@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useLayoutEffect } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,33 @@ import {
   StyleSheet,
 } from "react-native";
 import useCartStore from "../../../components/store/useCartStore";
+import useOrderStore from "../../../components/store/useOrderStore"; // import your order store
 import { Button, useTheme } from "react-native-paper";
+import { Link, useNavigation } from "expo-router";
 
 const Cart = () => {
   const cart = useCartStore((state) => state.cart);
   const removeFromCart = useCartStore((state) => state.removeFromCart);
+  const addOrder = useOrderStore((state) => state.addOrder); // get the addOrder action
+  const navigation = useNavigation();
   const theme = useTheme();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Your Cart",
+    });
+  }, [navigation]);
+
+  const handleRemoveFromCart = (itemId) => {
+    removeFromCart(itemId);
+  };
+
+  const handleOrder = (item) => {
+    // Add the current item to orders.
+    addOrder(item);
+    // Optionally remove the item from the cart after ordering.
+    removeFromCart(item.id);
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles.itemContainer}>
@@ -22,10 +43,18 @@ const Cart = () => {
         <Text style={styles.itemName}>{item.name}</Text>
         <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
         <View style={styles.buttonContainer}>
-          <Button style={styles.button} buttonColor={theme.colors.textColor}>
+          <Button
+            style={styles.button}
+            buttonColor={theme.colors.textColor}
+            onPress={() => handleRemoveFromCart(item.id)}
+          >
             Remove
           </Button>
-          <Button style={styles.button} buttonColor={theme.colors.textColor}>
+          <Button
+            style={styles.button}
+            buttonColor={theme.colors.textColor}
+            onPress={() => handleOrder(item)}
+          >
             Order
           </Button>
         </View>
@@ -35,7 +64,6 @@ const Cart = () => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Your Cart</Text>
       {cart.length > 0 ? (
         <FlatList
           data={cart}
@@ -56,7 +84,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-    padding: 16,
   },
   header: {
     fontSize: 24,
@@ -70,8 +97,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#f9f9f9",
     borderRadius: 8,
-    marginBottom: 16,
     overflow: "hidden",
+    marginVertical: 15,
+    marginHorizontal: 16,
   },
   itemImage: {
     width: 130,
@@ -91,7 +119,6 @@ const styles = StyleSheet.create({
     color: "#888",
     marginVertical: 8,
   },
-
   emptyCartText: {
     fontSize: 18,
     color: "#888",

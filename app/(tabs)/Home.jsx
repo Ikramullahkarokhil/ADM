@@ -1,4 +1,4 @@
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import React, { useLayoutEffect, useState } from "react";
 import {
   Chip,
@@ -13,14 +13,34 @@ import { Link, useNavigation } from "expo-router";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Popover, YStack, Button, Adapt } from "tamagui";
 import useCartStore from "../../components/store/useCartStore";
+import {
+  useFetchData,
+  fetchMainCategories,
+  fetchNewArrivals,
+} from "../../components/api/ProductFetcher";
 
 const Home = () => {
   const theme = useTheme();
   const [selectedCategories, setSelectedCategories] = useState([]);
   const [filterVisible, setFilterVisible] = useState(false);
   const navigation = useNavigation();
-  const categories = [...new Set(products.map((product) => product.category))];
+
   const cart = useCartStore((state) => state.cart);
+
+  const {
+    data: categoriesData,
+    isLoading: isCategoriesLoading,
+    error: categoriesError,
+  } = useFetchData("mainCategories", fetchMainCategories);
+
+  const {
+    data: newArrivalsData,
+    isLoading: isNewArrivalsLoading,
+    error: newArrivalsError,
+  } = useFetchData("newArrivals", fetchNewArrivals);
+
+  const categories = categoriesData ? categoriesData.data : [];
+  const newArrivals = newArrivalsData ? newArrivalsData.data : [];
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -59,25 +79,28 @@ const Home = () => {
           </Link>
           <View style={styles.iconsContainer}>
             <Link href={{ pathname: "/screens/Cart" }} asChild>
-              <IconButton
-                icon="cart"
-                size={24}
-                iconColor={theme.colors.textColor}
-              />
+              <Pressable android_ripple={theme.colors.riple}>
+                <IconButton
+                  icon="cart"
+                  size={24}
+                  iconColor={theme.colors.textColor}
+                />
+
+                <Badge
+                  style={[
+                    styles.badge,
+                    {
+                      position: "absolute",
+                      top: 5,
+                      left: 25,
+                      backgroundColor: "red",
+                    },
+                  ]}
+                >
+                  {cart.length}
+                </Badge>
+              </Pressable>
             </Link>
-            <Badge
-              style={[
-                styles.badge,
-                {
-                  position: "absolute",
-                  top: 5,
-                  left: 25,
-                  backgroundColor: "red",
-                },
-              ]}
-            >
-              {cart.length}
-            </Badge>
 
             <Popover
               open={filterVisible}
@@ -194,11 +217,11 @@ const Home = () => {
                 selectedColor={theme.colors.textColor}
                 elevated={true}
               >
-                {item}
+                {item.name}
               </Chip>
             </View>
           )}
-          keyExtractor={(item) => item}
+          keyExtractor={(item) => item.main_category_id}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.chipListContent}
@@ -210,7 +233,7 @@ const Home = () => {
         {filteredProducts.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={{ color: theme.colors.onSurface, fontSize: 16 }}>
-              No products found. Try adjusting your search or filters.
+              No products found. Try adjusting your filters.
             </Text>
           </View>
         ) : (
@@ -275,5 +298,8 @@ const styles = StyleSheet.create({
   },
   popoverContainer: {
     width: 200,
+  },
+  emptyContainer: {
+    padding: 15,
   },
 });

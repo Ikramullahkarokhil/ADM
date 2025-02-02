@@ -9,11 +9,13 @@ import * as NavigationBar from "expo-navigation-bar";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import { createTamagui, TamaguiProvider } from "tamagui";
 import { defaultConfig } from "@tamagui/config/v4";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const _layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const config = createTamagui(defaultConfig);
+  const queryClient = new QueryClient();
 
   const theme = isDarkTheme ? darkTheme : lightTheme;
 
@@ -23,24 +25,26 @@ const _layout = () => {
   }, [isDarkTheme]);
 
   return (
-    <TamaguiProvider config={config}>
-      <ActionSheetProvider>
-        <PaperProvider theme={theme}>
-          <StatusBar
-            style={isDarkTheme ? "light" : "dark"}
-            backgroundColor={theme.colors.primary}
-          />
-          <Stack
-            screenOptions={{
-              headerTitleAlign: "center",
-              animation: "simple_push",
-            }}
-          >
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          </Stack>
-        </PaperProvider>
-      </ActionSheetProvider>
-    </TamaguiProvider>
+    <QueryClientProvider client={queryClient}>
+      <TamaguiProvider config={config}>
+        <ActionSheetProvider>
+          <PaperProvider theme={theme}>
+            <StatusBar
+              style={isDarkTheme ? "light" : "dark"}
+              backgroundColor={theme.colors.primary}
+            />
+            <Stack
+              screenOptions={{
+                headerTitleAlign: "center",
+                animation: "simple_push",
+              }}
+            >
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+          </PaperProvider>
+        </ActionSheetProvider>
+      </TamaguiProvider>
+    </QueryClientProvider>
   );
 };
 

@@ -1,25 +1,24 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-const useCartStore = create(
+const useOrderStore = create(
   persist(
     (set) => ({
-      cart: [],
-      addToCart: (product) =>
+      orders: [],
+      addOrder: (order) =>
         set((state) => ({
-          cart: [...state.cart, product],
+          orders: [...state.orders, order],
         })),
-      removeFromCart: (productId) =>
+      deleteOrder: (orderId) =>
         set((state) => ({
-          cart: state.cart.filter((item) => item.id !== productId),
+          orders: state.orders.filter((order) => order.id !== orderId),
         })),
-      clearCart: () => set({ cart: [] }),
     }),
     {
-      name: "cart-storage",
+      name: "order-storage",
       storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );
 
-export default useCartStore;
+export default useOrderStore;

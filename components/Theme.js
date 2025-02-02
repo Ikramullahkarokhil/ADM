@@ -2,7 +2,7 @@ const lightTheme = {
   colors: {
     primary: "white",
     background: "#F3F3F3",
-    surface: "rgba(255, 255, 255, 0.9)",
+    button: "rgba(255, 255, 255, 0.9)",
     activeColor: "black",
     inactiveColor: "#626262",
     activeIndicatorStyle: "#DCDCDC",
@@ -17,7 +17,7 @@ const darkTheme = {
   colors: {
     primary: "#303030",
     background: "#121212",
-    surface: "#1e1e1e",
+    button: "#1e1e1e",
     activeColor: "white",
     inactiveColor: "#A5A5A5",
     activeIndicatorStyle: "#3C3C3C",
