@@ -4,4 +4,4 @@ const index = () => {
   return <Redirect href="/Home" />;
 };
 
-export default index
+export default index;

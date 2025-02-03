@@ -6,7 +6,7 @@ import {
   FlatList,
   useWindowDimensions,
 } from "react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useTheme } from "react-native-paper";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Link } from "expo-router";
@@ -15,7 +15,7 @@ import { Pressable } from "react-native";
 const ProductList = ({ data }) => {
   const theme = useTheme();
   const { width } = useWindowDimensions();
-  const numColumns = width > 500 ? 4 : 2;
+  const numColumns = width > 550 ? 4 : 2;
 
   const renderItem = ({ item }) => (
     <Link
@@ -28,7 +28,10 @@ const ProductList = ({ data }) => {
           margin: 10,
         },
       ]}
-      href={`/screens/ProductDetail?id=${item.id}`}
+      href={{
+        pathname: `/screens/ProductDetail`,
+        params: { id: item.products_id },
+      }}
       asChild
     >
       <Pressable
@@ -36,7 +39,11 @@ const ProductList = ({ data }) => {
         style={{ borderRadius: 10 }}
       >
         <Image
-          source={{ uri: item.image }}
+          source={
+            item.image
+              ? { uri: item.image }
+              : require("../../assets/images/imageSkeleton.jpg")
+          }
           style={styles.image}
           resizeMode="cover"
         />
@@ -46,11 +53,10 @@ const ProductList = ({ data }) => {
             numberOfLines={2}
             ellipsizeMode="tail"
           >
-            {item.name}
+            {item.title}
           </Text>
-
           <Text style={[styles.price, { color: theme.colors.textColor }]}>
-            ${item.price.toFixed(2)}
+            ${item.spu}
           </Text>
         </View>
         <View style={styles.ratingContainer}>
@@ -65,7 +71,7 @@ const ProductList = ({ data }) => {
     <FlatList
       data={data}
       renderItem={renderItem}
-      keyExtractor={(item) => item.id.toString()}
+      keyExtractor={(item) => item.products_id.toString()}
       numColumns={numColumns}
       key={numColumns}
       contentContainerStyle={styles.container}

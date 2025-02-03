@@ -8,14 +8,14 @@ import {
   StyleSheet,
 } from "react-native";
 import useCartStore from "../../../components/store/useCartStore";
-import useOrderStore from "../../../components/store/useOrderStore"; // import your order store
+import useOrderStore from "../../../components/store/useOrderStore";
 import { Button, useTheme } from "react-native-paper";
-import { Link, useNavigation } from "expo-router";
+import { useNavigation } from "expo-router";
 
 const Cart = () => {
   const cart = useCartStore((state) => state.cart);
   const removeFromCart = useCartStore((state) => state.removeFromCart);
-  const addOrder = useOrderStore((state) => state.addOrder); // get the addOrder action
+  const addOrder = useOrderStore((state) => state.addOrder);
   const navigation = useNavigation();
   const theme = useTheme();
 
@@ -30,23 +30,21 @@ const Cart = () => {
   };
 
   const handleOrder = (item) => {
-    // Add the current item to orders.
     addOrder(item);
-    // Optionally remove the item from the cart after ordering.
-    removeFromCart(item.id);
+    removeFromCart(item.products_id);
   };
 
   const renderItem = ({ item }) => (
     <View style={styles.itemContainer}>
       <Image source={{ uri: item.image }} style={styles.itemImage} />
       <View style={styles.itemDetails}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={styles.itemName}>{item.title}</Text>
+        <Text style={styles.itemPrice}>${item.spu}</Text>
         <View style={styles.buttonContainer}>
           <Button
             style={styles.button}
             buttonColor={theme.colors.textColor}
-            onPress={() => handleRemoveFromCart(item.id)}
+            onPress={() => handleRemoveFromCart(item.products_id)}
           >
             Remove
           </Button>
@@ -68,7 +66,7 @@ const Cart = () => {
         <FlatList
           data={cart}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.products_id}
           contentContainerStyle={styles.list}
         />
       ) : (

@@ -9,15 +9,17 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import products from "../../../assets/data/ProductData";
 import { FontAwesome } from "@expo/vector-icons";
 import useCartStore from "../../../components/store/useCartStore";
-import { Badge } from "react-native-paper";
+import useProductStore from "../../../components/api/useProductStore";
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
-  const product = products.find((item) => item.id.toString() === id);
   const navigation = useNavigation();
+  const { newArrivals, loading, error } = useProductStore();
+
+  const data = newArrivals ? newArrivals.data : [];
+  const product = data.find((item) => item.products_id.toString() === id);
 
   const cart = useCartStore((state) => state.cart);
   const addToCart = useCartStore((state) => state.addToCart);
@@ -37,7 +39,7 @@ export default function ProductDetail() {
   }
 
   const handleAddToCart = () => {
-    if (cart.some((item) => item.id === product.id)) {
+    if (cart.some((item) => item.products_id === product.products_id)) {
       Alert.alert("Info", "Product is already added to cart!");
     } else {
       addToCart(product);
@@ -47,9 +49,16 @@ export default function ProductDetail() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Image source={{ uri: product.image }} style={styles.image} />
+      <Image
+        source={
+          product.image
+            ? { uri: item.image }
+            : require("../../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.image}
+      />
       <View style={styles.infoContainer}>
-        <Text style={styles.title}>{product.name}</Text>
+        <Text style={styles.title}>{product.title}</Text>
         <View style={styles.ratingContainer}>
           {[...Array(5)].map((_, index) => (
             <FontAwesome
@@ -59,13 +68,13 @@ export default function ProductDetail() {
               color={index < Math.floor(product.rating) ? "#FFD700" : "#ccc"}
             />
           ))}
-          <Text style={styles.ratingText}>{product.rating.toFixed(1)}</Text>
+          <Text style={styles.ratingText}>rating</Text>
         </View>
-        <Text style={styles.price}>€{product.price.toFixed(2)}</Text>
+        <Text style={styles.price}>€{product.spu}</Text>
         <Text style={styles.description}>{product.description}</Text>
         <View style={styles.detailsRow}>
           <Text style={styles.detailLabel}>Brand:</Text>
-          <Text style={styles.detailValue}>{product.brand}</Text>
+          <Text style={styles.detailValue}>{product.brands_id}</Text>
         </View>
 
         {/* Add to Cart Button */}

@@ -1,5 +1,5 @@
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import React, { useLayoutEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
   Chip,
   useTheme,
@@ -11,60 +11,131 @@ import products from "../../assets/data/ProductData";
 import ProductList from "../../components/ui/ProductList";
 import { Link, useNavigation } from "expo-router";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { Popover, YStack, Button, Adapt } from "tamagui";
+import { useActionSheet } from "@expo/react-native-action-sheet";
 import useCartStore from "../../components/store/useCartStore";
-import {
-  useFetchData,
-  fetchMainCategories,
-  fetchNewArrivals,
-} from "../../components/api/ProductFetcher";
+import useProductStore from "../../components/api/useProductStore";
+import ProductSkeleton from "../../components/productSkeleton";
+import CategoriesSkeleton from "../../components/CategoriesSkeleton";
 
 const Home = () => {
   const theme = useTheme();
   const [selectedCategories, setSelectedCategories] = useState([]);
-  const [filterVisible, setFilterVisible] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [sorting, setSorting] = useState("default");
   const navigation = useNavigation();
-
+  const { showActionSheetWithOptions } = useActionSheet();
   const cart = useCartStore((state) => state.cart);
 
   const {
-    data: categoriesData,
-    isLoading: isCategoriesLoading,
-    error: categoriesError,
-  } = useFetchData("mainCategories", fetchMainCategories);
+    fetchNewArrivals,
+    fetchMainCategories,
+    mainCategories,
+    newArrivals,
+    error,
+  } = useProductStore();
 
-  const {
-    data: newArrivalsData,
-    isLoading: isNewArrivalsLoading,
-    error: newArrivalsError,
-  } = useFetchData("newArrivals", fetchNewArrivals);
+  const data = newArrivals?.data ?? [];
+  const categories = mainCategories?.data ?? [];
 
-  const categories = categoriesData ? categoriesData.data : [];
-  const newArrivals = newArrivalsData ? newArrivalsData.data : [];
+  useEffect(() => {
+    const initialize = async () => {
+      setLoading(true);
+      try {
+        await fetchNewArrivals();
+        await fetchMainCategories();
+      } catch (err) {
+        console.error("Failed to fetch data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    initialize();
+  }, []);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: false,
     });
-  }, []);
+  }, [navigation]);
 
-  const handleCategoryPress = (category) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category)
-        ? prev.filter((c) => c !== category)
-        : [...prev, category]
+  const getActionSheetStyles = () => ({
+    textStyle: { color: theme.colors.textColor },
+    titleTextStyle: {
+      color: theme.colors.textColor,
+      textAlign: "center",
+      width: "100%",
+      marginBottom: 8,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    containerStyle: {
+      backgroundColor: theme.colors.primary,
+    },
+  });
+
+  const handleFilterPress = () => {
+    const options = [
+      "Price: Low to High",
+      "Price: High to Low",
+      "Newest First",
+      "Cancel",
+    ];
+    const cancelButtonIndex = 3;
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        title: "Filter Products",
+        ...getActionSheetStyles(),
+      },
+      (selectedIndex) => {
+        if (
+          selectedIndex !== undefined &&
+          selectedIndex !== cancelButtonIndex
+        ) {
+          const sortOptions = ["priceLow", "priceHigh", "newest"];
+          setSorting(sortOptions[selectedIndex]);
+        }
+      }
     );
   };
 
-  const filteredProducts = products.filter((product) => {
+  const handleCategoryPress = (categoryId) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((c) => c !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
+
+  const filteredProducts = data.filter((product) => {
     const matchesCategory =
       selectedCategories.length === 0 ||
-      selectedCategories.includes(product.category);
+      selectedCategories.includes(product.main_category_id);
     return matchesCategory;
   });
 
+  const getSortedProducts = () => {
+    return [...filteredProducts].sort((a, b) => {
+      switch (sorting) {
+        case "priceLow":
+          return a.price - b.price;
+        case "priceHigh":
+          return b.price - a.price;
+        case "newest":
+          return new Date(b.releaseDate) - new Date(a.releaseDate);
+        default:
+          return 0;
+      }
+    });
+  };
+
+  const sortedProducts = getSortedProducts();
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      {/* Header Section */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.searchContainer}>
           <Link asChild href={{ pathname: "/Search" }}>
@@ -85,7 +156,6 @@ const Home = () => {
                   size={24}
                   iconColor={theme.colors.textColor}
                 />
-
                 <Badge
                   style={[
                     styles.badge,
@@ -101,77 +171,15 @@ const Home = () => {
                 </Badge>
               </Pressable>
             </Link>
-
-            <Popover
-              open={filterVisible}
-              onOpenChange={setFilterVisible}
-              placement="bottom"
-            >
-              <Popover.Trigger asChild>
-                <IconButton
-                  icon="filter-variant"
-                  size={24}
-                  onPress={() => setFilterVisible(true)}
-                  iconColor={theme.colors.textColor}
-                />
-              </Popover.Trigger>
-
-              <Adapt when="sm" platform="touch">
-                <Popover.Sheet animation="medium" modal dismissOnSnapToBottom>
-                  <Popover.Sheet.Frame padding="$4">
-                    <Adapt.Contents />
-                  </Popover.Sheet.Frame>
-                  <Popover.Sheet.Overlay
-                    animation="lazy"
-                    enterStyle={{ opacity: 0 }}
-                    exitStyle={{ opacity: 0 }}
-                  />
-                </Popover.Sheet>
-              </Adapt>
-
-              <Popover.Content
-                borderWidth={1}
-                borderColor="$borderColor"
-                marginRight={10}
-                enterStyle={{ y: -10, opacity: 0 }}
-                exitStyle={{ y: -10, opacity: 0 }}
-                elevate
-                animation={[
-                  "quick",
-                  {
-                    opacity: {
-                      overshootClamping: true,
-                    },
-                  },
-                ]}
-              >
-                <Popover.Arrow borderWidth={1} borderColor="$borderColor" />
-
-                <YStack gap="$3">
-                  <Text style={styles.filterTitle}>Filters</Text>
-                  <View style={styles.popoverContainer}>
-                    <Text>Filter</Text>
-                  </View>
-
-                  <Popover.Close asChild>
-                    <Button
-                      size="$3"
-                      onPress={() => {
-                        // Handle filter application
-                        setFilterVisible(false);
-                      }}
-                    >
-                      Apply Filters
-                    </Button>
-                  </Popover.Close>
-                </YStack>
-              </Popover.Content>
-            </Popover>
+            <IconButton
+              icon="filter-variant"
+              size={24}
+              onPress={handleFilterPress}
+              iconColor={theme.colors.textColor}
+            />
           </View>
         </View>
       </View>
-
-      {/* Categories Section */}
       <Text
         style={[styles.categoriesHeader, { color: theme.colors.textColor }]}
       >
@@ -179,72 +187,82 @@ const Home = () => {
       </Text>
 
       <View>
-        <FlatList
-          data={categories}
-          renderItem={({ item }) => (
-            <View style={styles.chipContainer}>
-              <Chip
-                mode="outlined"
-                selected={selectedCategories.includes(item)}
-                onPress={() => handleCategoryPress(item)}
-                style={[
-                  styles.chip,
-                  {
-                    borderWidth: 0.5,
-                    backgroundColor: theme.colors.primary,
-                  },
-                  selectedCategories.includes(item) && {
-                    backgroundColor: theme.colors.background,
-                    borderColor: theme.colors.active,
-                  },
-                ]}
-                rippleColor={theme.colors.riple}
-                textStyle={{
-                  color: selectedCategories.includes(item)
-                    ? theme.colors.textColor
-                    : theme.colors.inactiveColor,
-                }}
-                icon={({ size }) =>
-                  selectedCategories.includes(item) ? (
-                    <Icon
-                      name="check"
-                      size={size}
-                      color={theme.colors.textColor}
-                    />
-                  ) : null
-                }
-                accessibilityLabel={`Filter by ${item} category`}
-                selectedColor={theme.colors.textColor}
-                elevated={true}
-              >
-                {item.name}
-              </Chip>
-            </View>
-          )}
-          keyExtractor={(item) => item.main_category_id}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipListContent}
-        />
+        {loading ? (
+          <FlatList
+            data={Array(4).fill(null)}
+            renderItem={CategoriesSkeleton}
+            keyExtractor={(_, index) => index.toString()}
+            contentContainerStyle={styles.categoriesListContent}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          />
+        ) : (
+          <FlatList
+            data={categories}
+            renderItem={({ item }) => (
+              <View style={styles.chipContainer}>
+                <Chip
+                  mode="outlined"
+                  selected={selectedCategories.includes(item.main_category_id)}
+                  onPress={() => handleCategoryPress(item.main_category_id)}
+                  style={[
+                    styles.chip,
+                    {
+                      borderWidth: 0.5,
+                      backgroundColor: theme.colors.primary,
+                    },
+                    selectedCategories.includes(item.main_category_id) && {
+                      backgroundColor: theme.colors.background,
+                      borderColor: theme.colors.active,
+                    },
+                  ]}
+                  rippleColor={theme.colors.riple}
+                  textStyle={{
+                    color: selectedCategories.includes(item.main_category_id)
+                      ? theme.colors.textColor
+                      : theme.colors.inactiveColor,
+                  }}
+                  icon={({ size }) =>
+                    selectedCategories.includes(item.main_category_id) ? (
+                      <Icon
+                        name="check"
+                        size={size}
+                        color={theme.colors.textColor}
+                      />
+                    ) : null
+                  }
+                  accessibilityLabel={`Filter by ${item.name} category`}
+                  selectedColor={theme.colors.textColor}
+                  elevated={true}
+                >
+                  {item.name}
+                </Chip>
+              </View>
+            )}
+            keyExtractor={(item) => item.main_category_id}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipListContent}
+          />
+        )}
       </View>
 
-      {/* Products List */}
       <View style={styles.productsList}>
-        {filteredProducts.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={{ color: theme.colors.onSurface, fontSize: 16 }}>
-              No products found. Try adjusting your filters.
-            </Text>
-          </View>
+        {loading ? (
+          <FlatList
+            data={Array(6).fill(null)}
+            renderItem={ProductSkeleton}
+            keyExtractor={(_, index) => index.toString()}
+            numColumns={2}
+            contentContainerStyle={styles.productsListContent}
+          />
         ) : (
-          <ProductList data={filteredProducts} />
+          <ProductList data={sortedProducts} />
         )}
       </View>
     </View>
   );
 };
-
-export default Home;
 
 const styles = StyleSheet.create({
   container: {
@@ -291,15 +309,18 @@ const styles = StyleSheet.create({
   productsList: {
     flex: 1,
   },
-  filterTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginVertical: 8,
-  },
-  popoverContainer: {
-    width: 200,
-  },
   emptyContainer: {
     padding: 15,
   },
+  badge: {
+    position: "absolute",
+    top: 5,
+    left: 25,
+    backgroundColor: "red",
+  },
+  categoriesListContent: {
+    paddingHorizontal: 10,
+  },
 });
+
+export default Home;

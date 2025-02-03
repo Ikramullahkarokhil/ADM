@@ -3,12 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 /**
  * @param {string} queryKey
  * @param {function} fetchFunction
+ * @param {any} params
  * @returns {object}
  */
-export const useFetchData = (queryKey, fetchFunction) => {
+export const useFetchData = (queryKey, fetchFunction, params) => {
   return useQuery({
-    queryKey: [queryKey],
-    queryFn: fetchFunction,
+    queryKey: [queryKey, params],
+    queryFn: () => fetchFunction(params),
   });
 };
 
@@ -60,6 +61,24 @@ export const fetchSubcategories = async (mainCategory) => {
   );
   if (!response.ok) {
     throw new Error("Failed to fetch subcategories");
+  }
+  return response.json();
+};
+
+export const fetchProductData = async () => {
+  const response = await fetch(`${API_BASE_URL}/get-search-products`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch Product data");
+  }
+  return response.json();
+};
+
+export const searchProductData = async (params) => {
+  const response = await fetch(
+    `${API_BASE_URL}/get-search-products?search=products_id=${params}`
+  );
+  if (!response.ok) {
+    throw new Error("Failed to fetch Product data");
   }
   return response.json();
 };
