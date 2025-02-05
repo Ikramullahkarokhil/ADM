@@ -1,16 +1,9 @@
 import React, { useLayoutEffect } from "react";
-import {
-  View,
-  Text,
-  FlatList,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
-import useCartStore from "../../../components/store/useCartStore";
-import useOrderStore from "../../../components/store/useOrderStore";
+import { View, Text, FlatList, Image, StyleSheet } from "react-native";
 import { Button, useTheme } from "react-native-paper";
 import { useNavigation } from "expo-router";
+import useCartStore from "../../../components/store/useCartStore";
+import useOrderStore from "../../../components/store/useOrderStore";
 
 const Cart = () => {
   const cart = useCartStore((state) => state.cart);
@@ -29,14 +22,25 @@ const Cart = () => {
     removeFromCart(itemId);
   };
 
-  const handleOrder = (item) => {
-    addOrder(item);
-    removeFromCart(item.products_id);
+  const handleOrder = async (item) => {
+    try {
+      await addOrder(item);
+      removeFromCart(item.products_id);
+    } catch (error) {
+      console.error("Order failed:", error);
+    }
   };
 
   const renderItem = ({ item }) => (
     <View style={styles.itemContainer}>
-      <Image source={{ uri: item.image }} style={styles.itemImage} />
+      <Image
+        source={
+          item.image
+            ? { uri: item.image }
+            : require("../../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.itemImage}
+      />
       <View style={styles.itemDetails}>
         <Text style={styles.itemName}>{item.title}</Text>
         <Text style={styles.itemPrice}>${item.spu}</Text>
@@ -66,7 +70,7 @@ const Cart = () => {
         <FlatList
           data={cart}
           renderItem={renderItem}
-          keyExtractor={(item) => item.products_id}
+          keyExtractor={(item) => item.products_id.toString()}
           contentContainerStyle={styles.list}
         />
       ) : (
@@ -82,11 +86,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
-  },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 16,
   },
   list: {
     paddingBottom: 16,

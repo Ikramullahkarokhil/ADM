@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1089643168660",
+    "project_id": "zaytoon-d95cb",
+    "storage_bucket": "zaytoon-d95cb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1089643168660:android:89b33182886bb1f3d90581",
+        "android_client_info": {
+          "package_name": "com.ims.Zaytoon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA7-kp_m1c_4QPPfvCODDOqMJDCn_fjMWY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

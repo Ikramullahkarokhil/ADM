@@ -7,9 +7,9 @@ import {
   Modal,
   TouchableOpacity,
   Pressable,
+  ActivityIndicator,
 } from "react-native";
 import React, { useState, useEffect, useLayoutEffect } from "react";
-import products from "../../assets/data/ProductData";
 import { Feather } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, useNavigation } from "expo-router";
@@ -20,6 +20,7 @@ import {
   Searchbar,
   useTheme,
 } from "react-native-paper";
+import useProductStore from "../../components/api/useProductStore";
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -29,6 +30,9 @@ const Search = () => {
   const navigation = useNavigation();
   const theme = useTheme();
 
+  const { searchProductData, productData, error, loading } = useProductStore();
+  const data = productData?.data ?? [];
+
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: false,
@@ -36,48 +40,52 @@ const Search = () => {
   }, []);
 
   useEffect(() => {
-    filterProducts();
-  }, [searchQuery, minRating]);
+    const delayDebounceFn = setTimeout(() => {
+      if (searchQuery) {
+        searchProductData(searchQuery);
+      } else {
+        setFilteredProducts([]);
+      }
+    }, 300);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery]);
 
-  const filterProducts = () => {
-    let filtered = products;
-
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (product) =>
-          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          product.description
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase()) ||
-          product.category.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
+  useEffect(() => {
+    let filtered = data;
     if (minRating > 0) {
       filtered = filtered.filter((product) => product.rating >= minRating);
     }
-
     setFilteredProducts(filtered);
-  };
+  }, [productData, minRating]);
 
   const renderProductItem = ({ item }) => (
-    <Link href={{ pathname: `/screens/ProductDetail?id=${item.id}` }} asChild>
+    <Link
+      href={{
+        pathname: `/screens/ProductDetail`,
+        params: { id: item.products_id },
+      }}
+      asChild
+    >
       <Pressable
         style={styles.itemContainer}
-        android_ripple={theme.colors.riple}
+        android_ripple={{ color: theme.colors.ripple }}
       >
         <Image
-          source={{ uri: item.image }}
+          source={
+            item.image
+              ? { uri: item.image }
+              : require("../../assets/images/imageSkeleton.jpg")
+          }
           style={styles.productImage}
           resizeMode="cover"
         />
         <View style={styles.productInfo}>
           <Text style={styles.productName} numberOfLines={3}>
-            {item.name}
+            {item.title}
           </Text>
-          <Text style={styles.productPrice}>${item.price}</Text>
+          <Text style={styles.productPrice}>${item.spu}</Text>
           <View style={styles.categoryContainer}>
-            <Text style={styles.productCategory}>{item.brand}</Text>
+            <Text style={styles.productCategory}>{item.brands_id}</Text>
             <View style={styles.ratingContainer}>
               <Feather name="star" size={16} color="#FFD700" />
               <Text style={styles.ratingText}>{item.rating}</Text>
@@ -94,12 +102,21 @@ const Search = () => {
     <Modal
       visible={isFilterVisible}
       transparent={true}
-      animationType="fade"
+      animationType="slide"
       onRequestClose={() => setIsFilterVisible(false)}
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <Text style={styles.filterTitle}>Filter by Rating</Text>
+          <TouchableOpacity
+            style={styles.filterOption}
+            onPress={() => {
+              setMinRating(0);
+              setIsFilterVisible(false);
+            }}
+          >
+            <Text>Any Rating</Text>
+          </TouchableOpacity>
           {[1, 2, 3, 4, 5].map((rating) => (
             <TouchableOpacity
               key={rating}
@@ -152,7 +169,7 @@ const Search = () => {
         <FlatList
           data={filteredProducts}
           renderItem={renderProductItem}
-          keyExtractor={(item) => item.id.toString()}
+          keyExtractor={(item) => item.products_id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={renderSeparator}
@@ -164,6 +181,9 @@ const Search = () => {
         />
 
         {renderFilterModal()}
+        {error && (
+          <Text style={{ color: "red", textAlign: "center" }}>{error}</Text>
+        )}
       </PaperProvider>
     </SafeAreaView>
   );
@@ -268,12 +288,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
+    marginTop: "100%",
+    elevation: 100,
   },
   modalContent: {
-    width: "80%",
+    width: "100%",
     backgroundColor: "#FFF",
-    borderRadius: 10,
     padding: 20,
+    height: "100%",
   },
   filterTitle: {
     fontSize: 18,
@@ -284,5 +306,8 @@ const styles = StyleSheet.create({
     padding: 10,
     borderBottomWidth: 1,
     borderBottomColor: "#CCC",
+  },
+  loader: {
+    marginTop: 50,
   },
 });

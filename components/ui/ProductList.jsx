@@ -61,7 +61,7 @@ const ProductList = ({ data }) => {
         </View>
         <View style={styles.ratingContainer}>
           <Icon name="star" size={16} color="#FFD700" />
-          <Text style={styles.rating}>{item.rating}</Text>
+          <Text style={styles.rating}>{item.rating} 4.7</Text>
         </View>
       </Pressable>
     </Link>
@@ -119,6 +119,7 @@ const styles = StyleSheet.create({
     right: "3%",
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "rgba(255, 255, 255, 0.9)",
     borderRadius: 12,
     paddingHorizontal: 6,

@@ -1,15 +1,52 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import React from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
 import { useColorScheme } from "react-native";
-import { IconButton, useTheme } from "react-native-paper";
+import {
+  Button,
+  Divider,
+  IconButton,
+  List,
+  Menu,
+  PaperProvider,
+  Switch,
+  useTheme,
+} from "react-native-paper";
 import useThemeStore from "../../components/store/useThemeStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
+import useProductStore from "../../components/api/useProductStore";
+import { useNavigation, useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const Profile = () => {
   const theme = useTheme();
   const { themeMode, setThemeMode } = useThemeStore();
   const colorScheme = useColorScheme();
   const { showActionSheetWithOptions } = useActionSheet();
+  const { logout, user } = useProductStore();
+  const navigation = useNavigation();
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    const getBiometricState = async () => {
+      try {
+        const storedState = await AsyncStorage.getItem("biometricEnabled");
+        if (storedState !== null) {
+          setBiometricEnabled(JSON.parse(storedState));
+        }
+      } catch (error) {
+        console.error("Error retrieving biometric state:", error);
+      }
+    };
+    getBiometricState();
+  }, []);
+
+  useLayoutEffect(() => {
+    if (user) {
+      navigation.setOptions({
+        headerTitle: user.name,
+      });
+    }
+  }, [navigation, user]);
 
   const getActionSheetStyles = () => ({
     textStyle: { color: theme.colors.textColor },
@@ -73,17 +110,29 @@ const Profile = () => {
     }
   };
 
+  const [visible, setVisible] = useState(false);
+
+  const openMenu = () => setVisible(true);
+
+  const closeMenu = () => setVisible(false);
+
+  const handleLogout = async () => {
+    logout();
+    router.navigate("Login");
+  };
+
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
+      {/* Appearance Section */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, { color: theme.colors.textColor }]}>
-          {"Appearance"}
+          Appearance
         </Text>
         <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
           <Text style={[styles.title, { color: theme.colors.textColor }]}>
-            {"Theme"}
+            Theme
           </Text>
           <Pressable
             onPress={handleThemeSelect}
@@ -105,6 +154,14 @@ const Profile = () => {
           </Pressable>
         </View>
       </View>
+      {/* Logout Button */}
+      <Button
+        mode="contained"
+        onPress={handleLogout}
+        style={styles.logoutButton}
+      >
+        Logout
+      </Button>
     </View>
   );
 };
@@ -164,5 +221,8 @@ const styles = StyleSheet.create({
   },
   themeText: {
     fontSize: 15,
+  },
+  logoutButton: {
+    marginTop: 200,
   },
 });

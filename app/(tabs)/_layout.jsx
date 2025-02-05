@@ -19,7 +19,7 @@ const _layout = () => {
       }}
     >
       <Tabs.Screen
-        name="Home"
+        name="index"
         options={{
           tabBarIcon: ({ focused, color, size }) => {
             const iconName = focused ? "home" : "home-outline";

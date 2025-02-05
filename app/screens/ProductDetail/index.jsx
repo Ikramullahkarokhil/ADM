@@ -16,9 +16,9 @@ import useProductStore from "../../../components/api/useProductStore";
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
-  const { newArrivals, loading, error } = useProductStore();
+  const { productData, loading, error } = useProductStore();
 
-  const data = newArrivals ? newArrivals.data : [];
+  const data = productData ? productData.data : [];
   const product = data.find((item) => item.products_id.toString() === id);
 
   const cart = useCartStore((state) => state.cart);

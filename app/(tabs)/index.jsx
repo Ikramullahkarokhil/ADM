@@ -6,8 +6,11 @@ import {
   IconButton,
   Button as PaperButton,
   Badge,
+  Menu,
+  PaperProvider,
+  Divider,
+  Button,
 } from "react-native-paper";
-import products from "../../assets/data/ProductData";
 import ProductList from "../../components/ui/ProductList";
 import { Link, useNavigation } from "expo-router";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -27,21 +30,21 @@ const Home = () => {
   const cart = useCartStore((state) => state.cart);
 
   const {
-    fetchNewArrivals,
+    fetchProductData,
     fetchMainCategories,
     mainCategories,
-    newArrivals,
+    productData,
     error,
   } = useProductStore();
 
-  const data = newArrivals?.data ?? [];
+  const data = productData?.data ?? [];
   const categories = mainCategories?.data ?? [];
 
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
       try {
-        await fetchNewArrivals();
+        await fetchProductData();
         await fetchMainCategories();
       } catch (err) {
         console.error("Failed to fetch data:", err);
@@ -320,6 +323,14 @@ const styles = StyleSheet.create({
   },
   categoriesListContent: {
     paddingHorizontal: 10,
+  },
+  menuContainer: {
+    position: "absolute",
+    top: 50,
+    left: 0,
+    right: 0,
+    // additional styling to center the menu if needed
+    alignItems: "center",
   },
 });
 

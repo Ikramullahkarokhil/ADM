@@ -11,7 +11,7 @@ const useOrderStore = create(
         })),
       deleteOrder: (orderId) =>
         set((state) => ({
-          orders: state.orders.filter((order) => order.id !== orderId),
+          orders: state.orders.filter((order) => order.products_id !== orderId),
         })),
     }),
     {

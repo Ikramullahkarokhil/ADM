@@ -6,7 +6,7 @@ import useOrderStore from "../../components/store/useOrderStore";
 
 const Orders = () => {
   const orders = useOrderStore((state) => state.orders);
-  const cancelOrder = useOrderStore((state) => state.deleteOrder);
+  const deleteOrder = useOrderStore((state) => state.deleteOrder);
   const navigation = useNavigation();
   const theme = useTheme();
 
@@ -17,12 +17,19 @@ const Orders = () => {
   }, [navigation]);
 
   const handleCancel = (ItemId) => {
-    cancelOrder(ItemId);
+    deleteOrder(ItemId);
   };
 
   const renderItem = ({ item }) => (
     <View style={styles.itemContainer}>
-      <Image source={{ uri: item.image }} style={styles.itemImage} />
+      <Image
+        source={
+          item.image
+            ? { uri: item.image }
+            : require("../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.itemImage}
+      />
       <View style={styles.itemDetails}>
         <Text style={styles.itemName} numberOfLines={2}>
           {item.title}
