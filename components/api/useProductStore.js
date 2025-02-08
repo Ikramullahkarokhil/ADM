@@ -75,7 +75,6 @@ const useProductStore = create(
         }
       },
 
-      // Fetch Main Categories
       fetchMainCategories: async () => {
         set({ loading: true, error: null });
         try {
@@ -83,27 +82,31 @@ const useProductStore = create(
             `${API_BASE_URL}/get-main-categories`
           );
           set({ mainCategories: response.data, loading: false });
+          return response.data;
         } catch (error) {
           set({ error: "Failed to fetch main categories", loading: false });
+          throw error;
         }
       },
 
-      // Fetch Subcategories
-      fetchSubcategories: async (mainCategory) => {
+      fetchSubcategories: async (id) => {
         set({ loading: true, error: null });
         try {
           const response = await axios.get(
-            `${API_BASE_URL}/get-sub-categories/${mainCategory}`
+            `${API_BASE_URL}/get-sub-categories/${id}`
           );
           set((state) => ({
             subcategories: {
               ...state.subcategories,
-              [mainCategory]: response.data,
+              [id]: response.data,
             },
             loading: false,
           }));
+
+          return response.data;
         } catch (error) {
           set({ error: "Failed to fetch subcategories", loading: false });
+          throw error;
         }
       },
 

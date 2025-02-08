@@ -7,16 +7,22 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Pressable,
+  Share,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import useCartStore from "../../../components/store/useCartStore";
 import useProductStore from "../../../components/api/useProductStore";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { useTheme } from "react-native-paper";
+import * as Linking from "expo-linking";
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
   const { productData, loading, error } = useProductStore();
+  const theme = useTheme();
 
   const data = productData ? productData.data : [];
   const product = data.find((item) => item.products_id.toString() === id);
@@ -46,6 +52,20 @@ export default function ProductDetail() {
       Alert.alert("Success", "Product added to cart!");
     }
   };
+  const handleShare = async () => {
+    if (!product) return;
+    const deepLink = Linking.createURL(
+      `/screens/ProductDetails/${product.products_id}`
+    );
+    try {
+      await Share.share({
+        message: `Check out this product: ${deepLink}`,
+      });
+    } catch (error) {
+      Alert.alert("Error", "Failed to share product.");
+      console.log(error);
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -58,7 +78,16 @@ export default function ProductDetail() {
         style={styles.image}
       />
       <View style={styles.infoContainer}>
-        <Text style={styles.title}>{product.title}</Text>
+        <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+          <Text style={styles.title}>{product.title}</Text>
+          <Pressable
+            android_ripple={theme.colors.riple}
+            onPress={handleShare}
+            style={styles.shareIcon}
+          >
+            <Ionicons name="share-outline" size={24} color="#4CAF50" />
+          </Pressable>
+        </View>
         <View style={styles.ratingContainer}>
           {[...Array(5)].map((_, index) => (
             <FontAwesome
@@ -112,6 +141,9 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: "bold",
     marginBottom: 8,
+  },
+  shareIcon: {
+    padding: 5,
   },
   ratingContainer: {
     flexDirection: "row",

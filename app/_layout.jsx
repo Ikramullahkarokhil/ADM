@@ -31,7 +31,6 @@ const Layout = () => {
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const router = useRouter();
 
-  // Check terms acceptance status
   useEffect(() => {
     const checkTermsAcceptance = async () => {
       try {

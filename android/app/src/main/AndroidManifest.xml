@@ -27,7 +27,7 @@
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="zaytoon"/>
-        <data android:scheme="com.ikramullah.Zaytoon"/>
+        <data android:scheme="com.ims.Zaytoon"/>
       </intent-filter>
     </activity>
   </application>

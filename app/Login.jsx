@@ -12,11 +12,11 @@ import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../components/api/useProductStore";
 import { Link, useNavigation, useRouter } from "expo-router";
-import {
-  GoogleSignin,
-  GoogleSigninButton,
-  statusCodes,
-} from "@react-native-google-signin/google-signin";
+// import {
+//   GoogleSignin,
+//   GoogleSigninButton,
+//   statusCodes,
+// } from "@react-native-google-signin/google-signin";
 
 // Validation schema for login form
 const loginSchema = Yup.object().shape({
@@ -47,36 +47,36 @@ const Login = () => {
   const { loginUser, loginLoading, loginError } = useProductStore();
 
   // Configure Google Sign-In
-  useEffect(() => {
-    GoogleSignin.configure({
-      webClientId:
-        "171374130805-5u0qb6dnj2bsbd8smou8egdsh1j0jkea.apps.googleusercontent.com", // Replace with your actual web client ID
-      offlineAccess: true,
-    });
-  }, []);
+  // useEffect(() => {
+  //   GoogleSignin.configure({
+  //     webClientId:
+  //       "171374130805-5u0qb6dnj2bsbd8smou8egdsh1j0jkea.apps.googleusercontent.com", // Replace with your actual web client ID
+  //     offlineAccess: true,
+  //   });
+  // }, []);
 
   // Function to handle Google Sign-In
-  const signIn = async () => {
-    try {
-      await GoogleSignin.hasPlayServices();
-      const userInfo = await GoogleSignin.signIn();
-      console.log("User Info:", userInfo);
-    } catch (error) {
-      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-        Alert.alert("Sign-In Cancelled", "User cancelled the sign-in process.");
-      } else if (error.code === statusCodes.IN_PROGRESS) {
-        Alert.alert("Sign-In In Progress", "Sign-in is already in progress.");
-      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-        Alert.alert(
-          "Play Services Not Available",
-          "Google Play Services is not available or outdated."
-        );
-      } else {
-        Alert.alert("Sign-In Error", "An unknown error occurred.");
-        console.error("Sign-In Error:", error);
-      }
-    }
-  };
+  // const signIn = async () => {
+  //   try {
+  //     await GoogleSignin.hasPlayServices();
+  //     const userInfo = await GoogleSignin.signIn();
+  //     console.log("User Info:", userInfo);
+  //   } catch (error) {
+  //     if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+  //       Alert.alert("Sign-In Cancelled", "User cancelled the sign-in process.");
+  //     } else if (error.code === statusCodes.IN_PROGRESS) {
+  //       Alert.alert("Sign-In In Progress", "Sign-in is already in progress.");
+  //     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+  //       Alert.alert(
+  //         "Play Services Not Available",
+  //         "Google Play Services is not available or outdated."
+  //       );
+  //     } else {
+  //       Alert.alert("Sign-In Error", "An unknown error occurred.");
+  //       console.error("Sign-In Error:", error);
+  //     }
+  //   }
+  // };
 
   const handleLogin = async (values) => {
     try {

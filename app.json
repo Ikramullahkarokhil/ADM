@@ -13,7 +13,8 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ims.Zaytoon"
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +26,10 @@
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "plugins": ["expo-router", "@react-native-google-signin/google-signin"],
+    "plugins": [
+      "expo-router",
+      "@react-native-google-signin/google-signin"
+    ],
     "scheme": "zaytoon"
   }
 }

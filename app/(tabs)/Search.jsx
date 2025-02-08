@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 5,
+    paddingTop: 5,
     paddingHorizontal: 10,
   },
   searchInput: {

@@ -1,51 +1,49 @@
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, View } from "react-native";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import {
-  Chip,
   useTheme,
   IconButton,
   Button as PaperButton,
   Badge,
-  Menu,
-  PaperProvider,
-  Divider,
-  Button,
 } from "react-native-paper";
-import ProductList from "../../components/ui/ProductList";
 import { Link, useNavigation } from "expo-router";
-import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useActionSheet } from "@expo/react-native-action-sheet";
 import useCartStore from "../../components/store/useCartStore";
 import useProductStore from "../../components/api/useProductStore";
-import ProductSkeleton from "../../components/productSkeleton";
-import CategoriesSkeleton from "../../components/CategoriesSkeleton";
+import CategoriesSectionList from "../../components/ui/CategoriesList";
+import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
+import Fontisto from "@expo/vector-icons/Fontisto";
 
 const Home = () => {
   const theme = useTheme();
-  const [selectedCategories, setSelectedCategories] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [sorting, setSorting] = useState("default");
   const navigation = useNavigation();
-  const { showActionSheetWithOptions } = useActionSheet();
   const cart = useCartStore((state) => state.cart);
+  const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
+    useState([]);
 
-  const {
-    fetchProductData,
-    fetchMainCategories,
-    mainCategories,
-    productData,
-    error,
-  } = useProductStore();
-
-  const data = productData?.data ?? [];
-  const categories = mainCategories?.data ?? [];
+  const { fetchMainCategories, fetchSubcategories, error } = useProductStore();
 
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
       try {
-        await fetchProductData();
-        await fetchMainCategories();
+        const response = await fetchMainCategories();
+        const categories = response?.data ?? [];
+
+        if (categories.length > 0) {
+          const categoriesData = await Promise.all(
+            categories.map(async (category) => {
+              const subCategoriesResponse = await fetchSubcategories(
+                category.main_category_id
+              );
+              return {
+                ...category,
+                subCategories: subCategoriesResponse?.data ?? [],
+              };
+            })
+          );
+          setCategoriesWithSubCategories(categoriesData);
+        }
       } catch (err) {
         console.error("Failed to fetch data:", err);
       } finally {
@@ -60,81 +58,6 @@ const Home = () => {
       headerShown: false,
     });
   }, [navigation]);
-
-  const getActionSheetStyles = () => ({
-    textStyle: { color: theme.colors.textColor },
-    titleTextStyle: {
-      color: theme.colors.textColor,
-      textAlign: "center",
-      width: "100%",
-      marginBottom: 8,
-      fontSize: 16,
-      fontWeight: "600",
-    },
-    containerStyle: {
-      backgroundColor: theme.colors.primary,
-    },
-  });
-
-  const handleFilterPress = () => {
-    const options = [
-      "Price: Low to High",
-      "Price: High to Low",
-      "Newest First",
-      "Cancel",
-    ];
-    const cancelButtonIndex = 3;
-
-    showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex,
-        title: "Filter Products",
-        ...getActionSheetStyles(),
-      },
-      (selectedIndex) => {
-        if (
-          selectedIndex !== undefined &&
-          selectedIndex !== cancelButtonIndex
-        ) {
-          const sortOptions = ["priceLow", "priceHigh", "newest"];
-          setSorting(sortOptions[selectedIndex]);
-        }
-      }
-    );
-  };
-
-  const handleCategoryPress = (categoryId) => {
-    setSelectedCategories((prev) =>
-      prev.includes(categoryId)
-        ? prev.filter((c) => c !== categoryId)
-        : [...prev, categoryId]
-    );
-  };
-
-  const filteredProducts = data.filter((product) => {
-    const matchesCategory =
-      selectedCategories.length === 0 ||
-      selectedCategories.includes(product.main_category_id);
-    return matchesCategory;
-  });
-
-  const getSortedProducts = () => {
-    return [...filteredProducts].sort((a, b) => {
-      switch (sorting) {
-        case "priceLow":
-          return a.price - b.price;
-        case "priceHigh":
-          return b.price - a.price;
-        case "newest":
-          return new Date(b.releaseDate) - new Date(a.releaseDate);
-        default:
-          return 0;
-      }
-    });
-  };
-
-  const sortedProducts = getSortedProducts();
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -174,93 +97,34 @@ const Home = () => {
                 </Badge>
               </Pressable>
             </Link>
-            <IconButton
-              icon="filter-variant"
-              size={24}
-              onPress={handleFilterPress}
-              iconColor={theme.colors.textColor}
-            />
+            <Link href={{ pathname: "/screens/Favorite" }} asChild>
+              <IconButton
+                icon={() => (
+                  <Fontisto
+                    name="favorite"
+                    size={24}
+                    color={theme.colors.textColor}
+                  />
+                )}
+                size={24}
+                iconColor={theme.colors.textColor}
+              />
+            </Link>
           </View>
         </View>
-      </View>
-      <Text
-        style={[styles.categoriesHeader, { color: theme.colors.textColor }]}
-      >
-        Categories
-      </Text>
-
-      <View>
-        {loading ? (
-          <FlatList
-            data={Array(4).fill(null)}
-            renderItem={CategoriesSkeleton}
-            keyExtractor={(_, index) => index.toString()}
-            contentContainerStyle={styles.categoriesListContent}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          />
-        ) : (
-          <FlatList
-            data={categories}
-            renderItem={({ item }) => (
-              <View style={styles.chipContainer}>
-                <Chip
-                  mode="outlined"
-                  selected={selectedCategories.includes(item.main_category_id)}
-                  onPress={() => handleCategoryPress(item.main_category_id)}
-                  style={[
-                    styles.chip,
-                    {
-                      borderWidth: 0.5,
-                      backgroundColor: theme.colors.primary,
-                    },
-                    selectedCategories.includes(item.main_category_id) && {
-                      backgroundColor: theme.colors.background,
-                      borderColor: theme.colors.active,
-                    },
-                  ]}
-                  rippleColor={theme.colors.riple}
-                  textStyle={{
-                    color: selectedCategories.includes(item.main_category_id)
-                      ? theme.colors.textColor
-                      : theme.colors.inactiveColor,
-                  }}
-                  icon={({ size }) =>
-                    selectedCategories.includes(item.main_category_id) ? (
-                      <Icon
-                        name="check"
-                        size={size}
-                        color={theme.colors.textColor}
-                      />
-                    ) : null
-                  }
-                  accessibilityLabel={`Filter by ${item.name} category`}
-                  selectedColor={theme.colors.textColor}
-                  elevated={true}
-                >
-                  {item.name}
-                </Chip>
-              </View>
-            )}
-            keyExtractor={(item) => item.main_category_id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.chipListContent}
-          />
-        )}
       </View>
 
       <View style={styles.productsList}>
         {loading ? (
           <FlatList
             data={Array(6).fill(null)}
-            renderItem={ProductSkeleton}
+            renderItem={CategoriesSkeleton}
             keyExtractor={(_, index) => index.toString()}
             numColumns={2}
             contentContainerStyle={styles.productsListContent}
           />
         ) : (
-          <ProductList data={sortedProducts} />
+          <CategoriesSectionList data={categoriesWithSubCategories} />
         )}
       </View>
     </View>
@@ -274,7 +138,7 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 15,
     paddingTop: 40,
-    paddingVertical: 5,
+    paddingVertical: 4,
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -329,8 +193,10 @@ const styles = StyleSheet.create({
     top: 50,
     left: 0,
     right: 0,
-    // additional styling to center the menu if needed
     alignItems: "center",
+  },
+  productsListContent: {
+    marginTop: 40,
   },
 });
 
