@@ -1,4 +1,3 @@
-// ProductSkeleton.js
 import React from "react";
 import { View } from "react-native";
 import { Skeleton } from "@rneui/base";

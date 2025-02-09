@@ -120,7 +120,6 @@ const Layout = () => {
     );
   }
 
-  // Show loading indicator while checking auth
   if (isLoading) {
     return (
       <View style={styles.centered}>
@@ -129,7 +128,6 @@ const Layout = () => {
     );
   }
 
-  // Main layout
   return (
     <ActionSheetProvider>
       <PaperProvider theme={theme}>

@@ -72,8 +72,8 @@ const Search = () => {
       >
         <Image
           source={
-            item.image
-              ? { uri: item.image }
+            item.product_image
+              ? { uri: item.product_image }
               : require("../../assets/images/imageSkeleton.jpg")
           }
           style={styles.productImage}

@@ -22,13 +22,12 @@ const CategoriesSectionList = ({ data }) => {
     return <ActivityIndicator />;
   }
 
-  // Render subcategory item
   const renderSubcategoryItem = ({ item }) => (
     <View style={{ flex: 1, margin: 5 }}>
       <Link
         href={{
           pathname: `/screens/Products`,
-          params: { id: item.categories_id },
+          params: { subcategoryId: item.categories_id },
         }}
         asChild
       >
@@ -69,7 +68,7 @@ const CategoriesSectionList = ({ data }) => {
   const handleShowMore = (mainCategoryId) => {
     router.navigate({
       pathname: "/screens/Products",
-      params: { id: mainCategoryId },
+      params: { mainCategoryId: mainCategoryId, showmore: 1 },
     });
   };
 

@@ -5,197 +5,175 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_BASE_URL = "https://demo.ucsofficialstore.com/api";
 
+// Create axios instance with common configuration
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 10000,
+});
+
+const initialState = {
+  mostSaleProducts: [],
+  newArrivals: [],
+  justForYou: [],
+  topSellers: [],
+  mainCategories: [],
+  subcategories: {},
+  productData: {},
+  productsBySubcategory: {},
+  loginError: null,
+  user: null,
+  loginLoading: false,
+  loading: false,
+  error: null,
+};
+
 const useProductStore = create(
   persist(
     (set, get) => ({
-      // State variables
-      mostSaleProducts: [],
-      newArrivals: [],
-      justForYou: [],
-      topSellers: [],
-      mainCategories: [],
-      subcategories: {},
-      productData: [],
-      loginError: null,
-      user: null,
-      loginLoading: false,
-      loading: false,
-      error: null,
+      ...initialState,
+
+      // Helper function to handle API requests
+      apiRequest: async (endpoint, options = {}) => {
+        set({ loading: true, error: null });
+        try {
+          const response = await api.request({
+            url: endpoint,
+            ...options,
+          });
+          return response.data;
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          set({ error: errorMessage, loading: false });
+          throw new Error(errorMessage);
+        } finally {
+          set({ loading: false });
+        }
+      },
 
       // Fetch Most Sale Products
       fetchMostSaleProducts: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-most-sale-products`
-          );
-          set({ mostSaleProducts: response.data, loading: false });
-        } catch (error) {
-          set({ error: "Failed to fetch most sale products", loading: false });
-        }
+        const data = await get().apiRequest("/get-most-sale-products");
+        set({ mostSaleProducts: data });
       },
 
       // Fetch New Arrivals
       fetchNewArrivals: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-new-arrival-products`
-          );
-          set({ newArrivals: response.data, loading: false });
-        } catch (error) {
-          set({ error: "Failed to fetch new arrivals", loading: false });
-        }
+        const data = await get().apiRequest("/get-new-arrival-products");
+        set({ newArrivals: data });
       },
 
       // Fetch Just For You
       fetchJustForYou: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-just-foryou-products`
-          );
-          set({ justForYou: response.data, loading: false });
-        } catch (error) {
-          set({
-            error: "Failed to fetch Just For You products",
-            loading: false,
-          });
-        }
+        const data = await get().apiRequest("/get-just-foryou-products");
+        set({ justForYou: data });
       },
 
       // Fetch Top Sellers
       fetchTopSellers: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(`${API_BASE_URL}/get-top-sellers`);
-          set({ topSellers: response.data, loading: false });
-        } catch (error) {
-          set({ error: "Failed to fetch top sellers", loading: false });
-        }
+        const data = await get().apiRequest("/get-top-sellers");
+        set({ topSellers: data });
       },
 
+      // Fetch Main Categories
       fetchMainCategories: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-main-categories`
-          );
-          set({ mainCategories: response.data, loading: false });
-          return response.data;
-        } catch (error) {
-          set({ error: "Failed to fetch main categories", loading: false });
-          throw error;
-        }
+        const data = await get().apiRequest("/get-main-categories");
+        set({ mainCategories: data });
+        return data;
       },
 
+      // Fetch Subcategories
       fetchSubcategories: async (id) => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-sub-categories/${id}`
-          );
-          set((state) => ({
-            subcategories: {
-              ...state.subcategories,
-              [id]: response.data,
-            },
-            loading: false,
-          }));
-
-          return response.data;
-        } catch (error) {
-          set({ error: "Failed to fetch subcategories", loading: false });
-          throw error;
-        }
+        const data = await get().apiRequest(`/get-sub-categories/${id}`);
+        set((state) => ({
+          subcategories: {
+            ...state.subcategories,
+            [id]: data,
+          },
+        }));
+        return data;
       },
 
-      // Fetch Product Data
-      fetchProductData: async () => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-search-products`
-          );
-          set({ productData: response.data, loading: false });
-        } catch (error) {
-          set({ error: "Failed to fetch product data", loading: false });
-        }
+      // Fetch Products by Subcategory
+      fetchProductsBySubcategory: async (subcategoryId) => {
+        const data = await get().apiRequest("/get-search-products", {
+          params: { categories: [subcategoryId] },
+        });
+        set((state) => ({
+          productsBySubcategory: {
+            ...state.productsBySubcategory,
+            [subcategoryId]: data,
+          },
+        }));
+        return data;
       },
 
-      // Search Product Data
-      searchProductData: async (params) => {
-        set({ loading: true, error: null });
-        try {
-          const response = await axios.get(
-            `${API_BASE_URL}/get-search-products`,
-            { params: { search: params } }
-          );
-          set({ productData: response.data, loading: false });
-        } catch (error) {
-          set({ error: "Failed to search product data", loading: false });
-        }
+      // Search Products
+      searchProductData: async (searchTerm) => {
+        const data = await get().apiRequest("/get-search-products", {
+          params: { search: searchTerm },
+        });
+        set({ productData: data });
+        return data;
+      },
+
+      fetchProductByCategories: async (subCategoryIds = []) => {
+        if (subCategoryIds.length === 0) return [];
+        const data = await get().apiRequest("/get-search-products", {
+          params: { "categories[]": subCategoryIds },
+        });
+        return data;
       },
 
       // Login User
       loginUser: async (credentials) => {
         set({ loginLoading: true, loginError: null });
         try {
-          const response = await axios.post(`${API_BASE_URL}/consumer-login`, {
-            email: credentials.email,
-            password: credentials.password,
-          });
+          const response = await api.post("/consumer-login", credentials);
           if (response.data.status === "success") {
-            const userData = response.data.data;
-            const userWithTimestamp = { ...userData, timestamp: Date.now() };
+            const userWithTimestamp = {
+              ...response.data.data,
+              timestamp: Date.now(),
+            };
             set({ user: userWithTimestamp, loginLoading: false });
-          } else {
-            throw new Error(response.data.message || "Login failed");
+            return userWithTimestamp;
           }
+          throw new Error(response.data.message || "Login failed");
         } catch (error) {
-          set({
-            loginError:
-              error.response?.data?.message || error.message || "Login failed",
-            loginLoading: false,
-          });
-          throw error;
+          const errorMessage = error.response?.data?.message || error.message;
+          set({ loginError: errorMessage, loginLoading: false });
+          throw new Error(errorMessage);
         }
       },
 
+      // Signup User
       signupUser: async (userData) => {
         set({ loginLoading: true, loginError: null });
         try {
-          const response = await axios.post(
-            `${API_BASE_URL}/consumer-register`,
-            {
-              name: userData.name,
-              phone: userData.phone,
-              email: userData.email,
-              code: userData.code,
-              password: userData.password,
-            }
-          );
-
+          const response = await api.post("/consumer-register", userData);
           if (response.data.status === "success") {
-            const userData = response.data.data;
-            const userWithTimestamp = { ...userData, timestamp: Date.now() };
+            const userWithTimestamp = {
+              ...response.data.data,
+              timestamp: Date.now(),
+            };
             set({ user: userWithTimestamp, loginLoading: false });
-            return { success: true };
-          } else {
-            throw new Error(response.data.message || "Signup failed");
+            return { success: true, user: userWithTimestamp };
           }
+          throw new Error(response.data.message || "Signup failed");
         } catch (error) {
-          set({
-            loginError:
-              error.response?.data?.message || error.message || "Signup failed",
-            loginLoading: false,
-          });
-          throw error;
+          const errorMessage = error.response?.data?.message || error.message;
+          set({ loginError: errorMessage, loginLoading: false });
+          throw new Error(errorMessage);
         }
       },
 
-      logout: async () => {
+      // Logout User
+      logout: () => {
         set({ user: null });
+      },
+
+      // Reset Store
+      resetStore: () => {
+        set(initialState);
       },
     }),
     {
