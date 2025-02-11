@@ -17,6 +17,7 @@ import useProductStore from "../components/api/useProductStore";
 import * as SplashScreen from "expo-splash-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TermsModal from "./screens/ConsentScreen/index";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,7 +25,7 @@ const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const { logout, user } = useProductStore();
+  const { fetchProfile, logout, user } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkedTerms, setCheckedTerms] = useState(false);
@@ -64,6 +65,7 @@ const Layout = () => {
         } else if (user.consumer_id) {
           const oneWeekInMs = 7 * 24 * 60 * 60 * 1000;
           const isExpired = Date.now() - user.timestamp > oneWeekInMs;
+
           if (isExpired) {
             await logout();
             setIsLoggedIn(false);
@@ -84,7 +86,6 @@ const Layout = () => {
     }
   }, [hasAcceptedTerms, logout, user]);
 
-  // Routing logic
   useEffect(() => {
     if (hasAcceptedTerms && !isLoading) {
       if (isLoggedIn) {
@@ -96,27 +97,32 @@ const Layout = () => {
   }, [isLoading, isLoggedIn, router, hasAcceptedTerms]);
 
   useEffect(() => {
-    initializeTheme(colorScheme === "dark");
-    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-  }, [isDarkTheme, colorScheme, theme.colors.primary, initializeTheme]);
+    const initialize = async () => {
+      initializeTheme(colorScheme === "dark");
+      fetchProfile(user.consumer_id);
+      NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+    };
+    initialize();
+  }, [isDarkTheme, colorScheme]);
 
   if (checkedTerms && !hasAcceptedTerms) {
     return (
-      <ActionSheetProvider>
-        <PaperProvider theme={theme}>
-          <StatusBar style="auto" />
-          <TermsModal
-            onAccept={async () => {
-              await AsyncStorage.setItem("hasAcceptedTerms", "true");
-              setHasAcceptedTerms(true);
-            }}
-            onDecline={() => {
-              // Handle decline (e.g., exit app)
-              BackHandler.exitApp();
-            }}
-          />
-        </PaperProvider>
-      </ActionSheetProvider>
+      <GestureHandlerRootView>
+        <ActionSheetProvider>
+          <PaperProvider theme={theme}>
+            <StatusBar style="auto" />
+            <TermsModal
+              onAccept={async () => {
+                await AsyncStorage.setItem("hasAcceptedTerms", "true");
+                setHasAcceptedTerms(true);
+              }}
+              onDecline={() => {
+                BackHandler.exitApp();
+              }}
+            />
+          </PaperProvider>
+        </ActionSheetProvider>
+      </GestureHandlerRootView>
     );
   }
 
@@ -129,26 +135,28 @@ const Layout = () => {
   }
 
   return (
-    <ActionSheetProvider>
-      <PaperProvider theme={theme}>
-        <StatusBar
-          style={isDarkTheme ? "light" : "dark"}
-          backgroundColor={theme.colors.primary}
-        />
-        <Stack
-          screenOptions={{
-            headerTitleAlign: "center",
-            animation: "simple_push",
-          }}
-        >
-          {isLoggedIn ? (
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          ) : (
-            <Stack.Screen name="Login" options={{ headerShown: false }} />
-          )}
-        </Stack>
-      </PaperProvider>
-    </ActionSheetProvider>
+    <GestureHandlerRootView>
+      <ActionSheetProvider>
+        <PaperProvider theme={theme}>
+          <StatusBar
+            style={isDarkTheme ? "light" : "dark"}
+            backgroundColor={theme.colors.primary}
+          />
+          <Stack
+            screenOptions={{
+              headerTitleAlign: "center",
+              animation: "simple_push",
+            }}
+          >
+            {isLoggedIn ? (
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            ) : (
+              <Stack.Screen name="Login" options={{ headerShown: false }} />
+            )}
+          </Stack>
+        </PaperProvider>
+      </ActionSheetProvider>
+    </GestureHandlerRootView>
   );
 };
 

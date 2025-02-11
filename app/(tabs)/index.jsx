@@ -1,11 +1,6 @@
 import { FlatList, Pressable, StyleSheet, View } from "react-native";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import {
-  useTheme,
-  IconButton,
-  Button as PaperButton,
-  Badge,
-} from "react-native-paper";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useTheme, IconButton, Badge, Button } from "react-native-paper";
 import { Link, useNavigation } from "expo-router";
 import useCartStore from "../../components/store/useCartStore";
 import useProductStore from "../../components/api/useProductStore";
@@ -21,7 +16,8 @@ const Home = () => {
   const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
     useState([]);
 
-  const { fetchMainCategories, fetchSubcategories, error } = useProductStore();
+  const { user, fetchFavProducts, fetchMainCategories, fetchSubcategories } =
+    useProductStore();
 
   useEffect(() => {
     const initialize = async () => {
@@ -48,6 +44,7 @@ const Home = () => {
         console.error("Failed to fetch data:", err);
       } finally {
         setLoading(false);
+        await fetchFavProducts(user.consumer_id);
       }
     };
     initialize();
@@ -59,20 +56,32 @@ const Home = () => {
     });
   }, [navigation]);
 
+  const groupedCartItems = useMemo(() => {
+    return cart.reduce((acc, item) => {
+      const existingItem = acc.find((i) => i.products_id === item.products_id);
+      if (existingItem) {
+        existingItem.quantity += 1;
+      } else {
+        acc.push({ ...item, quantity: 1 });
+      }
+      return acc;
+    }, []);
+  }, [cart]);
+
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      {/* Header Section */}
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <View style={styles.searchContainer}>
           <Link asChild href={{ pathname: "/Search" }}>
-            <PaperButton
+            <Button
               icon="magnify"
               mode="contained"
               buttonColor={theme.colors.background}
               style={styles.searchBar}
+              textColor={theme.colors.textColor}
             >
               Search Products...
-            </PaperButton>
+            </Button>
           </Link>
           <View style={styles.iconsContainer}>
             <Link href={{ pathname: "/screens/Cart" }} asChild>
@@ -93,7 +102,7 @@ const Home = () => {
                     },
                   ]}
                 >
-                  {cart.length}
+                  {groupedCartItems.length}
                 </Badge>
               </Pressable>
             </Link>

@@ -1,16 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { useColorScheme } from "react-native";
-import {
-  Button,
-  Divider,
-  IconButton,
-  List,
-  Menu,
-  PaperProvider,
-  Switch,
-  useTheme,
-} from "react-native-paper";
+import { Button, IconButton, useTheme } from "react-native-paper";
 import useThemeStore from "../../components/store/useThemeStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../components/api/useProductStore";
@@ -22,7 +13,7 @@ const Profile = () => {
   const { themeMode, setThemeMode } = useThemeStore();
   const colorScheme = useColorScheme();
   const { showActionSheetWithOptions } = useActionSheet();
-  const { logout, user } = useProductStore();
+  const { logout, user, profileData } = useProductStore();
   const navigation = useNavigation();
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const router = useRouter();
@@ -43,7 +34,7 @@ const Profile = () => {
   useLayoutEffect(() => {
     if (user) {
       navigation.setOptions({
-        headerTitle: user.name,
+        headerTitle: profileData.name,
       });
     }
   }, [navigation, user]);
@@ -110,12 +101,6 @@ const Profile = () => {
     }
   };
 
-  const [visible, setVisible] = useState(false);
-
-  const openMenu = () => setVisible(true);
-
-  const closeMenu = () => setVisible(false);
-
   const handleLogout = async () => {
     logout();
     router.navigate("Login");
@@ -127,9 +112,29 @@ const Profile = () => {
     >
       {/* Appearance Section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.textColor }]}>
-          Appearance
-        </Text>
+        <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
+          <Text style={[styles.title, { color: theme.colors.textColor }]}>
+            Your Profile
+          </Text>
+
+          <Button
+            mode="contained"
+            // onPress={handleLogout}
+            style={styles.changePassword}
+          >
+            Profile
+          </Button>
+          <Button
+            mode="contained"
+            // onPress={handleLogout}
+            style={styles.changePassword}
+          >
+            Change Password
+          </Button>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
           <Text style={[styles.title, { color: theme.colors.textColor }]}>
             Theme

@@ -3,6 +3,7 @@ import React, {
   useLayoutEffect,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import {
   StyleSheet,
@@ -11,18 +12,19 @@ import {
   Image,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Pressable,
   Share,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import useCartStore from "../../../components/store/useCartStore";
 import useProductStore from "../../../components/api/useProductStore";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useTheme } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
+import { themeable } from "tamagui";
 
 const ProductDetail = () => {
   const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
@@ -30,10 +32,22 @@ const ProductDetail = () => {
   const theme = useTheme();
   const [product, setProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const { productsBySubcategory, productData, loading, error } =
-    useProductStore();
-  const cart = useCartStore((state) => state.cart);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavoriting, setIsFavoriting] = useState(false);
+
+  const {
+    user,
+    addToFavorite,
+    removeFavorite,
+    productsBySubcategory,
+    productData,
+    favProducts,
+    loading,
+    error,
+  } = useProductStore();
   const addToCart = useCartStore((state) => state.addToCart);
+  const cart = useCartStore((state) => state.cart);
+  const [addedToCart, setAddedToCart] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -49,8 +63,22 @@ const ProductDetail = () => {
           <Ionicons name="share-outline" size={24} color="#4CAF50" />
         </Pressable>
       ),
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+
+      headerTintColor: theme.colors.textColor,
     });
   }, [navigation, product]);
+
+  useEffect(() => {
+    if (product && favProducts) {
+      const isFav = favProducts.some(
+        (item) => item.products_id === product.products_id
+      );
+      setIsFavorite(isFav);
+    }
+  }, [product, favProducts]);
 
   useEffect(() => {
     const findProduct = async () => {
@@ -71,7 +99,6 @@ const ProductDetail = () => {
         }
       } catch (err) {
         console.error("Error finding product:", err);
-        Alert.alert("Error", "Failed to load product details");
       } finally {
         setIsLoading(false);
       }
@@ -82,34 +109,22 @@ const ProductDetail = () => {
 
   const handleAddToCart = useCallback(() => {
     if (!product) return;
-
-    if (cart.some((item) => item.products_id === product.products_id)) {
+    const productExists = cart.some(
+      (item) => item.products_id === product.products_id
+    );
+    if (productExists) {
       Alert.alert(
-        "Already in Cart",
-        "This product is already in your cart. Would you like to view your cart?",
-        [
-          { text: "No", style: "cancel" },
-          {
-            text: "View Cart",
-            onPress: () => navigation.navigate("Cart"),
-          },
-        ]
+        "Product already in cart",
+        "This product is already in your cart."
       );
     } else {
+      setAddedToCart(true);
       addToCart(product);
-      Alert.alert("Added to Cart", "Product successfully added to cart!", [
-        { text: "Continue Shopping", style: "cancel" },
-        {
-          text: "View Cart",
-          onPress: () => navigation.navigate("Cart"),
-        },
-      ]);
     }
-  }, [product, cart, addToCart, navigation]);
+  }, [product, addToCart, addedToCart]);
 
   const handleShare = useCallback(async () => {
     if (!product) return;
-
     try {
       const deepLink = Linking.createURL(
         `/screens/ProductDetails/${product.products_id}`
@@ -120,40 +135,96 @@ const ProductDetail = () => {
       });
     } catch (error) {
       console.error("Share error:", error);
-      Alert.alert("Share Failed", "Unable to share this product");
     }
   }, [product]);
 
-  const renderRatingStars = useCallback(() => {
-    return [...Array(5)].map((_, index) => (
-      <FontAwesome
-        key={index}
-        name={index < Math.floor(product?.rating || 0) ? "star" : "star-o"}
-        size={20}
-        color={index < Math.floor(product?.rating || 0) ? "#FFD700" : "#ccc"}
-        style={styles.starIcon}
-      />
-    ));
-  }, [product?.rating]);
+  const handleToggleFavorite = async () => {
+    if (!user) {
+      navigation.navigate("Login");
+      return;
+    }
+    if (isFavoriting) return;
+    setIsFavoriting(true);
+
+    try {
+      if (!isFavorite) {
+        await addToFavorite({
+          productID: product.products_id,
+          consumerID: user.consumer_id,
+        });
+      } else {
+        const favItem = await favProducts.find(
+          (item) => item.products_id === product.products_id
+        );
+        console.log(favItem);
+
+        if (favItem) {
+          await removeFavorite({
+            favId: favItem.product_fav_id,
+            consumerID: user.consumer_id,
+          });
+        }
+      }
+      setIsFavorite(!isFavorite);
+    } catch (error) {
+      Alert.alert("Error", error.message);
+    } finally {
+      setIsFavoriting(false);
+    }
+  };
+  const renderRatingStars = useCallback(
+    (item) => {
+      return [...Array(5)].map((_, index) => (
+        <FontAwesome
+          key={index}
+          name={
+            index < Math.floor(item?.average_rating || 0) ? "star" : "star-o"
+          }
+          size={15}
+          color={
+            index < Math.floor(item?.average_rating || 0) ? "#FFD700" : "#ccc"
+          }
+          style={styles.starIcon}
+        />
+      ));
+    },
+    [product?.rating]
+  );
 
   if (isLoading || loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#4CAF50" />
-        <Text style={styles.loadingText}>Loading product details...</Text>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.textColor} />
+        <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
+          Loading product details...
+        </Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.centerContainer}>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
         <Text style={styles.errorText}>{error}</Text>
         <TouchableOpacity
-          style={styles.retryButton}
+          style={[styles.retryButton, { backgroundColor: theme.colors.button }]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.retryButtonText}>Go Back</Text>
+          <Text
+            style={[styles.retryButtonText, { color: theme.colors.textColor }]}
+          >
+            Go Back
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -161,13 +232,27 @@ const ProductDetail = () => {
 
   if (!product) {
     return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Product not found</Text>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Text style={[styles.errorText, { color: theme.colors.textColor }]}>
+          Product not found
+        </Text>
         <TouchableOpacity
-          style={styles.retryButton}
+          style={[
+            styles.retryButton,
+            { backgroundColor: theme.colors.background },
+          ]}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.retryButtonText}>Go Back</Text>
+          <Text
+            style={[styles.retryButtonText, { color: theme.colors.textColor }]}
+          >
+            Go Back
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -175,7 +260,10 @@ const ProductDetail = () => {
 
   return (
     <ScrollView
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        { backgroundColor: theme.colors.background },
+      ]}
       showsVerticalScrollIndicator={false}
     >
       <Image
@@ -184,39 +272,81 @@ const ProductDetail = () => {
             ? { uri: product.product_image }
             : require("../../../assets/images/imageSkeleton.jpg")
         }
-        style={styles.image}
+        style={[styles.image, { backgroundColor: theme.colors.primary }]}
         resizeMode="cover"
       />
-      <View style={styles.infoContainer}>
-        <Text style={styles.title}>{product.title}</Text>
+      <View
+        style={[
+          styles.infoContainer,
+          { backgroundColor: theme.colors.primary },
+        ]}
+      >
+        <View style={styles.titleRow}>
+          <Text
+            style={[styles.title, { color: theme.colors.textColor }]}
+            numberOfLines={2}
+          >
+            {product.title}
+          </Text>
+          <TouchableOpacity
+            onPress={handleToggleFavorite}
+            disabled={isFavoriting}
+          >
+            <Ionicons
+              name={isFavorite ? "heart" : "heart-outline"}
+              size={28}
+              color={isFavorite ? "#FF0000" : "#333"}
+              style={isFavoriting && { opacity: 0.5 }}
+            />
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.ratingContainer}>
-          {renderRatingStars()}
+          {renderRatingStars(product)}
           <Text style={styles.ratingText}>
-            {product.rating ? `${product.rating} / 5` : "No ratings yet"}
+            {product.average_rating
+              ? `${product.average_rating}`
+              : "No ratings yet"}
           </Text>
         </View>
 
-        <Text style={styles.price}>{product.spu}</Text>
+        <Text style={[styles.price, { color: theme.colors.button }]}>
+          {product.spu}
+        </Text>
 
         {product.description && (
-          <Text style={styles.description}>{product.description}</Text>
+          <Text style={[styles.description, { color: theme.colors.textColor }]}>
+            {product.description}
+          </Text>
         )}
 
         {product.brand_title && (
           <View style={styles.detailsRow}>
-            <Text style={styles.detailLabel}>Brand:</Text>
-            <Text style={styles.detailValue}>{product.brand_title}</Text>
+            <Text
+              style={[styles.detailLabel, { color: theme.colors.textColor }]}
+            >
+              Brand
+            </Text>
+            <Text
+              style={[styles.detailValue, { color: theme.colors.textColor }]}
+            >
+              {product.brand_title}
+            </Text>
           </View>
         )}
 
-        <TouchableOpacity
-          style={styles.button}
-          onPress={handleAddToCart}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.buttonText}>Add to Cart</Text>
-        </TouchableOpacity>
+        <View style={styles.cartContainer}>
+          <Button
+            textColor={theme.colors.primary}
+            buttonColor={theme.colors.button}
+            onPress={handleAddToCart}
+            rippleColor={theme.colors.riple}
+            style={styles.button}
+            disabled={addedToCart}
+          >
+            {addedToCart ? "Added to cart" : "Add to Cart"}
+          </Button>
+        </View>
       </View>
     </ScrollView>
   );
@@ -225,7 +355,6 @@ const ProductDetail = () => {
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    backgroundColor: "#f9f9f9",
     flexGrow: 1,
   },
   centerContainer: {
@@ -237,14 +366,12 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
-    color: "#666",
   },
   image: {
     width: "100%",
     height: 300,
     borderRadius: 20,
     marginBottom: 16,
-    backgroundColor: "#f0f0f0",
   },
   infoContainer: {
     backgroundColor: "#fff",
@@ -256,11 +383,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#333",
-    marginBottom: 12,
+    flex: 1,
   },
   headerButton: {
     padding: 8,
@@ -317,12 +450,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     marginTop: 20,
+    alignSelf: "flex-end",
   },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
+
   errorText: {
     fontSize: 18,
     color: "#ff4444",
@@ -339,6 +469,21 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  counterContainer: {
+    flexDirection: "row",
+  },
+  cartContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  countText: {
+    marginTop: 10,
+    fontSize: 20,
+  },
+  button: {
+    width: "50%",
   },
 });
 

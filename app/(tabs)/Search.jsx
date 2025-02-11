@@ -21,6 +21,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import useProductStore from "../../components/api/useProductStore";
+import AnimatedText from "../../components/ui/AnimatedText";
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -141,9 +142,7 @@ const Search = () => {
     >
       <PaperProvider>
         <View style={styles.headerContainer}>
-          <Text style={[styles.header, { color: theme.colors.textColor }]}>
-            Zaytoon
-          </Text>
+          <AnimatedText text="Zaytoon" />
         </View>
         <View style={styles.searchContainer}>
           <Searchbar

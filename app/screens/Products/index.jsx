@@ -1,4 +1,9 @@
-import React, { useEffect, useCallback, useState } from "react";
+import React, {
+  useEffect,
+  useCallback,
+  useState,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -8,9 +13,11 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
-import { Link, useLocalSearchParams } from "expo-router";
+import { Link, useLocalSearchParams, useNavigation } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
+import { FontAwesome } from "@expo/vector-icons";
+import { color } from "@rneui/base";
 
 const ProductList = () => {
   const { subcategoryId, mainCategoryId, showmore } = useLocalSearchParams();
@@ -24,6 +31,18 @@ const ProductList = () => {
   } = useProductStore();
   const [products, setProducts] = useState([]);
   const theme = useTheme();
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Products",
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+
+      headerTintColor: theme.colors.textColor,
+    });
+  }, [navigation, products]);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -66,6 +85,25 @@ const ProductList = () => {
     fetchProductByCategories,
   ]);
 
+  const renderRatingStars = useCallback(
+    (item) => {
+      return [...Array(1)].map((_, index) => (
+        <FontAwesome
+          key={index}
+          name={
+            index < Math.floor(item?.average_rating || 0) ? "star" : "star-o"
+          }
+          size={20}
+          color={
+            index < Math.floor(item?.average_rating || 0) ? "#FFD700" : "#ccc"
+          }
+          style={styles.starIcon}
+        />
+      ));
+    },
+    [products?.rating]
+  );
+
   const renderItem = useCallback(
     ({ item }) => (
       <Link
@@ -81,16 +119,41 @@ const ProductList = () => {
         <TouchableOpacity style={styles.cardContainer}>
           <View style={styles.card}>
             <Image
-              source={{ uri: item.product_image }}
+              source={
+                item.product_image
+                  ? { uri: item.product_image }
+                  : require("../../../assets/images/imageSkeleton.jpg")
+              }
               style={styles.productImage}
               resizeMode="cover"
             />
             <View style={styles.cardContent}>
-              <Text style={styles.productTitle} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <Text style={styles.productPrice}>{item.spu}</Text>
-              <Text>{item.brand_title}</Text>
+              <View>
+                <Text
+                  style={[
+                    styles.productTitle,
+                    { color: theme.colors.textColor },
+                  ]}
+                  numberOfLines={2}
+                >
+                  {item.title}
+                </Text>
+                <Text
+                  style={[styles.productPrice, { color: theme.colors.button }]}
+                >
+                  {item.spu}
+                </Text>
+                <Text style={[styles.brand, { color: theme.colors.textColor }]}>
+                  {item.brand_title}
+                </Text>
+              </View>
+
+              <View style={styles.ratingContainer}>
+                {renderRatingStars(item)}
+                <Text style={styles.ratingText}>
+                  {`${item.average_rating}`}
+                </Text>
+              </View>
             </View>
           </View>
         </TouchableOpacity>
@@ -101,9 +164,16 @@ const ProductList = () => {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#FF7F50" />
-        <Text style={styles.loadingText}>Loading products...</Text>
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.textColor} />
+        <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
+          Loading products...
+        </Text>
       </View>
     );
   }
@@ -119,7 +189,7 @@ const ProductList = () => {
   if (products.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.messageText}>
+        <Text style={[styles.messageText, { color: theme.colors.textColor }]}>
           No products found in this subcategory.
         </Text>
       </View>
@@ -139,7 +209,10 @@ const ProductList = () => {
           ]}
         />
       )}
-      contentContainerStyle={styles.listContent}
+      contentContainerStyle={[
+        styles.listContent,
+        { backgroundColor: theme.colors.background },
+      ]}
     />
   );
 };
@@ -165,24 +238,25 @@ const styles = StyleSheet.create({
     color: "#555",
     textAlign: "center",
   },
-  listContent: {
-    paddingVertical: 5,
-  },
+  listContent: {},
   cardContainer: {
     marginVertical: 5,
+    borderRadius: 10,
   },
   card: {
     flexDirection: "row",
     overflow: "hidden",
+    margin: 10,
   },
   productImage: {
-    width: "40%",
-    height: 130,
-    marginLeft: 0,
+    width: 100,
+    height: 100,
+    borderRadius: 10,
   },
   cardContent: {
     flex: 1,
-    paddingVertical: 15,
+    paddingLeft: 15,
+    flexDirection: "row",
   },
   productTitle: {
     fontSize: 16,
@@ -197,6 +271,24 @@ const styles = StyleSheet.create({
   },
   separator: {
     borderTopWidth: 0.5,
+  },
+  ratingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    position: "absolute",
+    right: 10,
+    bottom: 10,
+  },
+  starIcon: {
+    marginRight: 1,
+  },
+  ratingText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: "#666",
+  },
+  brand: {
+    paddingTop: 5,
   },
 });
 
