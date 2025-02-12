@@ -6,24 +6,45 @@ import { LinearGradient } from "expo-linear-gradient";
 
 const ProductSkeleton = () => {
   return (
-    <View style={{ padding: 10, flex: 1 }}>
+    <View
+      style={{
+        paddingTop: 15,
+        paddingLeft: 10,
+        paddingBottom: 10,
+        flex: 1,
+        flexDirection: "row",
+      }}
+    >
       <Skeleton
-        animation="pulse"
-        width={"100%"}
-        height={150}
-        style={{ borderTopLeftRadius: 12, borderTopRightRadius: 12 }}
-      />
-      <Skeleton
-        LinearGradientComponent={LinearGradient}
         animation="wave"
-        width={"100%"}
-        height={50}
-        style={{
-          marginVertical: 1,
-          borderBottomLeftRadius: 12,
-          borderBottomRightRadius: 12,
-        }}
+        width={100}
+        height={100}
+        style={{ borderTopLeftRadius: 12, borderBottomLeftRadius: 12 }}
+        LinearGradientComponent={LinearGradient}
       />
+      <View style={{ flex: 1, flexDirection: "column", paddingLeft: 10 }}>
+        <Skeleton
+          animation="wave"
+          width={"90%"}
+          height={20}
+          style={{ borderRadius: 12 }}
+          LinearGradientComponent={LinearGradient}
+        />
+        <Skeleton
+          animation="wave"
+          width={"30%"}
+          height={20}
+          style={{ borderRadius: 12, marginTop: 10 }}
+          LinearGradientComponent={LinearGradient}
+        />
+        <Skeleton
+          animation="wave"
+          width={"40%"}
+          height={20}
+          style={{ borderRadius: 12, marginTop: 10 }}
+          LinearGradientComponent={LinearGradient}
+        />
+      </View>
     </View>
   );
 };

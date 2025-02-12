@@ -14,23 +14,26 @@ import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import useProductStore from "../components/api/useProductStore";
-import * as SplashScreen from "expo-splash-screen";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import TermsModal from "./screens/ConsentScreen/index";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-
-SplashScreen.preventAutoHideAsync();
+import * as SplashScreen from "expo-splash-screen";
 
 const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const { fetchProfile, logout, user } = useProductStore();
+  const { searchProductData, logout, user } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [checkedTerms, setCheckedTerms] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    SplashScreen.preventAutoHideAsync();
+    console.log(user);
+  }, []);
 
   useEffect(() => {
     const checkTermsAcceptance = async () => {
@@ -48,21 +51,20 @@ const Layout = () => {
   }, []);
 
   useEffect(() => {
-    if (checkedTerms) {
-      if (!hasAcceptedTerms) {
-        SplashScreen.hideAsync();
-      } else if (!isLoading) {
-        SplashScreen.hideAsync();
-      }
-    }
-  }, [checkedTerms, hasAcceptedTerms, isLoading]);
+    const initialize = () => {
+      initializeTheme(colorScheme === "dark");
 
+      searchProductData();
+      NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+    };
+    initialize();
+  }, [isDarkTheme, colorScheme]);
+
+  // Check authentication status
   useEffect(() => {
     const checkAuthentication = async () => {
       try {
-        if (!user) {
-          setIsLoggedIn(false);
-        } else if (user.consumer_id) {
+        if (user && user.consumer_id) {
           const oneWeekInMs = 7 * 24 * 60 * 60 * 1000;
           const isExpired = Date.now() - user.timestamp > oneWeekInMs;
 
@@ -72,6 +74,8 @@ const Layout = () => {
           } else {
             setIsLoggedIn(true);
           }
+        } else {
+          setIsLoggedIn(false);
         }
       } catch (error) {
         console.error("Authentication check failed:", error);
@@ -81,36 +85,36 @@ const Layout = () => {
       }
     };
 
-    if (hasAcceptedTerms) {
+    if (checkedTerms && hasAcceptedTerms) {
       checkAuthentication();
+    } else if (checkedTerms && !hasAcceptedTerms) {
+      setIsLoading(false);
     }
-  }, [hasAcceptedTerms, logout, user]);
+  }, [checkedTerms, hasAcceptedTerms, logout, user]);
 
   useEffect(() => {
-    if (hasAcceptedTerms && !isLoading) {
-      if (isLoggedIn) {
-        router.replace("/(tabs)");
-      } else {
-        router.replace("/Login");
+    if (checkedTerms && !isLoading) {
+      SplashScreen.hideAsync();
+
+      if (hasAcceptedTerms) {
+        if (isLoggedIn) {
+          router.replace("/(tabs)");
+        } else {
+          router.replace("/Login");
+        }
       }
     }
-  }, [isLoading, isLoggedIn, router, hasAcceptedTerms]);
+  }, [isLoading, isLoggedIn, router, hasAcceptedTerms, checkedTerms]);
 
-  useEffect(() => {
-    const initialize = async () => {
-      initializeTheme(colorScheme === "dark");
-      fetchProfile(user.consumer_id);
-      NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-    };
-    initialize();
-  }, [isDarkTheme, colorScheme]);
-
-  if (checkedTerms && !hasAcceptedTerms) {
-    return (
-      <GestureHandlerRootView>
-        <ActionSheetProvider>
-          <PaperProvider theme={theme}>
-            <StatusBar style="auto" />
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ActionSheetProvider>
+        <PaperProvider theme={theme}>
+          <StatusBar
+            style={isDarkTheme ? "light" : "dark"}
+            backgroundColor={theme.colors.primary}
+          />
+          {!hasAcceptedTerms ? (
             <TermsModal
               onAccept={async () => {
                 await AsyncStorage.setItem("hasAcceptedTerms", "true");
@@ -120,40 +124,17 @@ const Layout = () => {
                 BackHandler.exitApp();
               }}
             />
-          </PaperProvider>
-        </ActionSheetProvider>
-      </GestureHandlerRootView>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
-
-  return (
-    <GestureHandlerRootView>
-      <ActionSheetProvider>
-        <PaperProvider theme={theme}>
-          <StatusBar
-            style={isDarkTheme ? "light" : "dark"}
-            backgroundColor={theme.colors.primary}
-          />
-          <Stack
-            screenOptions={{
-              headerTitleAlign: "center",
-              animation: "simple_push",
-            }}
-          >
-            {isLoggedIn ? (
+          ) : (
+            <Stack
+              screenOptions={{
+                headerTitleAlign: "center",
+                animation: "simple_push",
+              }}
+            >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            ) : (
               <Stack.Screen name="Login" options={{ headerShown: false }} />
-            )}
-          </Stack>
+            </Stack>
+          )}
         </PaperProvider>
       </ActionSheetProvider>
     </GestureHandlerRootView>

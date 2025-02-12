@@ -121,7 +121,9 @@ const Cart = () => {
           ]}
         />
         <View style={styles.itemDetails}>
-          <Text style={styles.itemName}>{item.title}</Text>
+          <Text style={styles.itemName} numberOfLines={2}>
+            {item.title}
+          </Text>
           <Text style={styles.itemPrice}>${item.spu}</Text>
         </View>
         <Checkbox
@@ -157,7 +159,9 @@ const Cart = () => {
         buttonColor={theme.colors.button}
         disabled={selectedItems.length === 0}
         onPress={handleOrder}
-        icon={() => <Ionicons name="bag-add" size={24} color="white" />}
+        icon={() => (
+          <Ionicons name="bag-add" size={24} color={theme.colors.textColor} />
+        )}
       >
         Order Selected Items
       </Button>
@@ -214,7 +218,7 @@ const styles = StyleSheet.create({
   },
   orderButton: {
     position: "absolute",
-    bottom: 5,
+    bottom: 20,
     alignSelf: "center",
   },
   rightAction: {

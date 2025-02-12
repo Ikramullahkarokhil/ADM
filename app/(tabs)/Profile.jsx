@@ -110,7 +110,6 @@ const Profile = () => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      {/* Appearance Section */}
       <View style={styles.section}>
         <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
           <Text style={[styles.title, { color: theme.colors.textColor }]}>

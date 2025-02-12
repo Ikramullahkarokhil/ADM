@@ -187,7 +187,7 @@ const useProductStore = create(
       loginUser: async (credentials) => {
         set({ loginLoading: true, loginError: null });
         try {
-          const response = await api.post("/consumer-login", credentials);
+          const response = await api.post("/consumer/login", credentials);
           if (response.data.status === "success") {
             const userWithTimestamp = {
               ...response.data.data,
@@ -208,7 +208,7 @@ const useProductStore = create(
       signupUser: async (userData) => {
         set({ loginLoading: true, loginError: null });
         try {
-          const response = await api.post("/consumer-register", userData);
+          const response = await api.post("/consumer/register", userData);
 
           if (response.data.status === "success") {
             const userWithTimestamp = {

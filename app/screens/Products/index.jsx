@@ -8,7 +8,6 @@ import {
   View,
   Text,
   FlatList,
-  ActivityIndicator,
   Image,
   StyleSheet,
   TouchableOpacity,
@@ -17,10 +16,11 @@ import { Link, useLocalSearchParams, useNavigation } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import { FontAwesome } from "@expo/vector-icons";
-import { color } from "@rneui/base";
+import ProductSkeleton from "../../../components/skeleton/productSkeleton";
 
 const ProductList = () => {
-  const { subcategoryId, mainCategoryId, showmore } = useLocalSearchParams();
+  const { subcategoryId, mainCategoryId, showmore, subCategorieName } =
+    useLocalSearchParams();
   const {
     subcategories,
     productsBySubcategory,
@@ -32,14 +32,12 @@ const ProductList = () => {
   const [products, setProducts] = useState([]);
   const theme = useTheme();
   const navigation = useNavigation();
-
   useLayoutEffect(() => {
     navigation.setOptions({
-      title: "Products",
+      title: subCategorieName,
       headerStyle: {
         backgroundColor: theme.colors.primary,
       },
-
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, products]);
@@ -143,11 +141,15 @@ const ProductList = () => {
                 >
                   {item.spu}
                 </Text>
-                <Text style={[styles.brand, { color: theme.colors.textColor }]}>
-                  {item.brand_title}
-                </Text>
+                <View style={{ flexDirection: "row" }}>
+                  <Text style={styles.brand}>Brand: </Text>
+                  <Text
+                    style={[styles.brand, { color: theme.colors.textColor }]}
+                  >
+                    {item.brand_title}
+                  </Text>
+                </View>
               </View>
-
               <View style={styles.ratingContainer}>
                 {renderRatingStars(item)}
                 <Text style={styles.ratingText}>
@@ -162,22 +164,6 @@ const ProductList = () => {
     []
   );
 
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.textColor} />
-        <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
-          Loading products...
-        </Text>
-      </View>
-    );
-  }
-
   if (error) {
     return (
       <View style={styles.centerContainer}>
@@ -186,7 +172,7 @@ const ProductList = () => {
     );
   }
 
-  if (products.length === 0) {
+  const listEmptyComponent = () => {
     return (
       <View style={styles.centerContainer}>
         <Text style={[styles.messageText, { color: theme.colors.textColor }]}>
@@ -194,26 +180,38 @@ const ProductList = () => {
         </Text>
       </View>
     );
-  }
+  };
 
   return (
-    <FlatList
-      data={products}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.products_id.toString()}
-      ItemSeparatorComponent={() => (
-        <View
-          style={[
-            styles.separator,
-            { borderTopColor: theme.colors.inactiveColor },
+    <>
+      {loading ? (
+        <FlatList
+          data={Array(6).fill(null)}
+          renderItem={() => <ProductSkeleton />}
+          keyExtractor={(_, index) => index.toString()}
+          contentContainerStyle={styles.productsListContent}
+        />
+      ) : (
+        <FlatList
+          data={products}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.products_id.toString()}
+          ItemSeparatorComponent={() => (
+            <View
+              style={[
+                styles.separator,
+                { borderTopColor: theme.colors.inactiveColor },
+              ]}
+            />
+          )}
+          contentContainerStyle={[
+            styles.listContent,
+            { backgroundColor: theme.colors.background },
           ]}
+          ListEmptyComponent={listEmptyComponent}
         />
       )}
-      contentContainerStyle={[
-        styles.listContent,
-        { backgroundColor: theme.colors.background },
-      ]}
-    />
+    </>
   );
 };
 
@@ -222,7 +220,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 40,
   },
   loadingText: {
     marginTop: 10,

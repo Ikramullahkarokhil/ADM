@@ -1,14 +1,163 @@
-import { StyleSheet, Text, View } from "react-native";
-import React from "react";
+import React, { useEffect, useLayoutEffect } from "react";
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  FlatList,
+  Pressable,
+} from "react-native";
+import useProductStore from "../../../components/api/useProductStore";
+import { Button, IconButton, useTheme } from "react-native-paper";
+import { Link, useNavigation } from "expo-router";
 
-const index = () => {
+const FavoriteProductPage = () => {
+  const { user, removeFavorite, favProducts } = useProductStore();
+  const theme = useTheme();
+  const navigation = useNavigation();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Favorite Products",
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.textColor,
+    });
+  }, [navigation, theme.colors.primary, theme.colors.textColor]);
+
+  const handleRemoveFav = async (favId) => {
+    const favItem = await favProducts.find(
+      (item) => item.product_fav_id === favId
+    );
+    if (favItem) {
+      await removeFavorite({
+        favId: favItem.product_fav_id,
+        consumerID: user.consumer_id,
+      });
+    }
+  };
+
+  const renderFavoriteItem = ({ item }) => (
+    <Link
+      href={{
+        pathname: "/screens/ProductDetail",
+        params: { id: item.products_id },
+      }}
+      asChild
+      style={[styles.productCard, { backgroundColor: theme.colors.primary }]}
+    >
+      <Pressable android_ripple={theme.colors.riple}>
+        <View style={styles.productInfo}>
+          <Text
+            style={[styles.productName, { color: theme.colors.textColor }]}
+            numberOfLines={2}
+          >
+            {item.name}
+          </Text>
+          <Text style={[styles.productPrice, { color: theme.colors.button }]}>
+            ${item.price}
+          </Text>
+          <Text
+            style={[
+              styles.productSysteminactiveColor,
+              { color: theme.colors.inactiveColor },
+            ]}
+          >
+            {item.system_name}
+          </Text>
+          <Text
+            style={[styles.productDate, { color: theme.colors.inactiveColor }]}
+          >
+            {new Date(item.date).toLocaleString()}
+          </Text>
+        </View>
+
+        <IconButton
+          onPress={() => handleRemoveFav(item.product_fav_id)}
+          style={styles.removeButton}
+          iconColor={theme.colors.deleteButton}
+          icon="delete"
+        />
+      </Pressable>
+    </Link>
+  );
+
   return (
-    <View>
-      <Text>favorites</Text>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      {favProducts && favProducts.length > 0 ? (
+        <FlatList
+          data={favProducts}
+          keyExtractor={(item) => item.product_fav_id.toString()}
+          renderItem={renderFavoriteItem}
+          contentContainerStyle={styles.listContainer}
+        />
+      ) : (
+        <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
+          No favorite products found.
+        </Text>
+      )}
     </View>
   );
 };
 
-export default index;
+export default FavoriteProductPage;
 
-const styles = StyleSheet.create({});
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  listContainer: {
+    padding: 16,
+  },
+  productCard: {
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  productInfo: {
+    flex: 1,
+  },
+  productName: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+  },
+  productPrice: {
+    fontSize: 16,
+    color: "#888",
+    marginBottom: 4,
+  },
+  productSystem: {
+    fontSize: 14,
+    color: "#aaa",
+    marginBottom: 4,
+  },
+  productDate: {
+    fontSize: 12,
+    color: "#ccc",
+  },
+  removeButton: {
+    position: "absolute",
+    bottom: 1,
+    right: 1,
+  },
+
+  emptyText: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 20,
+  },
+});

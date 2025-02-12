@@ -16,8 +16,13 @@ const Home = () => {
   const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
     useState([]);
 
-  const { user, fetchFavProducts, fetchMainCategories, fetchSubcategories } =
-    useProductStore();
+  const {
+    fetchProfile,
+    user,
+    fetchFavProducts,
+    fetchMainCategories,
+    fetchSubcategories,
+  } = useProductStore();
 
   useEffect(() => {
     const initialize = async () => {
@@ -99,6 +104,7 @@ const Home = () => {
                       top: 5,
                       left: 25,
                       backgroundColor: "red",
+                      color: "white",
                     },
                   ]}
                 >

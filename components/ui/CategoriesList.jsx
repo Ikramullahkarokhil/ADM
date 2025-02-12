@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -17,17 +17,29 @@ const CategoriesSectionList = ({ data }) => {
   const { width } = useWindowDimensions();
   const numColumns = width > 550 ? 4 : 2;
   const router = useRouter();
+  const [refreshing, setRefreshing] = useState(false);
 
   if (!data || data.length === 0) {
     return <ActivityIndicator />;
   }
+
+  const onRefresh = () => {
+    setRefreshing(true);
+
+    setTimeout(() => {
+      setRefreshing(false);
+    }, 2000);
+  };
 
   const renderSubcategoryItem = ({ item }) => (
     <View style={{ flex: 1, margin: 5 }}>
       <Link
         href={{
           pathname: `/screens/Products`,
-          params: { subcategoryId: item.categories_id },
+          params: {
+            subcategoryId: item.categories_id,
+            subCategorieName: item.title,
+          },
         }}
         asChild
       >
@@ -44,8 +56,8 @@ const CategoriesSectionList = ({ data }) => {
         >
           <Image
             source={
-              item.image
-                ? { uri: item.image }
+              item.category_image
+                ? { uri: item.category_image }
                 : require("../../assets/images/imageSkeleton.jpg")
             }
             style={styles.image}
@@ -74,14 +86,16 @@ const CategoriesSectionList = ({ data }) => {
 
   const footerComponent = () => {
     return (
-      <View>
-        <Text style={styles.listFooter}>Footer</Text>
+      <View style={styles.footer}>
+        <Text style={[styles.listFooter, { color: theme.colors.textColor }]}>
+          Footer
+        </Text>
       </View>
     );
   };
 
   const renderCategory = ({ item }) => {
-    const displayedSubCategories = item.subCategories.slice(0, 4);
+    const displayedSubCategories = item.subCategories.slice(0, 8);
 
     return (
       <View style={styles.categoryContainer}>
@@ -107,7 +121,7 @@ const CategoriesSectionList = ({ data }) => {
           <Text
             style={[styles.showMoreText, { color: theme.colors.textColor }]}
           >
-            See More
+            Show More
           </Text>
         </Pressable>
       </View>
@@ -120,17 +134,17 @@ const CategoriesSectionList = ({ data }) => {
       renderItem={renderCategory}
       keyExtractor={(item) => item.main_category_id.toString()}
       contentContainerStyle={styles.container}
-      ItemSeparatorComponent={() => {
-        return (
-          <View
-            style={{
-              borderBlockColor: theme.colors.inactiveColor,
-              borderWidth: 0.5,
-            }}
-          />
-        );
-      }}
-      ListFooterComponentStyle={footerComponent}
+      ItemSeparatorComponent={() => (
+        <View
+          style={{
+            borderBlockColor: theme.colors.inactiveColor,
+            borderWidth: 0.5,
+          }}
+        />
+      )}
+      ListFooterComponent={footerComponent}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
     />
   );
 };
@@ -170,5 +184,9 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
     color: "#4CAF50",
   },
-  listFooter: {},
+
+  footer: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });

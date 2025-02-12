@@ -11,6 +11,7 @@ const lightTheme = {
     progressColor: "#D2D2D2",
     button: "#4CAF50",
     disabled: "#adb5bd",
+    deleteButton: "#ff5252",
   },
 };
 
