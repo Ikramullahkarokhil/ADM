@@ -32,7 +32,6 @@ const Layout = () => {
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
-    console.log(user);
   }, []);
 
   useEffect(() => {

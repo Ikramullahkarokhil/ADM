@@ -11,6 +11,8 @@ import {
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { Link, useRouter } from "expo-router";
+import useProductStore from "../api/useProductStore";
+import useThemeStore from "../store/useThemeStore";
 
 const CategoriesSectionList = ({ data }) => {
   const theme = useTheme();
@@ -18,14 +20,17 @@ const CategoriesSectionList = ({ data }) => {
   const numColumns = width > 550 ? 4 : 2;
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
+  const { user, fetchProfile, fetchFavProducts } = useProductStore();
+  const { isDarkTheme } = useThemeStore();
 
   if (!data || data.length === 0) {
     return <ActivityIndicator />;
   }
 
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-
+    await fetchProfile();
+    await fetchFavProducts(user.consumer_id);
     setTimeout(() => {
       setRefreshing(false);
     }, 2000);
@@ -58,6 +63,8 @@ const CategoriesSectionList = ({ data }) => {
             source={
               item.category_image
                 ? { uri: item.category_image }
+                : isDarkTheme
+                ? require("../../assets/images/darkImagePlaceholder.jpg")
                 : require("../../assets/images/imageSkeleton.jpg")
             }
             style={styles.image}
