@@ -11,14 +11,13 @@ import Fontisto from "@expo/vector-icons/Fontisto";
 const Home = () => {
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
-  const navigation = useNavigation();
-  const cart = useCartStore((state) => state.cart);
   const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
     useState([]);
+  const navigation = useNavigation();
 
   const {
-    fetchProfile,
     user,
+    cartItem,
     fetchFavProducts,
     fetchMainCategories,
     fetchSubcategories,
@@ -49,20 +48,25 @@ const Home = () => {
         console.error("Failed to fetch data:", err);
       } finally {
         setLoading(false);
-        await fetchFavProducts(user.consumer_id);
+        if (user?.consumer_id) {
+          fetchFavProducts(user.consumer_id);
+        }
       }
     };
     initialize();
-  }, []);
+  }, [
+    fetchMainCategories,
+    fetchSubcategories,
+    fetchFavProducts,
+    user?.consumer_id,
+  ]);
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
   const groupedCartItems = useMemo(() => {
-    return cart.reduce((acc, item) => {
+    return cartItem.reduce((acc, item) => {
       const existingItem = acc.find((i) => i.products_id === item.products_id);
       if (existingItem) {
         existingItem.quantity += 1;
@@ -71,7 +75,7 @@ const Home = () => {
       }
       return acc;
     }, []);
-  }, [cart]);
+  }, [cartItem]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
@@ -90,26 +94,18 @@ const Home = () => {
           </Link>
           <View style={styles.iconsContainer}>
             <Link href={{ pathname: "/screens/Cart" }} asChild>
-              <Pressable android_ripple={theme.colors.riple}>
+              <Pressable
+                android_ripple={{ color: theme.colors.ripple }}
+                style={styles.iconButton}
+              >
                 <IconButton
                   icon="cart"
                   size={24}
                   iconColor={theme.colors.textColor}
                 />
-                <Badge
-                  style={[
-                    styles.badge,
-                    {
-                      position: "absolute",
-                      top: 5,
-                      left: 25,
-                      backgroundColor: "red",
-                      color: "white",
-                    },
-                  ]}
-                >
-                  {groupedCartItems.length}
-                </Badge>
+                {groupedCartItems.length > 0 && (
+                  <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
+                )}
               </Pressable>
             </Link>
             <Link href={{ pathname: "/screens/Favorite" }} asChild>
@@ -162,13 +158,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  chipContainer: {
-    padding: 5,
-  },
-  chipListContent: {
-    paddingTop: 5,
-    paddingHorizontal: 10,
-  },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -182,33 +171,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  categoriesHeader: {
-    marginLeft: 16,
-    marginVertical: 8,
-    fontSize: 22,
-    fontWeight: "600",
-  },
-  productsList: {
-    flex: 1,
-  },
-  emptyContainer: {
-    padding: 15,
+  iconButton: {
+    position: "relative",
   },
   badge: {
     position: "absolute",
     top: 5,
     left: 25,
     backgroundColor: "red",
+    color: "white",
   },
-  categoriesListContent: {
-    paddingHorizontal: 10,
-  },
-  menuContainer: {
-    position: "absolute",
-    top: 50,
-    left: 0,
-    right: 0,
-    alignItems: "center",
+  productsList: {
+    flex: 1,
   },
   productsListContent: {
     marginTop: 40,

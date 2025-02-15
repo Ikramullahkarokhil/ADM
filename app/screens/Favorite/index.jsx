@@ -1,14 +1,7 @@
-import React, { useEffect, useLayoutEffect } from "react";
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  FlatList,
-  Pressable,
-} from "react-native";
+import React, { useLayoutEffect, useCallback } from "react";
+import { StyleSheet, Text, View, FlatList, Pressable } from "react-native";
 import useProductStore from "../../../components/api/useProductStore";
-import { Button, IconButton, useTheme } from "react-native-paper";
+import { IconButton, useTheme } from "react-native-paper";
 import { Link, useNavigation } from "expo-router";
 
 const FavoriteProductPage = () => {
@@ -19,75 +12,80 @@ const FavoriteProductPage = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Favorite Products",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
+      headerStyle: { backgroundColor: theme.colors.primary },
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, theme.colors.primary, theme.colors.textColor]);
 
-  const handleRemoveFav = async (favId) => {
-    const favItem = await favProducts.find(
-      (item) => item.product_fav_id === favId
-    );
-    if (favItem) {
-      await removeFavorite({
-        favId: favItem.product_fav_id,
-        consumerID: user.consumer_id,
-      });
-    }
-  };
+  // Memoizing the remove function to avoid unnecessary re-renders
+  const handleRemoveFav = useCallback(
+    async (favId) => {
+      const favItem = favProducts.find((item) => item.product_fav_id === favId);
+      if (favItem) {
+        await removeFavorite({
+          favId: favItem.product_fav_id,
+          consumerID: user.consumer_id,
+        });
+      }
+    },
+    [favProducts, removeFavorite, user.consumer_id]
+  );
 
-  const renderFavoriteItem = ({ item }) => (
-    <Link
-      href={{
-        pathname: "/screens/ProductDetail",
-        params: { id: item.products_id },
-      }}
-      asChild
-      style={[styles.productCard, { backgroundColor: theme.colors.primary }]}
-    >
-      <Pressable android_ripple={theme.colors.riple}>
-        <View style={styles.productInfo}>
-          <Text
-            style={[styles.productName, { color: theme.colors.textColor }]}
-            numberOfLines={2}
-          >
-            {item.name}
-          </Text>
-          <Text style={[styles.productPrice, { color: theme.colors.button }]}>
-            ${item.price}
-          </Text>
-          <Text
-            style={[
-              styles.productSysteminactiveColor,
-              { color: theme.colors.inactiveColor },
-            ]}
-          >
-            {item.system_name}
-          </Text>
-          <Text
-            style={[styles.productDate, { color: theme.colors.inactiveColor }]}
-          >
-            {new Date(item.date).toLocaleString()}
-          </Text>
-        </View>
-
-        <IconButton
-          onPress={() => handleRemoveFav(item.product_fav_id)}
-          style={styles.removeButton}
-          iconColor={theme.colors.deleteButton}
-          icon="delete"
-        />
-      </Pressable>
-    </Link>
+  const renderFavoriteItem = useCallback(
+    ({ item }) => (
+      <Link
+        href={{
+          pathname: "/screens/ProductDetail",
+          params: { id: item.products_id },
+        }}
+        asChild
+        style={[styles.productCard, { backgroundColor: theme.colors.primary }]}
+      >
+        <Pressable android_ripple={theme.colors.ripple}>
+          <View style={styles.productInfo}>
+            <Text
+              style={[styles.productName, { color: theme.colors.textColor }]}
+              numberOfLines={2}
+            >
+              {item.name}
+            </Text>
+            <Text style={[styles.productPrice, { color: theme.colors.button }]}>
+              ${item.price}
+            </Text>
+            <Text
+              style={[
+                styles.productSystem,
+                { color: theme.colors.inactiveColor },
+              ]}
+            >
+              {item.system_name}
+            </Text>
+            <Text
+              style={[
+                styles.productDate,
+                { color: theme.colors.inactiveColor },
+              ]}
+            >
+              {new Date(item.date).toLocaleString()}
+            </Text>
+          </View>
+          <IconButton
+            onPress={() => handleRemoveFav(item.product_fav_id)}
+            style={styles.removeButton}
+            iconColor={theme.colors.deleteButton}
+            icon="delete"
+          />
+        </Pressable>
+      </Link>
+    ),
+    [handleRemoveFav, theme.colors]
   );
 
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      {favProducts && favProducts.length > 0 ? (
+      {favProducts.length > 0 ? (
         <FlatList
           data={favProducts}
           keyExtractor={(item) => item.product_fav_id.toString()}
@@ -154,7 +152,6 @@ const styles = StyleSheet.create({
     bottom: 1,
     right: 1,
   },
-
   emptyText: {
     fontSize: 16,
     textAlign: "center",

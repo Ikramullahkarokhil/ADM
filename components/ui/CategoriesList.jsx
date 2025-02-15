@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,7 +11,6 @@ import {
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { Link, useRouter } from "expo-router";
-import useProductStore from "../api/useProductStore";
 import useThemeStore from "../store/useThemeStore";
 
 const CategoriesSectionList = ({ data }) => {
@@ -20,120 +19,116 @@ const CategoriesSectionList = ({ data }) => {
   const numColumns = width > 550 ? 4 : 2;
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
-  const { user, fetchProfile, fetchFavProducts } = useProductStore();
   const { isDarkTheme } = useThemeStore();
 
-  if (!data || data.length === 0) {
-    return <ActivityIndicator />;
-  }
-
-  const onRefresh = async () => {
+  const onRefresh = useCallback(() => {
     setRefreshing(true);
-    await fetchProfile();
-    await fetchFavProducts(user.consumer_id);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 2000);
-  };
+    setTimeout(() => setRefreshing(false), 1500);
+  }, []);
 
-  const renderSubcategoryItem = ({ item }) => (
-    <View style={{ flex: 1, margin: 5 }}>
-      <Link
-        href={{
-          pathname: `/screens/Products`,
-          params: {
-            subcategoryId: item.categories_id,
-            subCategorieName: item.title,
-          },
-        }}
-        asChild
-      >
-        <Pressable
-          android_ripple={{ color: theme.colors.ripple }}
-          style={[
-            styles.product,
-            {
-              backgroundColor: theme.colors.primary,
-              shadowColor: theme.colors.textColor,
-              borderRadius: 10,
-            },
-          ]}
-        >
-          <Image
-            source={
-              item.category_image
-                ? { uri: item.category_image }
-                : isDarkTheme
-                ? require("../../assets/images/darkImagePlaceholder.jpg")
-                : require("../../assets/images/imageSkeleton.jpg")
-            }
-            style={styles.image}
-            resizeMode="cover"
-          />
-          <View style={styles.details}>
-            <Text
-              style={[styles.name, { color: theme.colors.textColor }]}
-              numberOfLines={2}
-              ellipsizeMode="tail"
-            >
-              {item.title}
-            </Text>
-          </View>
-        </Pressable>
-      </Link>
-    </View>
+  const handleShowMore = useCallback(
+    (mainCategoryId) => {
+      router.push({
+        pathname: "/screens/Products",
+        params: { mainCategoryId, showmore: 1 },
+      });
+    },
+    [router]
   );
 
-  const handleShowMore = (mainCategoryId) => {
-    router.navigate({
-      pathname: "/screens/Products",
-      params: { mainCategoryId: mainCategoryId, showmore: 1 },
-    });
-  };
+  const renderSubcategoryItem = useCallback(
+    ({ item }) => (
+      <View style={styles.itemContainer}>
+        <Link
+          href={{
+            pathname: `/screens/Products`,
+            params: {
+              subcategoryId: item.categories_id,
+              subCategorieName: item.title,
+            },
+          }}
+          asChild
+        >
+          <Pressable
+            android_ripple={{ color: theme.colors.ripple }}
+            style={[styles.product, { backgroundColor: theme.colors.primary }]}
+          >
+            <Image
+              source={
+                item.category_image
+                  ? { uri: item.category_image }
+                  : isDarkTheme
+                  ? require("../../assets/images/darkImagePlaceholder.jpg")
+                  : require("../../assets/images/imageSkeleton.jpg")
+              }
+              style={styles.image}
+              resizeMode="cover"
+            />
+            <View style={styles.details}>
+              <Text
+                style={[styles.name, { color: theme.colors.textColor }]}
+                numberOfLines={2}
+              >
+                {item.title}
+              </Text>
+            </View>
+          </Pressable>
+        </Link>
+      </View>
+    ),
+    [theme, isDarkTheme]
+  );
 
-  const footerComponent = () => {
-    return (
+  const renderCategory = useCallback(
+    ({ item }) => {
+      const displayedSubCategories = item.subCategories.slice(0, 8);
+
+      return (
+        <View style={styles.categoryContainer}>
+          <Text style={[styles.header, { color: theme.colors.textColor }]}>
+            {item.name}
+          </Text>
+          <FlatList
+            data={displayedSubCategories}
+            renderItem={renderSubcategoryItem}
+            keyExtractor={(subItem) => subItem.categories_id.toString()}
+            numColumns={numColumns}
+            scrollEnabled={false}
+          />
+          <Pressable
+            onPress={() => handleShowMore(item.main_category_id)}
+            style={styles.showMoreButton}
+          >
+            <Text
+              style={[styles.showMoreText, { color: theme.colors.textColor }]}
+            >
+              Show More
+            </Text>
+          </Pressable>
+        </View>
+      );
+    },
+    [renderSubcategoryItem, handleShowMore]
+  );
+
+  const footerComponent = useMemo(
+    () => (
       <View style={styles.footer}>
         <Text style={[styles.listFooter, { color: theme.colors.textColor }]}>
           Footer
         </Text>
       </View>
-    );
-  };
+    ),
+    [theme]
+  );
 
-  const renderCategory = ({ item }) => {
-    const displayedSubCategories = item.subCategories.slice(0, 8);
-
+  if (!data || data.length === 0) {
     return (
-      <View style={styles.categoryContainer}>
-        <Text style={[styles.header, { color: theme.colors.textColor }]}>
-          {item.name}
-        </Text>
-        <FlatList
-          data={displayedSubCategories}
-          renderItem={renderSubcategoryItem}
-          keyExtractor={(subItem) => subItem.categories_id.toString()}
-          numColumns={numColumns}
-          scrollEnabled={false}
-          nestedScrollEnabled={true}
-        />
-        <Pressable
-          onPress={() => handleShowMore(item.main_category_id)}
-          android_ripple={{ color: theme.colors.ripple }}
-          style={[
-            styles.showMoreButton,
-            { backgroundColor: theme.colors.accent },
-          ]}
-        >
-          <Text
-            style={[styles.showMoreText, { color: theme.colors.textColor }]}
-          >
-            Show More
-          </Text>
-        </Pressable>
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
-  };
+  }
 
   return (
     <FlatList
@@ -141,17 +136,17 @@ const CategoriesSectionList = ({ data }) => {
       renderItem={renderCategory}
       keyExtractor={(item) => item.main_category_id.toString()}
       contentContainerStyle={styles.container}
-      ItemSeparatorComponent={() => (
-        <View
-          style={{
-            borderBlockColor: theme.colors.inactiveColor,
-            borderWidth: 0.5,
-          }}
-        />
-      )}
+      ItemSeparatorComponent={() => <View style={styles.separator} />}
       ListFooterComponent={footerComponent}
       refreshing={refreshing}
       onRefresh={onRefresh}
+      initialNumToRender={5}
+      windowSize={5}
+      getItemLayout={(data, index) => ({
+        length: 150,
+        offset: 150 * index,
+        index,
+      })}
     />
   );
 };
@@ -162,6 +157,11 @@ const styles = StyleSheet.create({
   container: {
     paddingBottom: 20,
   },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   categoryContainer: {
     marginBottom: 10,
     paddingHorizontal: 10,
@@ -170,30 +170,48 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     marginVertical: 10,
-    paddingHorizontal: 5,
+  },
+  itemContainer: {
+    flex: 1,
+    margin: 5,
   },
   product: {
     overflow: "hidden",
+    borderRadius: 10,
+    padding: 5,
   },
   image: {
     width: "100%",
     height: 150,
     borderRadius: 8,
   },
-  details: {},
+  details: {
+    padding: 5,
+  },
   name: {
     fontSize: 14,
     fontWeight: "500",
   },
-  showMoreText: {
-    marginHorizontal: 5,
-    marginVertical: 5,
-    textDecorationLine: "underline",
-    color: "#4CAF50",
+  showMoreButton: {
+    marginTop: 10,
+    padding: 10,
+    alignItems: "center",
+    borderRadius: 8,
   },
-
+  showMoreText: {
+    textDecorationLine: "underline",
+  },
+  separator: {
+    borderBottomWidth: 0.5,
+    borderBottomColor: "#ddd",
+    marginVertical: 5,
+  },
   footer: {
     justifyContent: "center",
     alignItems: "center",
+    paddingVertical: 10,
+  },
+  listFooter: {
+    fontSize: 16,
   },
 });

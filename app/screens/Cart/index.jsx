@@ -1,9 +1,4 @@
-import React, {
-  useLayoutEffect,
-  useState,
-  useCallback,
-  useEffect,
-} from "react";
+import React, { useLayoutEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,33 +6,38 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
+  ToastAndroid,
 } from "react-native";
 import { Button, IconButton, useTheme, Checkbox } from "react-native-paper";
 import { useNavigation } from "expo-router";
-import useCartStore from "../../../components/store/useCartStore";
-import useOrderStore from "../../../components/store/useOrderStore";
-import Ionicons from "@expo/vector-icons/Ionicons";
 import { Swipeable } from "react-native-gesture-handler";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import useOrderStore from "../../../components/store/useOrderStore";
+import useProductStore from "../../../components/api/useProductStore";
 
 const Cart = () => {
-  const cart = useCartStore((state) => state.cart);
-  const removeFromCart = useCartStore((state) => state.removeFromCart);
+  const { listCart, user, deleteFromCart, cartItem } = useProductStore();
   const addOrder = useOrderStore((state) => state.addOrder);
   const navigation = useNavigation();
   const theme = useTheme();
 
-  const [selectedItems, setSelectedItems] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
-  const toggleSelection = (item) => {
-    setSelectedItems((prev) => {
-      const exists = prev.find((i) => i.products_id === item.products_id);
-      if (exists) {
-        return prev.filter((i) => i.products_id !== item.products_id);
+  const toggleSelection = useCallback((productId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) {
+        next.delete(productId);
       } else {
-        return [...prev, item];
+        next.add(productId);
       }
+      return next;
     });
-  };
+  }, []);
+
+  const selectedItems = cartItem.filter((item) =>
+    selectedIds.has(item.products_id)
+  );
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -49,107 +49,118 @@ const Cart = () => {
     });
   }, [navigation, theme.colors.primary, theme.colors.textColor]);
 
-  useEffect(() => {
-    // Select all products by default
-    setSelectedItems([...cart]);
-  }, [cart]);
-
-  const handleRemoveFromCart = (item) => {
-    removeFromCart(item.products_id);
-    setSelectedItems((prev) =>
-      prev.filter((i) => i.products_id !== item.products_id)
-    );
-  };
-
-  const handleOrder = async () => {
-    try {
-      const successfulItems = [];
-      for (const item of selectedItems) {
-        try {
-          await addOrder(item);
-          successfulItems.push(item.products_id);
-        } catch (error) {
-          console.error("Failed to order item:", item, error);
-        }
+  const handleRemoveFromCart = useCallback(
+    async (item) => {
+      try {
+        await deleteFromCart({
+          productID: item.products_id,
+          consumerID: user.consumer_id,
+        });
+        ToastAndroid.show("Product removed from cart", ToastAndroid.SHORT);
+      } catch (error) {
+        console.error("Failed to remove item:", error);
+        ToastAndroid.show("Failed to remove product", ToastAndroid.SHORT);
       }
-      // Remove only successfully ordered items from the cart
-      successfulItems.forEach((id) => removeFromCart(id));
-      setSelectedItems((prev) =>
-        prev.filter((item) => !successfulItems.includes(item.products_id))
-      );
-    } catch (error) {
-      console.error("Order process failed:", error);
-    }
-  };
-
-  const renderRightActions = (item) => (
-    <View style={styles.rightAction}>
-      <IconButton
-        icon="delete"
-        onPress={() => handleRemoveFromCart(item)}
-        color="red"
-        size={24}
-      />
-    </View>
+    },
+    [deleteFromCart, listCart, user.consumer_id]
   );
 
-  const renderItem = ({ item }) => (
-    <Swipeable
-      renderRightActions={() => renderRightActions(item)}
-      containerStyle={[
-        styles.swipeableContainer,
-        { backgroundColor: theme.colors.background },
-      ]}
-    >
-      <TouchableOpacity
-        style={[
-          styles.itemContainer,
-          { backgroundColor: theme.colors.primary },
+  const handleOrder = useCallback(async () => {
+    try {
+      await Promise.all(selectedItems.map((item) => addOrder(item)));
+      await Promise.all(
+        selectedItems.map((item) =>
+          deleteFromCart({
+            productID: item.products_id,
+            consumerID: user.consumer_id,
+          })
+        )
+      );
+
+      await listCart(user.consumer_id);
+      ToastAndroid.show("Product Ordered", ToastAndroid.SHORT);
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error("Order failed:", error);
+    }
+  }, [selectedItems, addOrder, deleteFromCart, listCart, user.consumer_id]);
+
+  const renderRightActions = useCallback(
+    (item) => (
+      <View style={styles.rightAction}>
+        <IconButton
+          icon="delete"
+          onPress={() => handleRemoveFromCart(item)}
+          color="red"
+          size={24}
+        />
+      </View>
+    ),
+    [handleRemoveFromCart]
+  );
+
+  const renderItem = useCallback(
+    ({ item }) => (
+      <Swipeable
+        renderRightActions={() => renderRightActions(item)}
+        containerStyle={[
+          styles.swipeableContainer,
+          { backgroundColor: theme.colors.background },
         ]}
-        activeOpacity={0.8}
-        onPress={() => toggleSelection(item)}
       >
-        <Image
-          source={
-            item.image
-              ? { uri: item.image }
-              : require("../../../assets/images/imageSkeleton.jpg")
-          }
+        <TouchableOpacity
           style={[
-            styles.itemImage,
-            { backgroundColor: theme.colors.background },
+            styles.itemContainer,
+            { backgroundColor: theme.colors.primary },
           ]}
-        />
-        <View style={styles.itemDetails}>
-          <Text style={styles.itemName} numberOfLines={2}>
-            {item.title}
-          </Text>
-          <Text style={styles.itemPrice}>${item.spu}</Text>
-        </View>
-        <Checkbox
-          status={
-            selectedItems.find((i) => i.products_id === item.products_id)
-              ? "checked"
-              : "unchecked"
-          }
-          onPress={() => toggleSelection(item)}
-          color={theme.colors.button}
-        />
-      </TouchableOpacity>
-    </Swipeable>
+          activeOpacity={0.8}
+          onPress={() => toggleSelection(item.products_id)}
+        >
+          <Image
+            source={
+              item.image
+                ? { uri: item.image }
+                : require("../../../assets/images/imageSkeleton.jpg")
+            }
+            style={[
+              styles.itemImage,
+              { backgroundColor: theme.colors.background },
+            ]}
+          />
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemName} numberOfLines={2}>
+              {item.title}
+            </Text>
+            <Text style={styles.itemPrice}>${item.spu}</Text>
+          </View>
+          <Checkbox
+            status={selectedIds.has(item.products_id) ? "checked" : "unchecked"}
+            onPress={() => toggleSelection(item.products_id)}
+            color={theme.colors.button}
+          />
+        </TouchableOpacity>
+      </Swipeable>
+    ),
+    [
+      renderRightActions,
+      toggleSelection,
+      selectedIds,
+      theme.colors.background,
+      theme.colors.primary,
+      theme.colors.button,
+    ]
   );
 
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      {cart.length > 0 ? (
+      {cartItem.length > 0 ? (
         <FlatList
-          data={cart}
+          data={cartItem}
           renderItem={renderItem}
           keyExtractor={(item) => item.products_id.toString()}
           contentContainerStyle={styles.list}
-          scrollEnabled
         />
       ) : (
         <Text style={styles.emptyCartText}>Your cart is empty</Text>
@@ -177,7 +188,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   list: {
-    flex: 1,
+    flexGrow: 1,
     paddingBottom: 80,
   },
   swipeableContainer: {

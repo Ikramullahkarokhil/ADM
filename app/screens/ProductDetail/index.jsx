@@ -3,7 +3,6 @@ import React, {
   useLayoutEffect,
   useState,
   useCallback,
-  useRef,
 } from "react";
 import {
   StyleSheet,
@@ -16,24 +15,31 @@ import {
   Share,
   ActivityIndicator,
   Alert,
+  ToastAndroid,
+  TextInput,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
-import useCartStore from "../../../components/store/useCartStore";
 import useProductStore from "../../../components/api/useProductStore";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Button, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
-import { themeable } from "tamagui";
 
 const ProductDetail = () => {
   const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
+
   const [product, setProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
+  const [addedToCart, setAddedToCart] = useState(false);
+
+  const [comments, setComments] = useState([]);
+  const [newComment, setNewComment] = useState("");
+  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [isAddingComment, setIsAddingComment] = useState(false);
 
   const {
     user,
@@ -42,12 +48,14 @@ const ProductDetail = () => {
     productsBySubcategory,
     productData,
     favProducts,
+    addToCart,
+    cartItem,
     loading,
     error,
+    fetchComments,
+    addComment,
+    deleteComment,
   } = useProductStore();
-  const addToCart = useCartStore((state) => state.addToCart);
-  const cart = useCartStore((state) => state.cart);
-  const [addedToCart, setAddedToCart] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -60,13 +68,16 @@ const ProductDetail = () => {
             pressed && styles.headerButtonPressed,
           ]}
         >
-          <Ionicons name="share-outline" size={24} color="#4CAF50" />
+          <Ionicons
+            name="share-outline"
+            size={24}
+            color={theme.colors.button}
+          />
         </Pressable>
       ),
       headerStyle: {
         backgroundColor: theme.colors.primary,
       },
-
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, product]);
@@ -107,9 +118,93 @@ const ProductDetail = () => {
     findProduct();
   }, [id, subcategoryId, productData, productsBySubcategory]);
 
-  const handleAddToCart = useCallback(() => {
+  // Fetch comments when product loads
+  useEffect(() => {
+    if (product) {
+      loadComments();
+    }
+  }, [product]);
+
+  const loadComments = async () => {
+    setIsCommentsLoading(true);
+    try {
+      const data = await fetchComments(product.products_id);
+      if (data) {
+        setComments(data);
+      } else {
+        setComments([]);
+      }
+    } catch (err) {
+      console.error("Error fetching comments:", err);
+    } finally {
+      setIsCommentsLoading(false);
+    }
+  };
+  const handleAddComment = async () => {
+    if (!newComment.trim()) {
+      Alert.alert("Empty Comment", "Please write something before submitting.");
+      return;
+    }
+    if (!user) {
+      Alert.alert("Login Required", "Please login to add a comment.");
+      return;
+    }
+    setIsAddingComment(true);
+    try {
+      await addComment({
+        product_id: product.products_id,
+        comment: newComment,
+        consumer_id: user.consumer_id,
+      });
+      setNewComment("");
+      ToastAndroid.show("Comment added", ToastAndroid.SHORT);
+      loadComments();
+    } catch (err) {
+      Alert.alert("Error", err.message);
+    } finally {
+      setIsAddingComment(false);
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    Alert.alert(
+      "Delete Comment",
+      "Are you sure you want to delete this comment?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteComment({
+                commentId: commentId,
+                consumerID: user.consumer_id,
+              });
+              ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+              loadComments();
+            } catch (err) {
+              Alert.alert("Error", err.message);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleAddToCart = useCallback(async () => {
     if (!product) return;
-    const productExists = cart.some(
+    if (!user) {
+      Alert.alert(
+        "Login Required",
+        "Please login to add products to your cart."
+      );
+      return;
+    }
+    const productExists = cartItem.some(
       (item) => item.products_id === product.products_id
     );
     if (productExists) {
@@ -118,13 +213,24 @@ const ProductDetail = () => {
         "This product is already in your cart."
       );
     } else {
-      setAddedToCart(true);
-      addToCart(product);
+      try {
+        setAddedToCart(true);
+        await addToCart({
+          productID: product.products_id,
+          consumerID: user.consumer_id,
+        });
+        ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
+      } catch (error) {
+        Alert.alert("Error", error.message);
+      }
     }
-  }, [product, addToCart, addedToCart]);
+  }, [product, addToCart, cartItem, user]);
 
-  const handleShare = useCallback(async () => {
+  // Share Product
+
+  const handleShare = async () => {
     if (!product) return;
+
     try {
       const deepLink = Linking.createURL(
         `/screens/ProductDetails/${product.products_id}`
@@ -136,7 +242,9 @@ const ProductDetail = () => {
     } catch (error) {
       console.error("Share error:", error);
     }
-  }, [product]);
+  };
+
+  // Favorite function
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -145,24 +253,26 @@ const ProductDetail = () => {
     }
     if (isFavoriting) return;
     setIsFavoriting(true);
-
     try {
       if (!isFavorite) {
         await addToFavorite({
           productID: product.products_id,
           consumerID: user.consumer_id,
         });
+        ToastAndroid.show("Product added to favorite", ToastAndroid.SHORT);
       } else {
-        const favItem = await favProducts.find(
+        const favItem = favProducts.find(
           (item) => item.products_id === product.products_id
         );
-        console.log(favItem);
-
         if (favItem) {
           await removeFavorite({
             favId: favItem.product_fav_id,
             consumerID: user.consumer_id,
           });
+          ToastAndroid.show(
+            "Product removed from favorite",
+            ToastAndroid.SHORT
+          );
         }
       }
       setIsFavorite(!isFavorite);
@@ -172,40 +282,22 @@ const ProductDetail = () => {
       setIsFavoriting(false);
     }
   };
-  const renderRatingStars = useCallback(
-    (item) => {
-      return [...Array(5)].map((_, index) => (
-        <FontAwesome
-          key={index}
-          name={
-            index < Math.floor(item?.average_rating || 0) ? "star" : "star-o"
-          }
-          size={15}
-          color={
-            index < Math.floor(item?.average_rating || 0) ? "#FFD700" : "#ccc"
-          }
-          style={styles.starIcon}
-        />
-      ));
-    },
-    [product?.rating]
-  );
 
-  if (isLoading || loading) {
-    return (
-      <View
-        style={[
-          styles.centerContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.textColor} />
-        <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
-          Loading product details...
-        </Text>
-      </View>
-    );
-  }
+  const renderRatingStars = useCallback(() => {
+    return [...Array(5)].map((_, index) => (
+      <FontAwesome
+        key={index}
+        name={
+          index < Math.floor(product?.average_rating || 0) ? "star" : "star-o"
+        }
+        size={15}
+        color={
+          index < Math.floor(product?.average_rating || 0) ? "#FFD700" : "#ccc"
+        }
+        style={styles.starIcon}
+      />
+    ));
+  }, [product]);
 
   if (error) {
     return (
@@ -302,7 +394,7 @@ const ProductDetail = () => {
         </View>
 
         <View style={styles.ratingContainer}>
-          {renderRatingStars(product)}
+          {renderRatingStars()}
           <Text style={styles.ratingText}>
             {product.average_rating
               ? `${product.average_rating}`
@@ -348,6 +440,81 @@ const ProductDetail = () => {
           </Button>
         </View>
       </View>
+
+      {/* Comments Section */}
+      <View style={styles.commentsContainer}>
+        <Text style={[styles.sectionTitle, { color: theme.colors.textColor }]}>
+          Comments
+        </Text>
+
+        {/* Add Comment Input */}
+        <View style={styles.addCommentContainer}>
+          <TextInput
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder="Write a comment..."
+            placeholderTextColor="#999"
+            style={[
+              styles.commentInput,
+              {
+                color: theme.colors.textColor,
+                borderColor: theme.colors.subInactiveColor,
+              },
+            ]}
+          />
+          <Button
+            mode="contained"
+            onPress={handleAddComment}
+            loading={isAddingComment}
+            buttonColor={theme.colors.button}
+            textColor={theme.colors.primary}
+          >
+            Post
+          </Button>
+        </View>
+
+        {isCommentsLoading ? (
+          <ActivityIndicator size="small" color={theme.colors.textColor} />
+        ) : comments.length === 0 ? (
+          <Text style={{ color: theme.colors.textColor }}>
+            No comments yet.
+          </Text>
+        ) : (
+          comments.map((comment) => (
+            <View key={comment.product_comments_id} style={styles.commentItem}>
+              <View style={styles.commentHeader}>
+                <Text
+                  style={[
+                    styles.commentAuthor,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  {comment.consumer_name || "Anonymous"}
+                </Text>
+                {/* Show delete button if current user is the comment author */}
+                {comment.consumer_id === user.consumer_id && (
+                  <TouchableOpacity
+                    onPress={() =>
+                      handleDeleteComment(comment.product_comments_id)
+                    }
+                  >
+                    <Ionicons name="trash-outline" size={24} color="#FF0000" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <Text
+                style={[
+                  styles.commentContent,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                {comment.comment}
+              </Text>
+              <Text style={styles.commentDate}>{comment.date}</Text>
+            </View>
+          ))
+        )}
+      </View>
     </ScrollView>
   );
 };
@@ -392,7 +559,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#333",
     flex: 1,
   },
   headerButton: {
@@ -413,18 +579,15 @@ const styles = StyleSheet.create({
   ratingText: {
     marginLeft: 8,
     fontSize: 16,
-    color: "#666",
   },
   price: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "#4CAF50",
     marginBottom: 16,
   },
   description: {
     fontSize: 16,
     lineHeight: 24,
-    color: "#555",
     marginBottom: 16,
   },
   detailsRow: {
@@ -437,22 +600,19 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 16,
-    color: "#888",
   },
   detailValue: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#333",
+  },
+  cartContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   button: {
-    backgroundColor: "#4CAF50",
-    padding: 16,
-    borderRadius: 12,
-    alignItems: "center",
-    marginTop: 20,
-    alignSelf: "flex-end",
+    width: "50%",
   },
-
   errorText: {
     fontSize: 18,
     color: "#ff4444",
@@ -460,30 +620,65 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   retryButton: {
-    backgroundColor: "#4CAF50",
     padding: 12,
     borderRadius: 8,
     marginTop: 12,
   },
   retryButtonText: {
-    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
-  counterContainer: {
-    flexDirection: "row",
+  // Comments Section styles
+  commentsContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 10,
   },
-  cartContainer: {
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  commentItem: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    paddingBottom: 8,
+  },
+  commentHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  commentAuthor: {
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  commentContent: {
+    fontSize: 15,
+    marginTop: 4,
+  },
+  commentDate: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  addCommentContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  countText: {
-    marginTop: 10,
-    fontSize: 20,
-  },
-  button: {
-    width: "50%",
+  commentInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 20,
+    padding: 8,
+    marginRight: 8,
   },
 });
 

@@ -1,173 +1,320 @@
+// Import necessary libraries and components
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import {
   StyleSheet,
   Text,
   View,
   FlatList,
-  Image,
-  Modal,
   TouchableOpacity,
-  Pressable,
-  ActivityIndicator,
+  Image,
+  ScrollView,
 } from "react-native";
-import React, { useState, useEffect, useLayoutEffect } from "react";
-import { Feather } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { Link, useNavigation } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  Button,
-  IconButton,
   PaperProvider,
   Searchbar,
+  IconButton,
+  Button,
   useTheme,
 } from "react-native-paper";
+import { Feather } from "@expo/vector-icons";
+import Modal from "react-native-modal";
+import { debounce } from "lodash";
 import useProductStore from "../../components/api/useProductStore";
+import MultiSlider from "@ptomasroos/react-native-multi-slider";
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredProducts, setFilteredProducts] = useState([]);
   const [isFilterVisible, setIsFilterVisible] = useState(false);
-  const [minRating, setMinRating] = useState(0);
+  const [filters, setFilters] = useState({
+    minRating: 0,
+    selectedBrands: [],
+    selectedCategories: [],
+    priceRange: [0, 10000],
+  });
+
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
   const navigation = useNavigation();
   const theme = useTheme();
 
-  const { searchProductData, productData, error, loading } = useProductStore();
+  const { searchProductData, productData, error } = useProductStore();
   const data = productData?.data ?? [];
 
   useLayoutEffect(() => {
     navigation.setOptions({
       headerShown: false,
     });
-  }, []);
+  }, [navigation]);
 
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery) {
-        searchProductData(searchQuery);
+  // Debounced search function using lodash.debounce
+  const debouncedSearch = useCallback(
+    debounce((query) => {
+      if (query) {
+        searchProductData(query);
       } else {
-        setFilteredProducts([]);
       }
-    }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery]);
+    }, 300),
+    [searchProductData]
+  );
 
   useEffect(() => {
-    let filtered = data;
-    if (minRating > 0) {
-      filtered = filtered.filter((product) => product.rating >= minRating);
-    }
-    setFilteredProducts(filtered);
-  }, [productData, minRating]);
+    debouncedSearch(searchQuery);
+  }, [searchQuery, debouncedSearch]);
 
-  const renderProductItem = ({ item }) => (
-    <Link
-      href={{
-        pathname: `/screens/ProductDetail`,
-        params: { id: item.products_id },
-      }}
-      asChild
-    >
-      <Pressable
-        style={styles.itemContainer}
-        android_ripple={{ color: theme.colors.ripple }}
+  // Get unique brands and categories for filter options
+  const brands = useMemo(() => {
+    const uniqueBrands = [...new Set(data.map((item) => item.brand_title))];
+    return uniqueBrands;
+  }, [data]);
+
+  const categories = useMemo(() => {
+    const uniqueCategories = [
+      ...new Set(data.map((item) => item.categories_id)),
+    ];
+    return uniqueCategories;
+  }, [data]);
+
+  // Calculate dynamic price range from data
+  const priceBounds = useMemo(() => {
+    if (data.length === 0) return [0, 10000];
+    const prices = data.map((item) => parseFloat(item.spu));
+    return [Math.min(...prices), Math.max(...prices)];
+  }, [data]);
+
+  // Memoized filtered products
+  const filteredProducts = useMemo(() => {
+    return data.filter((product) => {
+      // Rating filter
+      if (filters.minRating > 0) {
+        const rating = product.average_rating || 0;
+        if (rating < filters.minRating) return false;
+      }
+
+      // Brand filter
+      if (
+        filters.selectedBrands.length > 0 &&
+        !filters.selectedBrands.includes(product.brand_title)
+      ) {
+        return false;
+      }
+
+      // Price filter
+      const price = parseFloat(product.spu);
+      if (price < filters.priceRange[0] || price > filters.priceRange[1])
+        return false;
+
+      return true;
+    });
+  }, [data, filters]);
+
+  // Refresh control
+  const onRefresh = () => {
+    setRefreshing(true);
+    searchProductData(searchQuery).finally(() => setRefreshing(false));
+  };
+
+  const loadMoreProducts = () => {
+    setPage((prevPage) => prevPage + 1);
+  };
+
+  // Chip press handler
+  const handleChipPress = (filterType, value) => {
+    setFilters((prev) => {
+      const currentValues = prev[filterType];
+      return {
+        ...prev,
+        [filterType]: currentValues.includes(value)
+          ? currentValues.filter((item) => item !== value)
+          : [...currentValues, value],
+      };
+    });
+  };
+
+  // Render product item
+  const renderProductItem = useCallback(
+    ({ item }) => (
+      <Link
+        href={{
+          pathname: `/screens/ProductDetail`,
+          params: { id: item.products_id },
+        }}
+        asChild
       >
-        <Image
-          source={
-            item.product_image
-              ? { uri: item.product_image }
-              : require("../../assets/images/imageSkeleton.jpg")
-          }
-          style={styles.productImage}
-          resizeMode="cover"
-        />
-        <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={3}>
-            {item.title}
-          </Text>
-          <Text style={styles.productPrice}>${item.spu}</Text>
-          <View style={styles.categoryContainer}>
-            <Text style={styles.productCategory}>{item.brands_id}</Text>
-            <View style={styles.ratingContainer}>
-              <Feather name="star" size={16} color="#FFD700" />
-              <Text style={styles.ratingText}>{item.rating}</Text>
+        <TouchableOpacity style={styles.itemContainer} activeOpacity={0.7}>
+          <Image
+            source={
+              item.product_image
+                ? { uri: item.product_image }
+                : require("../../assets/images/imageSkeleton.jpg")
+            }
+            style={styles.productImage}
+            resizeMode="cover"
+          />
+          <View style={styles.productInfo}>
+            <Text style={styles.productName} numberOfLines={3}>
+              {item.title}
+            </Text>
+            <Text style={styles.productPrice}>${item.spu}</Text>
+            <View style={styles.categoryContainer}>
+              <Text style={styles.productCategory}>{item.brand_title}</Text>
+              <View style={styles.ratingContainer}>
+                <Feather name="star" size={16} color="#FFD700" />
+                <Text style={styles.ratingText}>
+                  {item.average_rating || 0}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
-      </Pressable>
-    </Link>
+        </TouchableOpacity>
+      </Link>
+    ),
+    [theme.colors]
   );
 
   const renderSeparator = () => <View style={styles.separator} />;
 
+  // Filter modal component
   const renderFilterModal = () => (
     <Modal
-      visible={isFilterVisible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={() => setIsFilterVisible(false)}
+      isVisible={isFilterVisible}
+      onBackdropPress={() => setIsFilterVisible(false)}
+      style={styles.bottomModal}
     >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.filterTitle}>Filter by Rating</Text>
-          <TouchableOpacity
-            style={styles.filterOption}
-            onPress={() => {
-              setMinRating(0);
-              setIsFilterVisible(false);
-            }}
-          >
-            <Text>Any Rating</Text>
+      <View style={styles.modalContent}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Filters</Text>
+          <TouchableOpacity onPress={() => setIsFilterVisible(false)}>
+            <Feather name="x" size={24} color="#000" />
           </TouchableOpacity>
-          {[1, 2, 3, 4, 5].map((rating) => (
-            <TouchableOpacity
-              key={rating}
-              style={styles.filterOption}
-              onPress={() => {
-                setMinRating(rating);
-                setIsFilterVisible(false);
-              }}
-            >
-              <Text>{rating} Stars & Up</Text>
-            </TouchableOpacity>
-          ))}
-          <Button onPress={() => setIsFilterVisible(false)}>Close</Button>
         </View>
+
+        <ScrollView style={styles.filterScroll}>
+          {/* Rating Filter */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Minimum Rating</Text>
+            <View style={styles.ratingContainer}>
+              {[0, 1, 2, 3, 4, 5].map((rating) => (
+                <TouchableOpacity
+                  key={rating}
+                  style={[
+                    styles.ratingPill,
+                    filters.minRating === rating && styles.selectedPill,
+                  ]}
+                  onPress={() =>
+                    setFilters((prev) => ({ ...prev, minRating: rating }))
+                  }
+                >
+                  <Text>{rating === 0 ? "Any" : `${rating}+ ★`}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Brand Filter */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Brands</Text>
+            <View style={styles.chipContainer}>
+              {brands.map((brand) => (
+                <TouchableOpacity
+                  key={brand}
+                  style={[
+                    styles.filterChip,
+                    filters.selectedBrands.includes(brand) &&
+                      styles.selectedChip,
+                  ]}
+                  onPress={() => handleChipPress("selectedBrands", brand)}
+                >
+                  <Text style={styles.chipText}>{brand}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Price Filter */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>
+              Price Range: ${filters.priceRange[0]} - ${filters.priceRange[1]}
+            </Text>
+            <MultiSlider
+              min={priceBounds[0]}
+              max={priceBounds[1]}
+              values={filters.priceRange}
+              onValuesChange={(values) =>
+                setFilters((prev) => ({ ...prev, priceRange: values }))
+              }
+              step={10}
+              snapped
+              allowOverlap
+              markerStyle={styles.marker}
+              selectedStyle={styles.selectedTrack}
+              trackStyle={styles.track}
+            />
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.filterActions}>
+            <Button
+              mode="outlined"
+              style={styles.actionButton}
+              onPress={() =>
+                setFilters({
+                  minRating: 0,
+                  selectedBrands: [],
+                  selectedCategories: [],
+                  priceRange: priceBounds,
+                })
+              }
+            >
+              Reset
+            </Button>
+            <Button
+              mode="contained"
+              style={styles.actionButton}
+              onPress={() => setIsFilterVisible(false)}
+            >
+              Apply
+            </Button>
+          </View>
+        </ScrollView>
       </View>
     </Modal>
   );
 
   return (
-    <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.primary }]}
-    >
+    <SafeAreaView style={styles.container}>
       <PaperProvider>
         <View style={styles.headerContainer}>
           <Text style={styles.header}>Zaytoon</Text>
         </View>
         <View style={styles.searchContainer}>
           <Searchbar
-            style={[
-              styles.searchInput,
-              { backgroundColor: theme.colors.background },
-            ]}
+            accessibilityLabel="Search for products"
+            style={styles.searchInput}
             placeholder="Search products..."
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCorrect={false}
           />
-          <View style={styles.filterButton}>
-            <IconButton
-              icon="filter-variant"
-              size={24}
-              iconColor={theme.colors.textColor}
-              onPress={() => setIsFilterVisible(true)}
-            />
-          </View>
+          <IconButton
+            icon="filter-variant"
+            size={24}
+            onPress={() => setIsFilterVisible(true)}
+            accessibilityLabel="Filter products"
+          />
         </View>
 
         <FlatList
           data={filteredProducts}
           renderItem={renderProductItem}
-          keyExtractor={(item) => item.products_id}
+          keyExtractor={(item) => item.products_id.toString()}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           ItemSeparatorComponent={renderSeparator}
@@ -176,11 +323,24 @@ const Search = () => {
               {searchQuery ? "No products found" : "Search for products above"}
             </Text>
           }
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          onEndReached={loadMoreProducts}
+          onEndReachedThreshold={0.5}
         />
 
         {renderFilterModal()}
+
         {error && (
-          <Text style={{ color: "red", textAlign: "center" }}>{error}</Text>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>Oops, something went wrong.</Text>
+            <Button
+              mode="contained"
+              onPress={() => searchProductData(searchQuery)}
+            >
+              Try Again
+            </Button>
+          </View>
         )}
       </PaperProvider>
     </SafeAreaView>
@@ -189,18 +349,19 @@ const Search = () => {
 
 export default Search;
 
+// Styles for the component
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F5F5F5",
   },
   headerContainer: {
-    height: 30,
+    height: 50,
     width: "100%",
+    justifyContent: "center",
   },
   header: {
     fontSize: 18,
-    justifyContent: "center",
     alignSelf: "center",
     paddingTop: 5,
   },
@@ -214,9 +375,6 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 100,
     elevation: 5,
-  },
-  filterButton: {
-    padding: 10,
   },
   listContainer: {
     paddingBottom: 20,
@@ -281,31 +439,91 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#888",
   },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    marginTop: "100%",
-    elevation: 100,
+  loader: {
+    marginTop: 50,
+  },
+  bottomModal: {
+    justifyContent: "flex-end",
+    margin: 0,
   },
   modalContent: {
     width: "100%",
     backgroundColor: "#FFF",
-    padding: 20,
-    height: "100%",
-  },
-  filterTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  filterOption: {
     padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#CCC",
   },
-  loader: {
-    marginTop: 50,
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  filterScroll: {},
+  filterSection: {
+    marginBottom: 25,
+  },
+  chipContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  filterChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#f0f0f0",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  selectedChip: {
+    backgroundColor: "#e3f2fd",
+    borderColor: "#2196f3",
+  },
+  ratingContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  ratingPill: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "#f5f5f5",
+  },
+  selectedPill: {
+    backgroundColor: "#fff3e0",
+    borderColor: "#ff9800",
+  },
+  filterActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 20,
+  },
+  actionButton: {
+    flex: 1,
+  },
+  marker: {
+    backgroundColor: "#2196f3",
+    height: 20,
+    width: 20,
+    borderRadius: 10,
+  },
+  selectedTrack: {
+    backgroundColor: "#2196f3",
+  },
+  track: {
+    backgroundColor: "#ddd",
+  },
+  errorContainer: {
+    marginTop: 20,
+    alignItems: "center",
+  },
+  errorText: {
+    color: "red",
+    marginBottom: 10,
   },
 });

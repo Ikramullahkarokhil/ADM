@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useState,
   useLayoutEffect,
+  useMemo,
 } from "react";
 import {
   View,
@@ -32,15 +33,14 @@ const ProductList = () => {
   const [products, setProducts] = useState([]);
   const theme = useTheme();
   const navigation = useNavigation();
+
   useLayoutEffect(() => {
     navigation.setOptions({
       title: subCategorieName,
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
+      headerStyle: { backgroundColor: theme.colors.primary },
       headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, products]);
+  }, [navigation, theme, subCategorieName]);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -56,23 +56,20 @@ const ProductList = () => {
 
   useEffect(() => {
     if (showmore) {
-      const fetchData = async () => {
-        const subCategoryData = subcategories[mainCategoryId]?.data || [];
-        const subCategoryIds = subCategoryData.map(
-          (subCat) => subCat.categories_id
-        );
+      (async () => {
         try {
+          const subCategoryIds =
+            subcategories[mainCategoryId]?.data?.map(
+              (subCat) => subCat.categories_id
+            ) || [];
           const response = await fetchProductByCategories(subCategoryIds);
-          const newData = response?.data || [];
-          setProducts(newData);
+          setProducts(response?.data || []);
         } catch (err) {
           console.error("Failed to fetch products for all subcategories:", err);
         }
-      };
-      fetchData();
+      })();
     } else {
-      const productsList = productsBySubcategory[subcategoryId]?.data || [];
-      setProducts(productsList);
+      setProducts(productsBySubcategory[subcategoryId]?.data || []);
     }
   }, [
     showmore,
@@ -84,134 +81,118 @@ const ProductList = () => {
   ]);
 
   const renderRatingStars = useCallback(
-    (item) => {
-      return [...Array(1)].map((_, index) => (
-        <FontAwesome
-          key={index}
-          name={
-            index < Math.floor(item?.average_rating || 0) ? "star" : "star-o"
-          }
-          size={20}
-          color={
-            index < Math.floor(item?.average_rating || 0) ? "#FFD700" : "#ccc"
-          }
-          style={styles.starIcon}
-        />
-      ));
-    },
-    [products?.rating]
-  );
-
-  const renderItem = useCallback(
-    ({ item }) => (
-      <Link
-        href={{
-          pathname: "/screens/ProductDetail",
-          params: {
-            subcategoryId: item.categories_id,
-            categoryProductId: item.products_id,
-          },
-        }}
-        asChild
-      >
-        <TouchableOpacity style={styles.cardContainer}>
-          <View style={styles.card}>
-            <Image
-              source={
-                item.product_image
-                  ? { uri: item.product_image }
-                  : require("../../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.productImage}
-              resizeMode="cover"
-            />
-            <View style={styles.cardContent}>
-              <View>
-                <Text
-                  style={[
-                    styles.productTitle,
-                    { color: theme.colors.textColor },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {item.title}
-                </Text>
-                <Text
-                  style={[styles.productPrice, { color: theme.colors.button }]}
-                >
-                  {item.spu}
-                </Text>
-                <View style={{ flexDirection: "row" }}>
-                  <Text style={styles.brand}>Brand: </Text>
-                  <Text
-                    style={[styles.brand, { color: theme.colors.textColor }]}
-                  >
-                    {item.brand_title}
-                  </Text>
-                </View>
-              </View>
-              <View style={styles.ratingContainer}>
-                {renderRatingStars(item)}
-                <Text style={styles.ratingText}>
-                  {`${item.average_rating}`}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Link>
+    (item) => (
+      <FontAwesome
+        name={item?.average_rating >= 1 ? "star" : "star-o"}
+        size={20}
+        color={item?.average_rating >= 1 ? "#FFD700" : "#ccc"}
+        style={styles.starIcon}
+      />
     ),
     []
   );
 
-  if (error) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.errorText}>Error: {error}</Text>
-      </View>
-    );
-  }
+  const renderItem = useMemo(
+    () =>
+      ({ item }) =>
+        (
+          <Link
+            href={{
+              pathname: "/screens/ProductDetail",
+              params: {
+                subcategoryId: item.categories_id,
+                categoryProductId: item.products_id,
+              },
+            }}
+            asChild
+          >
+            <TouchableOpacity style={styles.cardContainer}>
+              <View style={styles.card}>
+                <Image
+                  source={
+                    item.product_image
+                      ? { uri: item.product_image }
+                      : require("../../../assets/images/imageSkeleton.jpg")
+                  }
+                  style={styles.productImage}
+                  resizeMode="cover"
+                />
+                <View style={styles.cardContent}>
+                  <View>
+                    <Text
+                      style={[
+                        styles.productTitle,
+                        { color: theme.colors.textColor },
+                      ]}
+                      numberOfLines={2}
+                    >
+                      {item.title}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.productPrice,
+                        { color: theme.colors.button },
+                      ]}
+                    >
+                      {item.spu}
+                    </Text>
+                    <View style={{ flexDirection: "row" }}>
+                      <Text style={styles.brand}>Brand: </Text>
+                      <Text
+                        style={[
+                          styles.brand,
+                          { color: theme.colors.textColor },
+                        ]}
+                      >
+                        {item.brand_title}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.ratingContainer}>
+                    {renderRatingStars(item)}
+                  </View>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </Link>
+        ),
+    [theme]
+  );
 
-  const listEmptyComponent = () => {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={[styles.messageText, { color: theme.colors.textColor }]}>
-          No products found in this subcategory.
-        </Text>
-      </View>
-    );
-  };
-
-  return (
-    <>
-      {loading ? (
-        <FlatList
-          data={Array(6).fill(null)}
-          renderItem={() => <ProductSkeleton />}
-          keyExtractor={(_, index) => index.toString()}
-          contentContainerStyle={styles.productsListContent}
-        />
-      ) : (
-        <FlatList
-          data={products}
-          renderItem={renderItem}
-          keyExtractor={(item) => item.products_id.toString()}
-          ItemSeparatorComponent={() => (
-            <View
-              style={[
-                styles.separator,
-                { borderTopColor: theme.colors.inactiveColor },
-              ]}
-            />
-          )}
-          contentContainerStyle={[
-            styles.listContent,
-            { backgroundColor: theme.colors.background },
+  return error ? (
+    <View style={styles.centerContainer}>
+      <Text style={styles.errorText}>Error: {error}</Text>
+    </View>
+  ) : (
+    <FlatList
+      data={loading ? Array(6).fill(null) : products}
+      renderItem={loading ? () => <ProductSkeleton /> : renderItem}
+      keyExtractor={(item, index) =>
+        item ? item.products_id.toString() : index.toString()
+      }
+      ItemSeparatorComponent={() => (
+        <View
+          style={[
+            styles.separator,
+            { borderTopColor: theme.colors.inactiveColor },
           ]}
-          ListEmptyComponent={listEmptyComponent}
         />
       )}
-    </>
+      contentContainerStyle={[
+        styles.listContent,
+        { backgroundColor: theme.colors.background },
+      ]}
+      ListEmptyComponent={
+        <View style={styles.centerContainer}>
+          <Text style={[styles.messageText, { color: theme.colors.textColor }]}>
+            No products found.
+          </Text>
+        </View>
+      }
+      initialNumToRender={10}
+      windowSize={5}
+      removeClippedSubviews
+    />
   );
 };
 
@@ -222,54 +203,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 40,
   },
-  loadingText: {
-    marginTop: 10,
-    fontSize: 16,
-    color: "#555",
-  },
-  errorText: {
-    color: "red",
-    fontSize: 16,
-  },
-  messageText: {
-    fontSize: 16,
-    color: "#555",
-    textAlign: "center",
-  },
-  listContent: {},
-  cardContainer: {
-    marginVertical: 5,
-    borderRadius: 10,
-  },
-  card: {
-    flexDirection: "row",
-    overflow: "hidden",
-    margin: 10,
-  },
-  productImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-  },
-  cardContent: {
-    flex: 1,
-    paddingLeft: 15,
-    flexDirection: "row",
-  },
-  productTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
-    marginBottom: 8,
-  },
-  productPrice: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FF7F50",
-  },
-  separator: {
-    borderTopWidth: 0.5,
-  },
+  errorText: { color: "red", fontSize: 16 },
+  messageText: { fontSize: 16, color: "#555", textAlign: "center" },
+  cardContainer: { marginVertical: 5, borderRadius: 10 },
+  card: { flexDirection: "row", overflow: "hidden", margin: 10 },
+  productImage: { width: 100, height: 100, borderRadius: 10 },
+  cardContent: { flex: 1, paddingLeft: 15, flexDirection: "row" },
+  productTitle: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
+  productPrice: { fontSize: 18, fontWeight: "bold" },
+  separator: { borderTopWidth: 0.5 },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -277,17 +219,8 @@ const styles = StyleSheet.create({
     right: 10,
     bottom: 10,
   },
-  starIcon: {
-    marginRight: 1,
-  },
-  ratingText: {
-    marginLeft: 8,
-    fontSize: 16,
-    color: "#666",
-  },
-  brand: {
-    paddingTop: 5,
-  },
+  starIcon: { marginRight: 1 },
+  brand: { paddingTop: 5 },
 });
 
 export default ProductList;

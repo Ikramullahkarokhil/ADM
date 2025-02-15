@@ -5,29 +5,76 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Platform,
+  Image,
 } from "react-native";
 import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../../../components/api/useProductStore";
-import { useLayoutEffect, useState } from "react";
+import { useState, React, useLayoutEffect } from "react";
 import { Link, useNavigation, useRouter } from "expo-router";
-import { useTheme } from "react-native-paper";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
+import { ProgressBar, useTheme } from "react-native-paper";
+import * as ImagePicker from "expo-image-picker";
+import CountryCodeDropdownPicker from "react-native-dropdown-country-picker";
 
-const signupValidationSchema = Yup.object().shape({
+const step1Schema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
   phone: Yup.string()
     .required("Phone number is required")
-    .length(10, "Invalid phone number"),
+    .matches(/^\+\d{1,4}\d{10}$/, "Invalid phone number"), // Example: +931234567890
   email: Yup.string().email("Invalid email").required("Email is required"),
-  dob: Yup.date().required("Date of birth is required"),
-  gender: Yup.string().required("Gender is required"),
+});
+
+const step2Schema = Yup.object().shape({
+  dob: Yup.date()
+    .required("Date of birth is required")
+    .max(
+      new Date(new Date().setFullYear(new Date().getFullYear() - 10)),
+      "You must be at least 10 years old"
+    ),
+});
+
+const step3Schema = Yup.object().shape({
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
+  // profilePicture: Yup.mixed().required("Profile picture is required"),
 });
+
+const FormikImagePicker = ({ fieldName }) => {
+  const [field, meta, helpers] = useField(fieldName);
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [3, 3],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      helpers.setValue(result.uri);
+    }
+  };
+
+  return (
+    <>
+      <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
+        {field.value ? (
+          <Image source={{ uri: field.value }} style={styles.image} />
+        ) : (
+          <Text style={styles.placeholderText}>Select Profile Picture</Text>
+        )}
+      </TouchableOpacity>
+      {meta.touched && meta.error && (
+        <Text style={styles.errorText}>{meta.error}</Text>
+      )}
+    </>
+  );
+};
+
+const steps = [step1Schema, step2Schema, step3Schema];
 
 const FormikInput = ({ fieldName, ...props }) => {
   const [field, meta, helpers] = useField(fieldName);
@@ -44,6 +91,31 @@ const FormikInput = ({ fieldName, ...props }) => {
         <Text style={styles.errorText}>{meta.error}</Text>
       )}
     </>
+  );
+};
+
+const PhoneInputWithCountryCode = ({ value, onChangeText, onBlur }) => {
+  const [selected, setSelected] = useState("+93"); // Default country code
+  const [phoneNumber, setPhoneNumber] = useState("");
+
+  const handlePhoneChange = (text) => {
+    setPhoneNumber(text);
+    onChangeText(`${selected}${text}`);
+  };
+
+  return (
+    <View style={styles.phoneContainer}>
+      <CountryCodeDropdownPicker
+        selected={selected}
+        setSelected={setSelected}
+        setCountryDetails={() => {}}
+        countryCodeTextStyles={{ fontSize: 12 }}
+        phone={phoneNumber}
+        setPhone={handlePhoneChange}
+        phoneStyles={styles.countryCodePhone}
+        countryCodeContainerStyles={styles.countryCodeContainer}
+      />
+    </View>
   );
 };
 
@@ -91,7 +163,11 @@ const FormikDatePicker = ({ fieldName }) => {
     <>
       <TouchableOpacity
         onPress={() => setShow(true)}
-        style={[styles.input, meta.touched && meta.error && styles.errorInput]}
+        style={[
+          styles.input,
+          styles.datepicker,
+          meta.touched && meta.error && styles.errorInput,
+        ]}
       >
         <Text style={field.value ? styles.text : styles.placeholder}>
           {field.value ? field.value.toDateString() : "Select Date of Birth"}
@@ -112,11 +188,39 @@ const FormikDatePicker = ({ fieldName }) => {
   );
 };
 
+const StepIndicator = ({ currentStep, totalSteps }) => {
+  const progress = (currentStep + 1) / totalSteps;
+  const theme = useTheme();
+
+  return (
+    <View style={styles.stepContainer}>
+      <ProgressBar
+        progress={progress}
+        color="#4a90e2"
+        style={[styles.progressBar]}
+      />
+      <View style={styles.stepTextContainer}>
+        {[...Array(totalSteps)].map((_, index) => (
+          <Text
+            key={index}
+            style={[
+              styles.stepText,
+              index <= progress && styles.activeStepText,
+            ]}
+          >
+            Step {index + 1}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+};
+
 const Signup = () => {
   const { signupUser, loginLoading, loginError } = useProductStore();
-  const navigation = useNavigation();
-  const theme = useTheme();
   const router = useRouter();
+  const navigation = useNavigation();
+  const [currentStep, setCurrentStep] = useState(0);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -125,17 +229,33 @@ const Signup = () => {
   }, [navigation]);
 
   const handleSignup = async (values) => {
+    console.log(values);
     try {
       await signupUser(values);
-      router.navigate("(tabs)");
+      router.replace("Login");
     } catch (error) {
       console.log(error);
     }
   };
 
+  const handleNext = async (values, setErrors) => {
+    try {
+      await steps[currentStep].validate(values, { abortEarly: false });
+      setCurrentStep((prev) => prev + 1);
+    } catch (error) {
+      const errors = error.inner.reduce((acc, curr) => {
+        acc[curr.path] = curr.message;
+        return acc;
+      }, {});
+      setErrors(errors);
+    }
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Sign Up to Zaytoon</Text>
+      <Text style={styles.title}>Create Your Account</Text>
+      <StepIndicator currentStep={currentStep} totalSteps={3} />
+
       <Formik
         initialValues={{
           name: "",
@@ -144,57 +264,105 @@ const Signup = () => {
           dob: "",
           gender: "",
           password: "",
-          code: "4637",
+          code: "4337",
+          consumer_image: null,
         }}
-        validationSchema={signupValidationSchema}
         onSubmit={handleSignup}
       >
-        {({ handleSubmit }) => (
+        {({
+          handleSubmit,
+          values,
+          setErrors,
+          setFieldValue,
+          setFieldTouched,
+        }) => (
           <View style={styles.form}>
-            <FormikInput
-              fieldName="name"
-              placeholder="Full Name"
-              autoCapitalize="words"
-            />
-            <FormikInput
-              fieldName="phone"
-              placeholder="Phone Number"
-              keyboardType="phone-pad"
-            />
-            <FormikInput
-              fieldName="email"
-              placeholder="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            <FormikDatePicker fieldName="dob" />
-            <FormikPicker fieldName="gender" />
-            <FormikInput
-              fieldName="password"
-              placeholder="Password"
-              secureTextEntry
-              autoCapitalize="none"
-            />
+            {currentStep === 0 && (
+              <>
+                <FormikInput
+                  fieldName="name"
+                  placeholder="Full Name"
+                  autoCapitalize="words"
+                />
+
+                <PhoneInputWithCountryCode
+                  value={values.phone}
+                  onChangeText={(text) => setFieldValue("phone", text)} // Update Formik field
+                  onBlur={() => setFieldTouched("phone", true)} // Mark field as touched
+                />
+
+                <FormikInput
+                  fieldName="email"
+                  placeholder="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </>
+            )}
+
+            {currentStep === 1 && (
+              <>
+                <Text style={styles.inputLabel}>Date Of Birth</Text>
+
+                <FormikDatePicker fieldName="dob" />
+
+                <FormikPicker fieldName="gender" />
+              </>
+            )}
+
+            {currentStep === 2 && (
+              <>
+                <FormikInput
+                  fieldName="password"
+                  placeholder="Password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+
+                <FormikImagePicker fieldName="consumer_image" />
+              </>
+            )}
 
             {loginError && <Text style={styles.errorText}>{loginError}</Text>}
 
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleSubmit}
-              disabled={loginLoading}
-            >
-              {loginLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Sign Up</Text>
+            <View style={styles.buttonContainer}>
+              {currentStep > 0 && (
+                <TouchableOpacity
+                  style={[styles.button, styles.prevButton]}
+                  onPress={() => setCurrentStep((prev) => prev - 1)}
+                >
+                  <Text style={styles.buttonText}>Back</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
-            <Link href={{ pathname: "/Login" }} asChild>
-              <Text style={styles.link}>Already have an account? Sign In</Text>
-            </Link>
+
+              {currentStep < 2 ? (
+                <TouchableOpacity
+                  style={[styles.button, styles.nextButton]}
+                  onPress={() => handleNext(values, setErrors)}
+                >
+                  <Text style={styles.buttonText}>Next</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleSubmit}
+                  disabled={loginLoading}
+                >
+                  {loginLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Sign Up</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       </Formik>
+
+      <Link href={{ pathname: "/Login" }} asChild>
+        <Text style={styles.link}>Already have an account? Sign In</Text>
+      </Link>
     </View>
   );
 };
@@ -202,71 +370,110 @@ const Signup = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 20,
+    backgroundColor: "#ffffff",
+    padding: 24,
     justifyContent: "center",
   },
+  phoneContainer: {
+    marginBottom: 20,
+  },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 40,
+    fontSize: 28,
+    fontWeight: "600",
+    color: "#1a1a1a",
+    marginBottom: 32,
     textAlign: "center",
   },
   form: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    marginBottom: 24,
   },
   input: {
-    minHeight: 50,
+    height: 45,
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    justifyContent: "center",
-    marginBottom: 10,
+    borderColor: "#e0e0e0",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    backgroundColor: "#f8f9fa",
+    marginBottom: 20,
+  },
+  countryCodeContainer: {
+    backgroundColor: "#f8f9fa",
+    height: 45,
+  },
+  countryCodePhone: {
+    height: 45,
+    backgroundColor: "#f8f9fa",
   },
   pickerContainer: {
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 10,
+    borderColor: "#e0e0e0",
+    borderRadius: 12,
+    marginBottom: 16,
+    backgroundColor: "#f8f9fa",
   },
   errorInput: {
-    borderColor: "red",
+    borderColor: "#dc3545",
   },
   errorText: {
-    color: "red",
-    marginBottom: 5,
+    color: "#dc3545",
+    marginBottom: 8,
+    fontSize: 14,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    marginTop: 24,
   },
   button: {
-    backgroundColor: "#007bff",
-    padding: 15,
-    borderRadius: 8,
+    flex: 1,
+    backgroundColor: "#4a90e2",
+    paddingVertical: 14,
+    borderRadius: 12,
     alignItems: "center",
-    marginTop: 20,
+    elevation: 2,
+  },
+  prevButton: {
+    backgroundColor: "#6c757d",
+  },
+  nextButton: {
+    backgroundColor: "#4a90e2",
   },
   buttonText: {
     color: "white",
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "500",
   },
   link: {
-    color: "#007bff",
+    color: "#4a90e2",
     textAlign: "center",
-    marginTop: 10,
+    fontSize: 14,
     textDecorationLine: "underline",
   },
-  text: {
-    color: "#000",
+  stepContainer: {
+    marginBottom: 32,
   },
-  placeholder: {
-    color: "#aaa",
+  progressBar: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#e0e0e0",
+  },
+  stepTextContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+  },
+  stepText: {
+    fontSize: 14,
+    color: "#999", // Inactive step text color
+  },
+  activeStepText: {
+    color: "#4a90e2", // Active step text color
+    fontWeight: "bold",
+  },
+  datepicker: {
+    justifyContent: "center",
   },
 });
 

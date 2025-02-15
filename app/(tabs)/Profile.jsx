@@ -1,74 +1,89 @@
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import React, { useEffect, useLayoutEffect, useState } from "react";
-import { useColorScheme } from "react-native";
-import { Button, IconButton, useTheme } from "react-native-paper";
-import useThemeStore from "../../components/store/useThemeStore";
+import React, { useLayoutEffect, useState, useEffect } from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  View,
+  Image,
+  Text,
+  Alert,
+} from "react-native";
+import { useTheme, Divider, TouchableRipple } from "react-native-paper";
 import { useActionSheet } from "@expo/react-native-action-sheet";
-import useProductStore from "../../components/api/useProductStore";
 import { useNavigation, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
+import useThemeStore from "../../components/store/useThemeStore";
+import useProductStore from "../../components/api/useProductStore";
+import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
+
+const ProfileHeader = ({
+  profileImage,
+  username,
+  membership,
+  theme,
+  onProfileImagePick,
+}) => {
+  return (
+    <View
+      style={[
+        styles.headerContainer,
+        { backgroundColor: theme.colors.primary },
+      ]}
+    >
+      <TouchableRipple
+        onPress={onProfileImagePick}
+        accessibilityLabel="Change profile picture"
+        accessibilityRole="button"
+      >
+        <Image
+          source={{ uri: profileImage }}
+          style={styles.profileImage}
+          accessibilityLabel="Profile picture"
+        />
+      </TouchableRipple>
+      <View style={styles.headerTextContainer}>
+        <Text style={[styles.username, { color: theme.colors.text }]}>
+          {username}
+        </Text>
+        <Text
+          style={[styles.membershipText, { color: theme.colors.inactiveColor }]}
+        >
+          {membership}
+        </Text>
+      </View>
+    </View>
+  );
+};
 
 const Profile = () => {
   const theme = useTheme();
-  const { themeMode, setThemeMode } = useThemeStore();
-  const colorScheme = useColorScheme();
+  const { setThemeMode } = useThemeStore();
   const { showActionSheetWithOptions } = useActionSheet();
-  const { logout, user, profileData } = useProductStore();
+  const { uploadConsumerImage, profileData, logout } = useProductStore();
+  const [image, setImage] = useState(null);
   const navigation = useNavigation();
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const router = useRouter();
-  useEffect(() => {
-    const getBiometricState = async () => {
-      try {
-        const storedState = await AsyncStorage.getItem("biometricEnabled");
-        if (storedState !== null) {
-          setBiometricEnabled(JSON.parse(storedState));
-        }
-      } catch (error) {
-        console.error("Error retrieving biometric state:", error);
-      }
-    };
-    getBiometricState();
-  }, []);
+  const [isChangePasswordModalVisible, setChangePasswordModalVisible] =
+    useState(false);
 
   useLayoutEffect(() => {
-    if (user) {
-      navigation.setOptions({
-        headerTitle: profileData.name,
-      });
-    }
-  }, [navigation, user]);
-
-  const getActionSheetStyles = () => ({
-    textStyle: { color: theme.colors.textColor },
-    titleTextStyle: {
-      color: theme.colors.textColor,
-      textAlign: "center",
-      width: "100%",
-      marginBottom: 8,
-      fontSize: 16,
-      fontWeight: "600",
-    },
-    containerStyle: {
-      backgroundColor: theme.colors.primary,
-    },
-    messageTextStyle: {
-      textAlign: "center",
-      color: theme.colors.textColor,
-    },
-  });
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
 
   const handleThemeSelect = () => {
     const options = ["System Default", "Light", "Dark", "Cancel"];
     const cancelButtonIndex = options.length - 1;
-    const styles = getActionSheetStyles();
 
     showActionSheetWithOptions(
       {
         options,
         cancelButtonIndex,
         title: "Select Theme",
-        ...styles,
       },
       async (selectedIndex) => {
         if (
@@ -79,7 +94,7 @@ const Profile = () => {
           const selectedTheme = themeOptions[selectedIndex];
 
           if (selectedTheme === "system") {
-            await setThemeMode("system", colorScheme === "dark");
+            await setThemeMode("system", false);
           } else {
             await setThemeMode(selectedTheme);
           }
@@ -88,145 +103,243 @@ const Profile = () => {
     );
   };
 
-  const getThemeText = () => {
-    switch (themeMode) {
-      case "system":
-        return "System Default";
-      case "light":
-        return "Light";
-      case "dark":
-        return "Dark";
-      default:
-        return "System Default";
-    }
+  const handleNavigation = (screen) => {
+    router.push(screen);
   };
 
   const handleLogout = async () => {
-    logout();
-    router.navigate("Login");
+    try {
+      await logout();
+      router.replace("/Login");
+    } catch (error) {
+      Alert.alert("Error", "Failed to logout. Please try again.");
+    }
   };
 
-  return (
+  const getMembershipDuration = (regDateString) => {
+    if (!regDateString) return "";
+    const regDate = new Date(regDateString.replace(" ", "T"));
+    const now = new Date();
+    const diffMs = now - regDate;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 30) {
+      return `Member for ${diffDays} ${diffDays === 1 ? "day" : "days"}`;
+    }
+
+    const diffMonths = Math.floor(diffDays / 30);
+    if (diffMonths < 12) {
+      return `Member for ${diffMonths} ${
+        diffMonths === 1 ? "month" : "months"
+      }`;
+    }
+
+    const diffYears = Math.floor(diffMonths / 12);
+    return `Member for ${diffYears} ${diffYears === 1 ? "year" : "years"}`;
+  };
+
+  const handleProfileImagePick = async () => {
+    const permissionResult =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert("Permission to access gallery is required!");
+      return;
+    }
+
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: "images",
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setImage(result.assets[0].uri);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!image) {
+      Alert.alert("Please select an image first.");
+      return;
+    }
+
+    let fileInfo = await FileSystem.getInfoAsync(image);
+    if (fileInfo.size && fileInfo.size > 2 * 1024 * 1024) {
+      const manipResult = await ImageManipulator.manipulateAsync(image, [], {
+        compress: 0.5,
+        format: ImageManipulator.SaveFormat.JPEG,
+      });
+      fileInfo = await FileSystem.getInfoAsync(manipResult.uri);
+      if (fileInfo.size && fileInfo.size > 2 * 1024 * 1024) {
+        Alert.alert(
+          "Image too large",
+          "Could not compress the image below 2MB. Please choose a different image."
+        );
+        return;
+      }
+      setImage(manipResult.uri);
+    }
+
+    try {
+      const response = await uploadConsumerImage({
+        image: {
+          uri: image,
+          name: "photo.jpg",
+          type: "image/jpeg",
+        },
+        consumer_id: profileData?.consumer_id,
+      });
+      Alert.alert("Success", "Image uploaded successfully!");
+      console.log("Upload response:", response);
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const accountSettings = [
+    { label: "Update Profile", screen: "UpdateProfile" },
+    {
+      label: "Change Password",
+      onPress: () => setChangePasswordModalVisible(true),
+    },
+    { label: "Billing Address", screen: "/screens/BillingAddress" },
+  ];
+
+  const appSettings = [
+    { label: "Change Theme", onPress: handleThemeSelect },
+    { label: "More Features", screen: "MoreFeatures" },
+  ];
+
+  const accountActions = [
+    { label: "Logout", onPress: handleLogout, special: true },
+  ];
+
+  const renderMenuGroup = (items) => (
     <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[
+        styles.menuSection,
+        {
+          backgroundColor: theme.colors.primary,
+          borderColor: theme.colors.subInactiveColor,
+        },
+      ]}
     >
-      <View style={styles.section}>
-        <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
-          <Text style={[styles.title, { color: theme.colors.textColor }]}>
-            Your Profile
-          </Text>
-
-          <Button
-            mode="contained"
-            // onPress={handleLogout}
-            style={styles.changePassword}
+      {items.map((item, index) => (
+        <View key={index}>
+          <TouchableRipple
+            onPress={() => {
+              if (item.screen) {
+                handleNavigation(item.screen);
+              } else if (item.onPress) {
+                item.onPress();
+              }
+            }}
           >
-            Profile
-          </Button>
-          <Button
-            mode="contained"
-            // onPress={handleLogout}
-            style={styles.changePassword}
-          >
-            Change Password
-          </Button>
-        </View>
-      </View>
-
-      <View style={styles.section}>
-        <View style={[styles.card, { backgroundColor: theme.colors.primary }]}>
-          <Text style={[styles.title, { color: theme.colors.textColor }]}>
-            Theme
-          </Text>
-          <Pressable
-            onPress={handleThemeSelect}
-            style={[
-              styles.selector,
-              { backgroundColor: theme.colors.background },
-            ]}
-          >
-            <Text
-              style={[styles.selectorText, { color: theme.colors.textColor }]}
-            >
-              {getThemeText()}
-            </Text>
-            <IconButton
-              icon="chevron-right"
-              size={24}
-              iconColor={theme.colors.textColor}
+            <View style={styles.menuItem}>
+              <Text
+                style={[
+                  styles.menuItemText,
+                  item.special ? styles.logoutText : null,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </View>
+          </TouchableRipple>
+          {index < items.length - 1 && (
+            <Divider
+              style={[
+                styles.menuDivider,
+                { backgroundColor: theme.colors.subInactiveColor },
+              ]}
             />
-          </Pressable>
+          )}
         </View>
-      </View>
-      {/* Logout Button */}
-      <Button
-        mode="contained"
-        onPress={handleLogout}
-        style={styles.logoutButton}
-      >
-        Logout
-      </Button>
+      ))}
     </View>
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: theme.colors.background }]}
+    >
+      <ScrollView contentContainerStyle={styles.container}>
+        <ProfileHeader
+          profileImage={
+            profileData?.consumer_image ||
+            "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg"
+          }
+          username={profileData?.name || "Guest User"}
+          membership={getMembershipDuration(profileData?.reg_date)}
+          theme={theme}
+          onProfileImagePick={handleProfileImagePick}
+        />
+
+        {renderMenuGroup(accountSettings)}
+        {renderMenuGroup(appSettings)}
+        {renderMenuGroup(accountActions)}
+
+        <ChangePasswordModal
+          isVisible={isChangePasswordModalVisible}
+          onClose={() => setChangePasswordModalVisible(false)}
+        />
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 export default Profile;
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 16,
   },
-  section: {
-    marginBottom: 24,
+  container: {
+    paddingBottom: 32,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    marginBottom: 12,
-    marginLeft: 4,
-    opacity: 0.7,
-  },
-  card: {
-    backgroundColor: "white",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
+  headerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingTop: 40,
+    marginBottom: 20,
+    paddingBottom: 5,
+    paddingHorizontal: 10,
     elevation: 5,
   },
-  title: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 12,
+  profileImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: "#fff",
   },
-  selector: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
+  headerTextContainer: {
+    marginLeft: 12,
+  },
+  username: {
+    fontSize: 18,
+    fontWeight: "600",
+  },
+  membershipText: {
+    fontSize: 14,
+  },
+  menuSection: {
+    marginBottom: 16,
+    borderWidth: 1,
     borderRadius: 12,
+    overflow: "hidden",
+    marginHorizontal: 10,
   },
-  selectorText: {
-    fontSize: 15,
+  menuItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 16,
   },
-  themeContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 8,
+  menuItemText: {
+    fontSize: 16,
   },
-  themeText: {
-    fontSize: 15,
-  },
-  logoutButton: {
-    marginTop: 200,
+  logoutText: {
+    color: "#e53935",
   },
 });

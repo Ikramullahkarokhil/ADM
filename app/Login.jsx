@@ -12,13 +12,8 @@ import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../components/api/useProductStore";
 import { Link, useNavigation, useRouter } from "expo-router";
-// import {
-//   GoogleSignin,
-//   GoogleSigninButton,
-//   statusCodes,
-// } from "@react-native-google-signin/google-signin";
+import { Button, useTheme } from "react-native-paper";
 
-// Validation schema for login form
 const loginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
   password: Yup.string().min(6, "Too Short!").required("Required"),
@@ -45,38 +40,7 @@ const FormikInput = ({ fieldName, ...props }) => {
 const Login = () => {
   const router = useRouter();
   const { loginUser, loginLoading, loginError } = useProductStore();
-
-  // Configure Google Sign-In
-  // useEffect(() => {
-  //   GoogleSignin.configure({
-  //     webClientId:
-  //       "171374130805-5u0qb6dnj2bsbd8smou8egdsh1j0jkea.apps.googleusercontent.com", // Replace with your actual web client ID
-  //     offlineAccess: true,
-  //   });
-  // }, []);
-
-  // Function to handle Google Sign-In
-  // const signIn = async () => {
-  //   try {
-  //     await GoogleSignin.hasPlayServices();
-  //     const userInfo = await GoogleSignin.signIn();
-  //     console.log("User Info:", userInfo);
-  //   } catch (error) {
-  //     if (error.code === statusCodes.SIGN_IN_CANCELLED) {
-  //       Alert.alert("Sign-In Cancelled", "User cancelled the sign-in process.");
-  //     } else if (error.code === statusCodes.IN_PROGRESS) {
-  //       Alert.alert("Sign-In In Progress", "Sign-in is already in progress.");
-  //     } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
-  //       Alert.alert(
-  //         "Play Services Not Available",
-  //         "Google Play Services is not available or outdated."
-  //       );
-  //     } else {
-  //       Alert.alert("Sign-In Error", "An unknown error occurred.");
-  //       console.error("Sign-In Error:", error);
-  //     }
-  //   }
-  // };
+  const theme = useTheme();
 
   const handleLogin = async (values) => {
     try {
@@ -89,6 +53,14 @@ const Login = () => {
 
   return (
     <View style={styles.container}>
+      <Link href={{ pathname: "(tabs)" }} asChild style={styles.skipButton}>
+        <Button
+          buttonColor={theme.colors.button}
+          textColor={theme.colors.primary}
+        >
+          Skip
+        </Button>
+      </Link>
       <Text style={styles.title}>Welcome Back</Text>
 
       <Formik
@@ -122,7 +94,7 @@ const Login = () => {
             {loginError && <Text style={styles.error}>{loginError}</Text>}
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, { backgroundColor: theme.colors.button }]}
               onPress={handleSubmit}
               disabled={loginLoading}
             >
@@ -210,5 +182,10 @@ const styles = StyleSheet.create({
   errorText: {
     color: "red",
     marginBottom: 5,
+  },
+  skipButton: {
+    position: "absolute",
+    top: 50,
+    right: 20,
   },
 });

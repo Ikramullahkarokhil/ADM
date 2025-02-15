@@ -19,6 +19,7 @@ const initialState = {
   subcategories: {},
   productData: {},
   favProducts: [],
+  cartItem: [],
   productsBySubcategory: {},
   loginError: null,
   user: null,
@@ -127,16 +128,10 @@ const useProductStore = create(
 
       addToFavorite: async ({ productID, consumerID }) => {
         try {
-          const response = await api.post(
+          await api.post(
             `/consumer/addfav-product?product_id=${productID}&consumer_id=${consumerID}`
           );
-          if (response.data.status === "success") {
-            set((state) => ({
-              favProducts: [...state.favProducts, response.data.data],
-            }));
-            console.log("Product added to fav");
-          }
-          return response.data;
+          await get().fetchFavProducts(consumerID);
         } catch (error) {
           console.log("error", error);
           const errorMessage = error.response?.data?.message || error.message;
@@ -146,13 +141,13 @@ const useProductStore = create(
 
       removeFavorite: async ({ favId, consumerID }) => {
         try {
-          const response = await api.post(
+          await api.post(
             `/consumer/removefav-product?id=${favId}&consumer_id=${consumerID}`
           );
-          if (response.data.status === "success") {
-            set({ favProducts: response.data.data });
-          }
-        } catch (error) {}
+          await get().fetchFavProducts(consumerID);
+        } catch (error) {
+          console.log(error);
+        }
       },
 
       fetchFavProducts: async (consumerId) => {
@@ -160,12 +155,48 @@ const useProductStore = create(
           const data = await api.post(
             `consumer/fav-products?consumer_id=${consumerId}`
           );
-
           set({ favProducts: data.data.favorites || [] });
           return data.data.favorites || [];
         } catch (error) {
           console.error("Error fetching favorites:", error);
           throw error;
+        }
+      },
+
+      addToCart: async ({ productID, consumerID, quantity = 1 }) => {
+        try {
+          await api.post(
+            `/cart/add?product_id=${productID}&consumer_id=${consumerID}&qty=${quantity}`
+          );
+          await get().listCart(consumerID);
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          throw new Error(errorMessage);
+        }
+      },
+
+      // List cart items for a consumer
+      listCart: async (consumerID) => {
+        try {
+          const response = await api.get(
+            `/cart/list?consumer_id=${consumerID}`
+          );
+          set({ cartItem: response.data.cart_products });
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          throw new Error(errorMessage);
+        }
+      },
+
+      deleteFromCart: async ({ productID, consumerID }) => {
+        try {
+          await api.delete(
+            `/cart/delete?product_id=${productID}&consumer_id=${consumerID}`
+          );
+          await get().listCart(consumerID);
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          throw new Error(errorMessage);
         }
       },
 
@@ -183,7 +214,38 @@ const useProductStore = create(
         }
       },
 
-      // Login User
+      uploadConsumerImage: async ({ image, consumer_id }) => {
+        set({ loading: true, error: null });
+        try {
+          const formData = new FormData();
+          formData.append("image", image);
+          formData.append("consumer_id", consumer_id);
+
+          const response = await api.post("/consumer/upload-image", formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          });
+          return response.data;
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          set({ error: errorMessage, loading: false });
+          throw new Error(errorMessage);
+        } finally {
+          set({ loading: false });
+        }
+      },
+
+      changePassword: async ({ consumerID, password }) => {
+        const data = await api.post(
+          `/consumer/change-password?consumer_id=${consumerID}&password=${password},`,
+          {
+            method: "POST",
+          }
+        );
+        return data;
+      },
+
       loginUser: async (credentials) => {
         set({ loginLoading: true, loginError: null });
         try {
@@ -194,7 +256,6 @@ const useProductStore = create(
               timestamp: Date.now(),
             };
             set({ user: userWithTimestamp, loginLoading: false });
-
             return userWithTimestamp;
           }
           throw new Error(response.data.message || "Login failed");
@@ -209,21 +270,24 @@ const useProductStore = create(
         set({ loginLoading: true, loginError: null });
         try {
           const response = await api.post("/consumer/register", userData);
-
-          if (response.data.status === "success") {
+          if (
+            response.status === 201 ||
+            response.data.message === "Consumer registered successfully!"
+          ) {
             const userWithTimestamp = {
               ...response.data.data,
               timestamp: Date.now(),
             };
-            set({ user: userWithTimestamp, loginLoading: false });
+            set({ loginLoading: false });
             return { success: true, user: userWithTimestamp };
+          } else {
+            throw new Error(response.data.message || "Signup failed");
           }
-          throw new Error(response.data.message || "Signup failed");
         } catch (error) {
           console.log("Signup error:", error);
-
           let errorMessage = "An error occurred during signup.";
           if (error.response) {
+            console.log(error);
             if (error.response.status === 422) {
               errorMessage =
                 "This email is already registered. Please log in or use a different email.";
@@ -236,10 +300,37 @@ const useProductStore = create(
           } else {
             errorMessage = error.message;
           }
-
           set({ loginError: errorMessage, loginLoading: false });
           throw new Error(errorMessage);
         }
+      },
+
+      // New Comment APIs
+
+      // Fetch comments (optionally, pass an identifier like postID if needed)
+      fetchComments: async (productID) => {
+        const response = await get().apiRequest(
+          `/comment/list?product_id=${productID}`
+        );
+        return response.comments.data;
+      },
+
+      // Add a comment. Pass the comment data in the request body.
+      addComment: async (commentData) => {
+        const data = await get().apiRequest("/comment/add", {
+          method: "POST",
+          data: commentData,
+        });
+        return data;
+      },
+
+      // Delete a comment by its ID.
+      deleteComment: async ({ commentId, consumerID }) => {
+        const data = await get().apiRequest("/comment/delete", {
+          method: "DELETE",
+          params: { comment_id: commentId, consumer_id: consumerID },
+        });
+        return data;
       },
 
       // Logout User
