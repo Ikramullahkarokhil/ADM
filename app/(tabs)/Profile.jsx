@@ -165,21 +165,43 @@ const Profile = () => {
       return;
     }
 
+    const MAX_SIZE = 100 * 1024; // 100KB
     let fileInfo = await FileSystem.getInfoAsync(image);
-    if (fileInfo.size && fileInfo.size > 2 * 1024 * 1024) {
-      const manipResult = await ImageManipulator.manipulateAsync(image, [], {
-        compress: 0.5,
-        format: ImageManipulator.SaveFormat.JPEG,
-      });
-      fileInfo = await FileSystem.getInfoAsync(manipResult.uri);
-      if (fileInfo.size && fileInfo.size > 2 * 1024 * 1024) {
+
+    // If image is larger than 100KB, attempt to compress it iteratively.
+    if (fileInfo.size && fileInfo.size > MAX_SIZE) {
+      let currentUri = image;
+      let currentFileInfo = fileInfo;
+      let quality = 0.7; // initial compression quality
+      let iterations = 0;
+      const maxIterations = 5;
+
+      while (currentFileInfo.size > MAX_SIZE && iterations < maxIterations) {
+        const manipResult = await ImageManipulator.manipulateAsync(
+          currentUri,
+          [],
+          {
+            compress: quality,
+            format: ImageManipulator.SaveFormat.JPEG,
+          }
+        );
+        currentUri = manipResult.uri;
+        currentFileInfo = await FileSystem.getInfoAsync(currentUri);
+        quality *= 0.7; // further reduce quality for next iteration if needed
+        iterations++;
+      }
+
+      if (currentFileInfo.size > MAX_SIZE) {
         Alert.alert(
           "Image too large",
-          "Could not compress the image below 2MB. Please choose a different image."
+          "Could not compress the image below 100KB. Please choose a different image."
         );
         return;
       }
-      setImage(manipResult.uri);
+
+      // Update the image state to the compressed image and exit.
+      setImage(currentUri);
+      return;
     }
 
     try {
@@ -191,12 +213,19 @@ const Profile = () => {
         },
         consumer_id: profileData?.consumer_id,
       });
-      Alert.alert("Success", "Image uploaded successfully!");
       console.log("Upload response:", response);
+      Alert.alert("Success", "Image uploaded successfully!");
     } catch (error) {
-      console.log(error);
+      console.log("Upload error:", error);
+      Alert.alert("Upload failed", error.message);
     }
   };
+
+  useEffect(() => {
+    if (image) {
+      handleUpload();
+    }
+  }, [image]);
 
   const accountSettings = [
     { label: "Update Profile", screen: "UpdateProfile" },

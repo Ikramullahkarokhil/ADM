@@ -16,9 +16,13 @@ import {
   ActivityIndicator,
   Alert,
   ToastAndroid,
-  TextInput,
 } from "react-native";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  Link,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -29,6 +33,7 @@ const ProductDetail = () => {
   const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
+  const router = useRouter();
 
   const [product, setProduct] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,9 +42,8 @@ const ProductDetail = () => {
   const [addedToCart, setAddedToCart] = useState(false);
 
   const [comments, setComments] = useState([]);
-  const [newComment, setNewComment] = useState("");
+  const [commentPage, setCommentPage] = useState(1);
   const [isCommentsLoading, setIsCommentsLoading] = useState(false);
-  const [isAddingComment, setIsAddingComment] = useState(false);
 
   const {
     user,
@@ -53,8 +57,6 @@ const ProductDetail = () => {
     loading,
     error,
     fetchComments,
-    addComment,
-    deleteComment,
   } = useProductStore();
 
   useLayoutEffect(() => {
@@ -118,83 +120,6 @@ const ProductDetail = () => {
     findProduct();
   }, [id, subcategoryId, productData, productsBySubcategory]);
 
-  // Fetch comments when product loads
-  useEffect(() => {
-    if (product) {
-      loadComments();
-    }
-  }, [product]);
-
-  const loadComments = async () => {
-    setIsCommentsLoading(true);
-    try {
-      const data = await fetchComments(product.products_id);
-      if (data) {
-        setComments(data);
-      } else {
-        setComments([]);
-      }
-    } catch (err) {
-      console.error("Error fetching comments:", err);
-    } finally {
-      setIsCommentsLoading(false);
-    }
-  };
-  const handleAddComment = async () => {
-    if (!newComment.trim()) {
-      Alert.alert("Empty Comment", "Please write something before submitting.");
-      return;
-    }
-    if (!user) {
-      Alert.alert("Login Required", "Please login to add a comment.");
-      return;
-    }
-    setIsAddingComment(true);
-    try {
-      await addComment({
-        product_id: product.products_id,
-        comment: newComment,
-        consumer_id: user.consumer_id,
-      });
-      setNewComment("");
-      ToastAndroid.show("Comment added", ToastAndroid.SHORT);
-      loadComments();
-    } catch (err) {
-      Alert.alert("Error", err.message);
-    } finally {
-      setIsAddingComment(false);
-    }
-  };
-
-  const handleDeleteComment = async (commentId) => {
-    Alert.alert(
-      "Delete Comment",
-      "Are you sure you want to delete this comment?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteComment({
-                commentId: commentId,
-                consumerID: user.consumer_id,
-              });
-              ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
-              loadComments();
-            } catch (err) {
-              Alert.alert("Error", err.message);
-            }
-          },
-        },
-      ]
-    );
-  };
-
   const handleAddToCart = useCallback(async () => {
     if (!product) return;
     if (!user) {
@@ -226,11 +151,8 @@ const ProductDetail = () => {
     }
   }, [product, addToCart, cartItem, user]);
 
-  // Share Product
-
   const handleShare = async () => {
     if (!product) return;
-
     try {
       const deepLink = Linking.createURL(
         `/screens/ProductDetails/${product.products_id}`
@@ -243,8 +165,6 @@ const ProductDetail = () => {
       console.error("Share error:", error);
     }
   };
-
-  // Favorite function
 
   const handleToggleFavorite = async () => {
     if (!user) {
@@ -327,7 +247,7 @@ const ProductDetail = () => {
       <View
         style={[
           styles.centerContainer,
-          { backgroundColor: theme.colors.background },
+          { backgroundColor: theme.colors.primary },
         ]}
       >
         <Text style={[styles.errorText, { color: theme.colors.textColor }]}>
@@ -354,7 +274,7 @@ const ProductDetail = () => {
     <ScrollView
       contentContainerStyle={[
         styles.container,
-        { backgroundColor: theme.colors.background },
+        { backgroundColor: theme.colors.primary },
       ]}
       showsVerticalScrollIndicator={false}
     >
@@ -433,87 +353,33 @@ const ProductDetail = () => {
             buttonColor={theme.colors.button}
             onPress={handleAddToCart}
             rippleColor={theme.colors.riple}
-            style={styles.button}
+            style={[
+              styles.button,
+              { borderColor: theme.colors.button, borderWidth: 1 },
+            ]}
             disabled={addedToCart}
           >
             {addedToCart ? "Added to cart" : "Add to Cart"}
           </Button>
-        </View>
-      </View>
-
-      {/* Comments Section */}
-      <View style={styles.commentsContainer}>
-        <Text style={[styles.sectionTitle, { color: theme.colors.textColor }]}>
-          Comments
-        </Text>
-
-        {/* Add Comment Input */}
-        <View style={styles.addCommentContainer}>
-          <TextInput
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder="Write a comment..."
-            placeholderTextColor="#999"
-            style={[
-              styles.commentInput,
-              {
-                color: theme.colors.textColor,
-                borderColor: theme.colors.subInactiveColor,
-              },
-            ]}
-          />
-          <Button
-            mode="contained"
-            onPress={handleAddComment}
-            loading={isAddingComment}
-            buttonColor={theme.colors.button}
-            textColor={theme.colors.primary}
+          <Link
+            href={{
+              pathname: "/screens/Comments",
+              params: { productId: product.products_id },
+            }}
+            asChild
           >
-            Post
-          </Button>
+            <Button
+              textColor={theme.colors.button}
+              rippleColor={theme.colors.riple}
+              mode="outlined"
+              style={styles.showCommentsButton}
+              disabled={!comments}
+            >
+              {product.total_comments}
+              {"  "}Comments
+            </Button>
+          </Link>
         </View>
-
-        {isCommentsLoading ? (
-          <ActivityIndicator size="small" color={theme.colors.textColor} />
-        ) : comments.length === 0 ? (
-          <Text style={{ color: theme.colors.textColor }}>
-            No comments yet.
-          </Text>
-        ) : (
-          comments.map((comment) => (
-            <View key={comment.product_comments_id} style={styles.commentItem}>
-              <View style={styles.commentHeader}>
-                <Text
-                  style={[
-                    styles.commentAuthor,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  {comment.consumer_name || "Anonymous"}
-                </Text>
-                {/* Show delete button if current user is the comment author */}
-                {comment.consumer_id === user.consumer_id && (
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleDeleteComment(comment.product_comments_id)
-                    }
-                  >
-                    <Ionicons name="trash-outline" size={24} color="#FF0000" />
-                  </TouchableOpacity>
-                )}
-              </View>
-              <Text
-                style={[
-                  styles.commentContent,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                {comment.comment}
-              </Text>
-              <Text style={styles.commentDate}>{comment.date}</Text>
-            </View>
-          ))
-        )}
       </View>
     </ScrollView>
   );
@@ -628,8 +494,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  // Comments Section styles
-  commentsContainer: {
+  commentsButtonContainer: {
     marginTop: 20,
     padding: 16,
     backgroundColor: "#fff",
@@ -638,47 +503,21 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 10,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 12,
-  },
-  commentItem: {
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-    paddingBottom: 8,
-  },
-  commentHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  commentAuthor: {
+  showCommentsButton: {
+    borderRadius: 20,
+  },
+  showCommentsButtonText: {
+    color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
-  commentContent: {
-    fontSize: 15,
-    marginTop: 4,
-  },
-  commentDate: {
-    fontSize: 12,
+  commentsCountText: {
+    fontSize: 16,
     color: "#666",
-    marginTop: 4,
-  },
-  addCommentContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  commentInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 20,
-    padding: 8,
-    marginRight: 8,
   },
 });
 

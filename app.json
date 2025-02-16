@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Zaytoon",
-    "slug": "Zaytoon",
+    "name": "ADM",
+    "slug": "ADM",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
@@ -21,15 +21,12 @@
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.ims.Zaytoon"
+      "package": "com.afghanbyteTechnologies.ADM"
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "plugins": [
-      "expo-router",
-      "@react-native-google-signin/google-signin"
-    ],
-    "scheme": "zaytoon"
+    "plugins": ["expo-router"],
+    "scheme": "ADM"
   }
 }

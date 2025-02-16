@@ -21,6 +21,7 @@ const initialState = {
   favProducts: [],
   cartItem: [],
   productsBySubcategory: {},
+  productQuestions: {},
   loginError: null,
   user: null,
   profileData: null,
@@ -246,6 +247,28 @@ const useProductStore = create(
         return data;
       },
 
+      getProductQuestionList: async (productID) => {
+        const data = await get().apiRequest(
+          `/questions/list?product_id=${productID}`
+        );
+        set({ productQuestions: data });
+        return data;
+      },
+
+      addProductQuestion: async ({ consumerID, productID, question }) => {
+        const data = await api.post(
+          `/question/add?question=${question}&product_id=${productID}&consumer_id=${consumerID}`
+        );
+        return data;
+      },
+
+      deleteProductQuestion: async ({ consumerID, questionId }) => {
+        const data = await api.delete(
+          `/question/delete?question_id=${questionId}&consumer_id=${consumerID}`
+        );
+        return data;
+      },
+
       loginUser: async (credentials) => {
         set({ loginLoading: true, loginError: null });
         try {
@@ -305,12 +328,10 @@ const useProductStore = create(
         }
       },
 
-      // New Comment APIs
-
       // Fetch comments (optionally, pass an identifier like postID if needed)
-      fetchComments: async (productID) => {
+      fetchComments: async ({ productID, page }) => {
         const response = await get().apiRequest(
-          `/comment/list?product_id=${productID}`
+          `/comment/list?product_id=${productID}&page=${page}`
         );
         return response.comments.data;
       },

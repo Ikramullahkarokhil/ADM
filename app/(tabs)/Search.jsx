@@ -1,4 +1,3 @@
-// Import necessary libraries and components
 import React, {
   useState,
   useEffect,
@@ -45,7 +44,8 @@ const Search = () => {
   const navigation = useNavigation();
   const theme = useTheme();
 
-  const { searchProductData, productData, error } = useProductStore();
+  const { searchProductData, productData, error, subcategories } =
+    useProductStore();
   const data = productData?.data ?? [];
 
   useLayoutEffect(() => {
@@ -59,7 +59,6 @@ const Search = () => {
     debounce((query) => {
       if (query) {
         searchProductData(query);
-      } else {
       }
     }, 300),
     [searchProductData]
@@ -67,26 +66,41 @@ const Search = () => {
 
   useEffect(() => {
     debouncedSearch(searchQuery);
+    return () => debouncedSearch.cancel(); // Cleanup debounce on unmount
   }, [searchQuery, debouncedSearch]);
 
-  // Get unique brands and categories for filter options
+  // Get unique brands for filter options
   const brands = useMemo(() => {
     const uniqueBrands = [...new Set(data.map((item) => item.brand_title))];
-    return uniqueBrands;
+    return uniqueBrands.length > 0 ? uniqueBrands : ["No brands available"];
   }, [data]);
 
-  const categories = useMemo(() => {
+  // Get unique subcategories from product data (by their IDs)
+  const categoriesFromData = useMemo(() => {
     const uniqueCategories = [
       ...new Set(data.map((item) => item.categories_id)),
     ];
     return uniqueCategories;
   }, [data]);
 
-  // Calculate dynamic price range from data
+  const categoryOptions = useMemo(() => {
+    if (!subcategories || !categoriesFromData)
+      return [{ id: 0, name: "No categories available" }];
+    return Object.values(subcategories)
+      .flatMap((category) => category?.data || [])
+      .filter((subcat) => subcat && categoriesFromData.includes(subcat.id));
+  }, [subcategories, categoriesFromData]);
+
   const priceBounds = useMemo(() => {
     if (data.length === 0) return [0, 10000];
-    const prices = data.map((item) => parseFloat(item.spu));
-    return [Math.min(...prices), Math.max(...prices)];
+    const prices = data
+      .map((item) => parseFloat(item.spu))
+      .filter(
+        (price) => !isNaN(price) && price !== null && price !== undefined
+      );
+    return prices.length > 0
+      ? [Math.min(...prices), Math.max(...prices)]
+      : [0, 10000];
   }, [data]);
 
   // Memoized filtered products
@@ -102,6 +116,14 @@ const Search = () => {
       if (
         filters.selectedBrands.length > 0 &&
         !filters.selectedBrands.includes(product.brand_title)
+      ) {
+        return false;
+      }
+      // Category filter
+      if (
+        filters.selectedCategories.length > 0 &&
+        (!product.categories_id ||
+          !filters.selectedCategories.includes(product.categories_id))
       ) {
         return false;
       }
@@ -139,44 +161,44 @@ const Search = () => {
   };
 
   // Render product item
-  const renderProductItem = useCallback(
-    ({ item }) => (
-      <Link
-        href={{
-          pathname: `/screens/ProductDetail`,
-          params: { id: item.products_id },
-        }}
-        asChild
-      >
-        <TouchableOpacity style={styles.itemContainer} activeOpacity={0.7}>
-          <Image
-            source={
-              item.product_image
-                ? { uri: item.product_image }
-                : require("../../assets/images/imageSkeleton.jpg")
-            }
-            style={styles.productImage}
-            resizeMode="cover"
-          />
-          <View style={styles.productInfo}>
-            <Text style={styles.productName} numberOfLines={3}>
-              {item.title}
-            </Text>
-            <Text style={styles.productPrice}>${item.spu}</Text>
-            <View style={styles.categoryContainer}>
-              <Text style={styles.productCategory}>{item.brand_title}</Text>
-              <View style={styles.ratingContainer}>
-                <Feather name="star" size={16} color="#FFD700" />
-                <Text style={styles.ratingText}>
-                  {item.average_rating || 0}
-                </Text>
-              </View>
+  const ProductItem = React.memo(({ item }) => (
+    <Link
+      href={{
+        pathname: `/screens/ProductDetail`,
+        params: { id: item.products_id },
+      }}
+      asChild
+    >
+      <TouchableOpacity style={styles.itemContainer} activeOpacity={0.7}>
+        <Image
+          source={
+            item.product_image
+              ? { uri: item.product_image }
+              : require("../../assets/images/imageSkeleton.jpg")
+          }
+          style={styles.productImage}
+          resizeMode="cover"
+        />
+        <View style={styles.productInfo}>
+          <Text style={styles.productName} numberOfLines={3}>
+            {item.title}
+          </Text>
+          <Text style={styles.productPrice}>${item.spu}</Text>
+          <View style={styles.categoryContainer}>
+            <Text style={styles.productCategory}>{item.brand_title}</Text>
+            <View style={styles.ratingContainer}>
+              <Feather name="star" size={16} color="#FFD700" />
+              <Text style={styles.ratingText}>{item.average_rating || 0}</Text>
             </View>
           </View>
-        </TouchableOpacity>
-      </Link>
-    ),
-    [theme.colors]
+        </View>
+      </TouchableOpacity>
+    </Link>
+  ));
+
+  const renderProductItem = useCallback(
+    ({ item }) => <ProductItem item={item} />,
+    []
   );
 
   const renderSeparator = () => <View style={styles.separator} />;
@@ -196,7 +218,7 @@ const Search = () => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.filterScroll}>
+        <ScrollView style={{ maxHeight: 400 }}>
           {/* Rating Filter */}
           <View style={styles.filterSection}>
             <Text style={styles.filterTitle}>Minimum Rating</Text>
@@ -233,6 +255,29 @@ const Search = () => {
                   onPress={() => handleChipPress("selectedBrands", brand)}
                 >
                   <Text style={styles.chipText}>{brand}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Categories Filter */}
+          <View style={styles.filterSection}>
+            <Text style={styles.filterTitle}>Categories</Text>
+            <View style={styles.chipContainer}>
+              {categoryOptions.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.filterChip,
+                    filters.selectedCategories.includes(
+                      category.categorie_id
+                    ) && styles.selectedChip,
+                  ]}
+                  onPress={() =>
+                    handleChipPress("selectedCategories", category.categorie_id)
+                  }
+                >
+                  <Text style={styles.chipText}>{category.name}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -349,7 +394,6 @@ const Search = () => {
 
 export default Search;
 
-// Styles for the component
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -439,9 +483,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#888",
   },
-  loader: {
-    marginTop: 50,
-  },
   bottomModal: {
     justifyContent: "flex-end",
     margin: 0,
@@ -465,6 +506,10 @@ const styles = StyleSheet.create({
   filterSection: {
     marginBottom: 25,
   },
+  filterTitle: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
   chipContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -477,15 +522,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     borderWidth: 1,
     borderColor: "#ddd",
+    marginBottom: 8,
   },
   selectedChip: {
     backgroundColor: "#e3f2fd",
     borderColor: "#2196f3",
   },
-  ratingContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
+  chipText: {
+    fontSize: 14,
   },
   ratingPill: {
     paddingVertical: 8,

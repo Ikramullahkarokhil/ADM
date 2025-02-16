@@ -91,7 +91,7 @@ const Cart = () => {
         <IconButton
           icon="delete"
           onPress={() => handleRemoveFromCart(item)}
-          color="red"
+          color="white"
           size={24}
         />
       </View>

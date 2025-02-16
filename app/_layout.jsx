@@ -72,7 +72,7 @@ const Layout = () => {
           fetchProfile(user.consumer_id),
           fetchFavProducts(user.consumer_id),
           listCart(user.consumer_id),
-          searchProductData(),
+          // searchProductData(),
         ]);
       }
     };
