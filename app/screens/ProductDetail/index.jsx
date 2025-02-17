@@ -13,8 +13,6 @@ import {
   TouchableOpacity,
   Pressable,
   Share,
-  ActivityIndicator,
-  Alert,
   ToastAndroid,
 } from "react-native";
 import {
@@ -26,8 +24,9 @@ import {
 import { FontAwesome } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Button, useTheme } from "react-native-paper";
+import { Button, IconButton, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
+import AlertDialog from "../../../components/ui/AlertDialog";
 
 const ProductDetail = () => {
   const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
@@ -36,14 +35,15 @@ const ProductDetail = () => {
   const router = useRouter();
 
   const [product, setProduct] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
-
-  const [comments, setComments] = useState([]);
-  const [commentPage, setCommentPage] = useState(1);
-  const [isCommentsLoading, setIsCommentsLoading] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertConfirmText, setAlertConfirmText] = useState("Ok");
+  const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
+  const [questions, setQuestions] = useState([]);
 
   const {
     user,
@@ -54,29 +54,15 @@ const ProductDetail = () => {
     favProducts,
     addToCart,
     cartItem,
-    loading,
     error,
-    fetchComments,
+    getProductQuestionList,
+    addProductQuestion,
+    deleteProductQuestion,
   } = useProductStore();
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
-      headerRight: () => (
-        <Pressable
-          onPress={handleShare}
-          style={({ pressed }) => [
-            styles.headerButton,
-            pressed && styles.headerButtonPressed,
-          ]}
-        >
-          <Ionicons
-            name="share-outline"
-            size={24}
-            color={theme.colors.button}
-          />
-        </Pressable>
-      ),
       headerStyle: {
         backgroundColor: theme.colors.primary,
       },
@@ -84,6 +70,7 @@ const ProductDetail = () => {
     });
   }, [navigation, product]);
 
+  // Update favorite status when product or favorites change
   useEffect(() => {
     if (product && favProducts) {
       const isFav = favProducts.some(
@@ -93,9 +80,9 @@ const ProductDetail = () => {
     }
   }, [product, favProducts]);
 
+  // Find product based on provided params
   useEffect(() => {
     const findProduct = async () => {
-      setIsLoading(true);
       try {
         if (id) {
           const data = productData?.data || [];
@@ -112,44 +99,64 @@ const ProductDetail = () => {
         }
       } catch (err) {
         console.error("Error finding product:", err);
-      } finally {
-        setIsLoading(false);
       }
     };
 
     findProduct();
   }, [id, subcategoryId, productData, productsBySubcategory]);
 
+  // Fetch product questions once the product is loaded
+  useEffect(() => {
+    if (product) {
+      getProductQuestionList(product.products_id)
+        .then((data) => {
+          // Assuming the API returns an object with a "questions" key
+          setQuestions(data.questions || []);
+        })
+        .catch((err) => console.error("Error fetching questions:", err));
+    }
+  }, [product]);
+
   const handleAddToCart = useCallback(async () => {
     if (!product) return;
+
     if (!user) {
-      Alert.alert(
-        "Login Required",
-        "Please login to add products to your cart."
-      );
+      setAlertTitle("Login Required");
+      setAlertMessage("Please login to add products to your cart.");
+      setAlertConfirmAction(() => () => {
+        setAlertVisible(false);
+        navigation.navigate("Login");
+      });
+      setAlertVisible(true);
       return;
     }
+
     const productExists = cartItem.some(
       (item) => item.products_id === product.products_id
     );
     if (productExists) {
-      Alert.alert(
-        "Product already in cart",
-        "This product is already in your cart."
-      );
-    } else {
-      try {
-        setAddedToCart(true);
-        await addToCart({
-          productID: product.products_id,
-          consumerID: user.consumer_id,
-        });
-        ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
-      } catch (error) {
-        Alert.alert("Error", error.message);
-      }
+      setAlertTitle("Product already in cart");
+      setAlertMessage("This product is already in your cart.");
+      setAlertConfirmText("Go to Cart");
+      setAlertConfirmAction(() => () => router.navigate("/screens/Cart"));
+      setAlertVisible(true);
+      return;
     }
-  }, [product, addToCart, cartItem, user]);
+
+    try {
+      setAddedToCart(true);
+      await addToCart({
+        productID: product.products_id,
+        consumerID: user.consumer_id,
+      });
+      ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
+    } catch (error) {
+      setAlertTitle("Error");
+      setAlertMessage(error.message);
+      setAlertConfirmAction(() => () => setAlertVisible(false));
+      setAlertVisible(true);
+    }
+  }, [product, addToCart, cartItem, user, navigation]);
 
   const handleShare = async () => {
     if (!product) return;
@@ -197,7 +204,10 @@ const ProductDetail = () => {
       }
       setIsFavorite(!isFavorite);
     } catch (error) {
-      Alert.alert("Error", error.message);
+      setAlertTitle("Error");
+      setAlertMessage(error.message);
+      setAlertConfirmAction(() => () => setAlertVisible(false));
+      setAlertVisible(true);
     } finally {
       setIsFavoriting(false);
     }
@@ -218,6 +228,37 @@ const ProductDetail = () => {
       />
     ));
   }, [product]);
+
+  // Handler to delete a product question
+  const handleDeleteQuestion = async (questionId) => {
+    if (!user) {
+      setAlertTitle("Login Required");
+      setAlertMessage("Please login to delete your question.");
+      setAlertConfirmAction(() => () => {
+        setAlertVisible(false);
+        navigation.navigate("Login");
+      });
+      setAlertVisible(true);
+      return;
+    }
+    try {
+      await deleteProductQuestion({
+        consumerID: user.consumer_id,
+        questionId, // questionId is expected to be products_qna_id
+      });
+      const updatedData = await getProductQuestionList(product.products_id);
+      setQuestions(updatedData.questions || []);
+      ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
+    } catch (error) {
+      setAlertTitle("Error");
+      setAlertMessage(error.message);
+      setAlertConfirmAction(() => () => setAlertVisible(false));
+      setAlertVisible(true);
+    }
+  };
+
+  // Show only the first 3 questions
+  const displayedQuestions = questions.slice(0, 3);
 
   if (error) {
     return (
@@ -271,117 +312,288 @@ const ProductDetail = () => {
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.container,
-        { backgroundColor: theme.colors.primary },
-      ]}
-      showsVerticalScrollIndicator={false}
-    >
-      <Image
-        source={
-          product.product_image
-            ? { uri: product.product_image }
-            : require("../../../assets/images/imageSkeleton.jpg")
-        }
-        style={[styles.image, { backgroundColor: theme.colors.primary }]}
-        resizeMode="cover"
-      />
-      <View
-        style={[
-          styles.infoContainer,
+    <>
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
           { backgroundColor: theme.colors.primary },
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.titleRow}>
-          <Text
-            style={[styles.title, { color: theme.colors.textColor }]}
-            numberOfLines={2}
-          >
-            {product.title}
-          </Text>
-          <TouchableOpacity
-            onPress={handleToggleFavorite}
-            disabled={isFavoriting}
-          >
-            <Ionicons
-              name={isFavorite ? "heart" : "heart-outline"}
-              size={28}
-              color={isFavorite ? "#FF0000" : "#333"}
-              style={isFavoriting && { opacity: 0.5 }}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.ratingContainer}>
-          {renderRatingStars()}
-          <Text style={styles.ratingText}>
-            {product.average_rating
-              ? `${product.average_rating}`
-              : "No ratings yet"}
-          </Text>
-        </View>
-
-        <Text style={[styles.price, { color: theme.colors.button }]}>
-          {product.spu}
-        </Text>
-
-        {product.description && (
-          <Text style={[styles.description, { color: theme.colors.textColor }]}>
-            {product.description}
-          </Text>
-        )}
-
-        {product.brand_title && (
-          <View style={styles.detailsRow}>
+        <Image
+          source={
+            product.product_image
+              ? { uri: product.product_image }
+              : require("../../../assets/images/imageSkeleton.jpg")
+          }
+          style={[styles.image, { backgroundColor: theme.colors.primary }]}
+          resizeMode="cover"
+        />
+        <View
+          style={[
+            styles.infoContainer,
+            { backgroundColor: theme.colors.primary },
+          ]}
+        >
+          <View style={styles.titleRow}>
             <Text
-              style={[styles.detailLabel, { color: theme.colors.textColor }]}
+              style={[styles.title, { color: theme.colors.textColor }]}
+              numberOfLines={2}
             >
-              Brand
+              {product.title}
             </Text>
-            <Text
-              style={[styles.detailValue, { color: theme.colors.textColor }]}
+            <TouchableOpacity
+              onPress={handleToggleFavorite}
+              disabled={isFavoriting}
             >
-              {product.brand_title}
+              <Ionicons
+                name={isFavorite ? "heart" : "heart-outline"}
+                size={28}
+                color={isFavorite ? "#FF0000" : "#333"}
+                style={isFavoriting && { opacity: 0.5 }}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.ratingContainer}>
+            {renderRatingStars()}
+            <Text
+              style={[styles.ratingText, { color: theme.colors.textColor }]}
+            >
+              {product.average_rating
+                ? `${product.average_rating}`
+                : "No ratings yet"}
             </Text>
           </View>
-        )}
 
-        <View style={styles.cartContainer}>
-          <Button
-            textColor={theme.colors.primary}
-            buttonColor={theme.colors.button}
-            onPress={handleAddToCart}
-            rippleColor={theme.colors.riple}
-            style={[
-              styles.button,
-              { borderColor: theme.colors.button, borderWidth: 1 },
-            ]}
-            disabled={addedToCart}
+          <Text style={[styles.price, { color: theme.colors.button }]}>
+            {product.spu}
+          </Text>
+
+          {product.description && (
+            <Text
+              style={[styles.description, { color: theme.colors.textColor }]}
+            >
+              {product.description}
+            </Text>
+          )}
+
+          {product.brand_title && (
+            <View style={styles.detailsRow}>
+              <Text
+                style={[styles.detailLabel, { color: theme.colors.textColor }]}
+              >
+                Brand
+              </Text>
+              <Text
+                style={[styles.detailValue, { color: theme.colors.textColor }]}
+              >
+                {product.brand_title}
+              </Text>
+            </View>
+          )}
+
+          {product.brand_title && (
+            <Link
+              href={{
+                pathname: "/screens/Comments",
+                params: { productId: product.products_id },
+              }}
+              asChild
+            >
+              <Pressable
+                style={styles.detailsRow}
+                android_ripple={theme.colors.riple}
+              >
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  Comments
+                </Text>
+                <Text
+                  mode="outlined"
+                  style={[
+                    styles.showCommentsButton,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  {product.total_comments} , Comments
+                </Text>
+              </Pressable>
+            </Link>
+          )}
+
+          <View style={styles.detailsRow}>
+            <Button
+              textColor={theme.colors.primary}
+              buttonColor={theme.colors.button}
+              onPress={handleAddToCart}
+              rippleColor={theme.colors.riple}
+              style={[
+                styles.button,
+                { borderColor: theme.colors.button, borderWidth: 1 },
+              ]}
+              disabled={addedToCart}
+            >
+              {addedToCart ? "Added to cart" : "Add to Cart"}
+            </Button>
+            <Button
+              onPress={handleShare}
+              textColor={theme.colors.button}
+              style={[
+                styles.button,
+                {
+                  borderColor: theme.colors.button,
+                  borderRadius: 20,
+                  borderWidth: 1,
+                },
+              ]}
+              icon={() => (
+                <Ionicons
+                  name="share-social"
+                  size={24}
+                  color={theme.colors.button}
+                />
+              )}
+            >
+              Share
+            </Button>
+          </View>
+        </View>
+
+        {/* Product Questions Section */}
+        <View
+          style={[
+            styles.questionsSection,
+            { backgroundColor: theme.colors.primary },
+          ]}
+        >
+          <Text
+            style={[styles.questionsTitle, { color: theme.colors.textColor }]}
           >
-            {addedToCart ? "Added to cart" : "Add to Cart"}
-          </Button>
+            Product Questions
+          </Text>
+          {displayedQuestions && displayedQuestions.length > 0 ? (
+            displayedQuestions.map((q) => (
+              <View
+                key={q.products_qna_id}
+                style={[
+                  styles.questionItem,
+                  { backgroundColor: theme.colors.background },
+                ]}
+              >
+                {/* Header with user name and date */}
+                <View style={styles.questionHeader}>
+                  <Text
+                    style={[
+                      styles.consumerName,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {q.consumer_name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.dateText,
+                      ,
+                      { color: theme.colors.inactiveColor },
+                    ]}
+                  >
+                    {q.date}
+                  </Text>
+                </View>
+                {/* Question text */}
+                <Text
+                  style={[
+                    styles.questionText,
+                    ,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  {q.question}
+                </Text>
+                {/* Render answers if available */}
+                {q.answers && q.answers.length > 0 && (
+                  <View style={styles.answersContainer}>
+                    {q.answers.map((ans) => (
+                      <View key={ans.products_ana_id} style={styles.answerItem}>
+                        <Text
+                          style={[
+                            styles.answerText,
+                            ,
+                            { color: theme.colors.textColor },
+                          ]}
+                        >
+                          {ans.answer}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.answerDate,
+                            ,
+                            { color: theme.colors.inactiveColor },
+                          ]}
+                        >
+                          {ans.date}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {/* Delete option only when there are no answers */}
+                {user &&
+                  q.consumer_id === user.consumer_id &&
+                  (!q.answers || q.answers.length === 0) && (
+                    <TouchableOpacity
+                      onPress={() => handleDeleteQuestion(q.products_qna_id)}
+                    >
+                      <Text style={styles.deleteQuestion}>Delete</Text>
+                    </TouchableOpacity>
+                  )}
+              </View>
+            ))
+          ) : (
+            <Text
+              style={[
+                styles.noQuestionsText,
+                { color: theme.colors.textColor },
+              ]}
+            >
+              No questions yet.
+            </Text>
+          )}
+
           <Link
             href={{
-              pathname: "/screens/Comments",
+              pathname: "screens/Questions",
               params: { productId: product.products_id },
             }}
             asChild
           >
             <Button
-              textColor={theme.colors.button}
-              rippleColor={theme.colors.riple}
-              mode="outlined"
-              style={styles.showCommentsButton}
-              disabled={!comments}
+              mode="contained"
+              style={styles.showMoreButton}
+              buttonColor={theme.colors.button}
+              textColor={theme.colors.primary}
             >
-              {product.total_comments}
-              {"  "}Comments
+              Show More
             </Button>
           </Link>
         </View>
-      </View>
-    </ScrollView>
+      </ScrollView>
+
+      <AlertDialog
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onDismiss={() => setAlertVisible(false)}
+        onConfirm={alertConfirmAction}
+        confirmText={alertConfirmText}
+        cancelText="Cancel"
+      />
+    </>
   );
 };
 
@@ -396,15 +608,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-  },
   image: {
     width: "100%",
     height: 300,
     borderRadius: 20,
     marginBottom: 16,
+    elevation: 10,
   },
   infoContainer: {
     backgroundColor: "#fff",
@@ -414,7 +623,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 10,
   },
   titleRow: {
     flexDirection: "row",
@@ -460,7 +669,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
   },
@@ -477,7 +686,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   button: {
-    width: "50%",
+    width: "48%",
+    elevation: 10,
   },
   errorText: {
     fontSize: 18,
@@ -494,30 +704,74 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  commentsButtonContainer: {
-    marginTop: 20,
-    padding: 16,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
   showCommentsButton: {
-    borderRadius: 20,
+    textDecorationLine: "underline",
   },
-  showCommentsButtonText: {
-    color: "#fff",
+  questionsSection: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+    elevation: 10,
+  },
+  questionsTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  questionItem: {
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+  },
+  questionHeader: {
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  consumerName: {
     fontSize: 16,
     fontWeight: "600",
+    color: "#333",
   },
-  commentsCountText: {
+  dateText: {
+    fontSize: 14,
+    color: "#777",
+  },
+  questionText: {
     fontSize: 16,
-    color: "#666",
+    marginBottom: 8,
+    color: "#444",
+  },
+  answersContainer: {
+    marginTop: 8,
+    paddingLeft: 12,
+    borderLeftWidth: 2,
+    borderLeftColor: "#ddd",
+  },
+  answerItem: {
+    marginBottom: 6,
+  },
+  answerText: {
+    fontSize: 15,
+    color: "#333",
+  },
+  answerDate: {
+    fontSize: 13,
+    color: "#777",
+  },
+  deleteQuestion: {
+    color: "red",
+    marginTop: 4,
+    fontSize: 14,
+  },
+  noQuestionsText: {
+    fontSize: 16,
+    fontStyle: "italic",
+  },
+  showMoreButton: {
+    marginTop: 12,
+    alignSelf: "center",
   },
 });
 

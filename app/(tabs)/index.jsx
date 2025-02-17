@@ -1,4 +1,4 @@
-import { FlatList, Pressable, StyleSheet, View } from "react-native";
+import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { useTheme, IconButton, Badge, Button } from "react-native-paper";
 import { Link, useNavigation } from "expo-router";
@@ -7,6 +7,7 @@ import useProductStore from "../../components/api/useProductStore";
 import CategoriesSectionList from "../../components/ui/CategoriesList";
 import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
 import Fontisto from "@expo/vector-icons/Fontisto";
+import { Ionicons } from "@expo/vector-icons";
 
 const Home = () => {
   const theme = useTheme();
@@ -80,48 +81,39 @@ const Home = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <View style={styles.searchContainer}>
+        <Image
+          source={require("../../assets/images/darkLogo.png")}
+          style={styles.logo}
+        />
+        <View style={styles.iconsContainer}>
           <Link asChild href={{ pathname: "/Search" }}>
-            <Button
-              icon="magnify"
-              mode="contained"
-              buttonColor={theme.colors.background}
-              style={styles.searchBar}
-              textColor={theme.colors.textColor}
-            >
-              Search Products...
-            </Button>
-          </Link>
-          <View style={styles.iconsContainer}>
-            <Link href={{ pathname: "/screens/Cart" }} asChild>
-              <Pressable
-                android_ripple={{ color: theme.colors.ripple }}
-                style={styles.iconButton}
-              >
-                <IconButton
-                  icon="cart"
+            <IconButton
+              icon={() => (
+                <Ionicons
+                  name="search-outline"
                   size={24}
-                  iconColor={theme.colors.textColor}
+                  color={theme.colors.textColor}
                 />
-                {groupedCartItems.length > 0 && (
-                  <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
-                )}
-              </Pressable>
-            </Link>
-            <Link href={{ pathname: "/screens/Favorite" }} asChild>
+              )}
+              iconColor={theme.colors.textColor}
+              style={[styles.searchBar]}
+            />
+          </Link>
+          <Link href={{ pathname: "/screens/Cart" }} asChild>
+            <Pressable
+              android_ripple={{ color: theme.colors.ripple }}
+              style={styles.iconButton}
+            >
               <IconButton
-                icon={() => (
-                  <Fontisto
-                    name="favorite"
-                    size={24}
-                    color={theme.colors.textColor}
-                  />
-                )}
+                icon="cart"
                 size={24}
                 iconColor={theme.colors.textColor}
               />
-            </Link>
-          </View>
+              {groupedCartItems.length > 0 && (
+                <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
+              )}
+            </Pressable>
+          </Link>
         </View>
       </View>
 
@@ -151,22 +143,12 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingVertical: 4,
     elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  searchBar: {
-    flex: 1,
-    borderRadius: 40,
-  },
+
+  searchBar: {},
   iconsContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -186,6 +168,10 @@ const styles = StyleSheet.create({
   },
   productsListContent: {
     marginTop: 40,
+  },
+  logo: {
+    height: 30,
+    width: 120,
   },
 });
 

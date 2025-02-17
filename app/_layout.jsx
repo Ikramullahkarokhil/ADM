@@ -156,7 +156,6 @@ const Layout = () => {
             <Stack
               screenOptions={{
                 headerTitleAlign: "center",
-                animation: "simple_push",
               }}
             >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

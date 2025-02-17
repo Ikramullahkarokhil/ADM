@@ -168,11 +168,9 @@ const Cart = () => {
       <Button
         style={styles.orderButton}
         buttonColor={theme.colors.button}
+        textColor={theme.colors.textColor}
         disabled={selectedItems.length === 0}
         onPress={handleOrder}
-        icon={() => (
-          <Ionicons name="bag-add" size={24} color={theme.colors.textColor} />
-        )}
       >
         Order Selected Items
       </Button>

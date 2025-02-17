@@ -25,7 +25,7 @@ const darkTheme = {
     textColor: "white",
     riple: "rgba(163, 163, 163, 0.1)",
     progressColor: "#3F3F3F",
-    button: "#4CAF50",
+    button: "#4a90e2",
   },
 };
 

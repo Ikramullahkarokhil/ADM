@@ -40,12 +40,15 @@ const ProfileHeader = ({
       >
         <Image
           source={{ uri: profileImage }}
-          style={styles.profileImage}
+          style={[
+            styles.profileImage,
+            { borderColor: theme.colors.inactiveColor },
+          ]}
           accessibilityLabel="Profile picture"
         />
       </TouchableRipple>
       <View style={styles.headerTextContainer}>
-        <Text style={[styles.username, { color: theme.colors.text }]}>
+        <Text style={[styles.username, { color: theme.colors.textColor }]}>
           {username}
         </Text>
         <Text
@@ -234,6 +237,7 @@ const Profile = () => {
       onPress: () => setChangePasswordModalVisible(true),
     },
     { label: "Billing Address", screen: "/screens/BillingAddress" },
+    { label: "Favorite Products", screen: "/screens/Favorite" },
   ];
 
   const appSettings = [
@@ -269,7 +273,7 @@ const Profile = () => {
             <View style={styles.menuItem}>
               <Text
                 style={[
-                  styles.menuItemText,
+                  { color: theme.colors.textColor },
                   item.special ? styles.logoutText : null,
                 ]}
               >
@@ -364,9 +368,6 @@ const styles = StyleSheet.create({
   menuItem: {
     paddingVertical: 14,
     paddingHorizontal: 16,
-  },
-  menuItemText: {
-    fontSize: 16,
   },
   logoutText: {
     color: "#e53935",

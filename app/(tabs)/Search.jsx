@@ -169,7 +169,15 @@ const Search = () => {
       }}
       asChild
     >
-      <TouchableOpacity style={styles.itemContainer} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={{
+          backgroundColor: theme.colors.primary,
+          flexDirection: "row",
+          padding: 12,
+          alignItems: "center",
+        }}
+        activeOpacity={0.7}
+      >
         <Image
           source={
             item.product_image
@@ -180,15 +188,30 @@ const Search = () => {
           resizeMode="cover"
         />
         <View style={styles.productInfo}>
-          <Text style={styles.productName} numberOfLines={3}>
+          <Text
+            style={[styles.productName, { color: theme.colors.textColor }]}
+            numberOfLines={3}
+          >
             {item.title}
           </Text>
-          <Text style={styles.productPrice}>${item.spu}</Text>
+          <Text
+            style={[styles.productPrice, { color: theme.colors.textColor }]}
+          >
+            ${item.spu}
+          </Text>
           <View style={styles.categoryContainer}>
-            <Text style={styles.productCategory}>{item.brand_title}</Text>
+            <Text
+              style={[styles.productCategory, { color: theme.colors.pimary }]}
+            >
+              {item.brand_title}
+            </Text>
             <View style={styles.ratingContainer}>
               <Feather name="star" size={16} color="#FFD700" />
-              <Text style={styles.ratingText}>{item.average_rating || 0}</Text>
+              <Text
+                style={[styles.ratingText, { color: theme.colors.textColor }]}
+              >
+                {item.average_rating || 0}
+              </Text>
             </View>
           </View>
         </View>
@@ -214,7 +237,7 @@ const Search = () => {
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Filters</Text>
           <TouchableOpacity onPress={() => setIsFilterVisible(false)}>
-            <Feather name="x" size={24} color="#000" />
+            <Feather name="x" size={24} color={theme.colors.textColor} />
           </TouchableOpacity>
         </View>
 
@@ -334,15 +357,22 @@ const Search = () => {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.primary }]}
+    >
       <PaperProvider>
         <View style={styles.headerContainer}>
-          <Text style={styles.header}>Zaytoon</Text>
+          <Text style={[styles.header, { color: theme.colors.textColor }]}>
+            Zaytoon
+          </Text>
         </View>
         <View style={styles.searchContainer}>
           <Searchbar
             accessibilityLabel="Search for products"
-            style={styles.searchInput}
+            style={[
+              styles.searchInput,
+              { backgroundColor: theme.colors.primary },
+            ]}
             placeholder="Search products..."
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -353,35 +383,46 @@ const Search = () => {
             size={24}
             onPress={() => setIsFilterVisible(true)}
             accessibilityLabel="Filter products"
+            iconColor={theme.colors.textColor}
           />
         </View>
 
-        <FlatList
-          data={filteredProducts}
-          renderItem={renderProductItem}
-          keyExtractor={(item) => item.products_id.toString()}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={renderSeparator}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              {searchQuery ? "No products found" : "Search for products above"}
-            </Text>
-          }
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          onEndReached={loadMoreProducts}
-          onEndReachedThreshold={0.5}
-        />
+        <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
+          <FlatList
+            data={filteredProducts}
+            renderItem={renderProductItem}
+            keyExtractor={(item) => item.products_id.toString()}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={renderSeparator}
+            ListEmptyComponent={
+              <Text style={styles.emptyText}>
+                {searchQuery
+                  ? "No products found"
+                  : "Search for products above"}
+              </Text>
+            }
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            onEndReached={loadMoreProducts}
+            onEndReachedThreshold={0.5}
+          />
+        </View>
 
         {renderFilterModal()}
 
         {error && (
-          <View style={styles.errorContainer}>
+          <View
+            style={[
+              styles.errorContainer,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
             <Text style={styles.errorText}>Oops, something went wrong.</Text>
             <Button
               mode="contained"
               onPress={() => searchProductData(searchQuery)}
+              buttonColor={theme.colors.button}
             >
               Try Again
             </Button>
@@ -423,12 +464,7 @@ const styles = StyleSheet.create({
   listContainer: {
     paddingBottom: 20,
   },
-  itemContainer: {
-    flexDirection: "row",
-    padding: 12,
-    backgroundColor: "#FFF",
-    alignItems: "center",
-  },
+  itemContainer: {},
   separator: {
     height: 1,
     backgroundColor: "#CCC",

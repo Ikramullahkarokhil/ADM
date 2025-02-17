@@ -27,10 +27,10 @@ const AlertDialog = ({
       backdropOpacity={0}
     >
       <View style={[styles.dialog, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>
+        <Text style={[styles.title, { color: theme.colors.textColor }]}>
           {title}
         </Text>
-        <Text style={[styles.message, { color: theme.colors.text }]}>
+        <Text style={[styles.message, { color: theme.colors.textColor }]}>
           {message}
         </Text>
         <View style={styles.buttonsContainer}>
