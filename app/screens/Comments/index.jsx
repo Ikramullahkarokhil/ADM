@@ -216,7 +216,11 @@ const Comments = () => {
         onEndReachedThreshold={0.5}
         ListFooterComponent={
           isLoading && hasMoreComments ? (
-            <ActivityIndicator size="small" color={theme.colors.textColor} />
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.textColor}
+              style={styles.listFooter}
+            />
           ) : null
         }
       />
@@ -261,7 +265,6 @@ const Comments = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 10,
   },
   deleteContainer: {
     justifyContent: "center",
@@ -284,11 +287,12 @@ const styles = StyleSheet.create({
   },
   commentAuthor: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   commentContent: {
     fontSize: 15,
-    marginTop: 4,
+    paddingTop: 5,
+
     marginLeft: 45,
   },
   commentDate: {
@@ -303,14 +307,21 @@ const styles = StyleSheet.create({
   addCommentContainer: {
     flexDirection: "row",
     alignItems: "center",
+    position: "absolute",
     padding: 10,
     elevation: 10,
+    paddingBottom: 40,
+    bottom: 0,
   },
   commentInput: {
     flex: 1,
     borderWidth: 0.5,
-    borderRadius: 20,
-    paddingHorizontal: 10,
+    borderRadius: 40,
+    paddingHorizontal: 15,
+    height: 45,
+  },
+  listFooter: {
+    marginBottom: 120,
   },
 });
 

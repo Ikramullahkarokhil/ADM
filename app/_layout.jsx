@@ -117,7 +117,6 @@ const Layout = () => {
     }
   }, [checkedTerms, isLoading, hasAcceptedTerms, isLoggedIn, router]);
 
-  // Memoized event handlers to avoid inline functions.
   const handleAcceptTerms = useCallback(async () => {
     try {
       await AsyncStorage.setItem("hasAcceptedTerms", "true");

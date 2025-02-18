@@ -8,13 +8,13 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/animate.gif",
-      "resizeMode": "contain",
+      "image": "./assets/icon.png",
+      "resizeMode": "cover",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ims.Zaytoon"
+      "bundleIdentifier": "com.afghanbyteTechnologies.ADM"
     },
     "android": {
       "adaptiveIcon": {

@@ -362,9 +362,10 @@ const Search = () => {
     >
       <PaperProvider>
         <View style={styles.headerContainer}>
-          <Text style={[styles.header, { color: theme.colors.textColor }]}>
-            Zaytoon
-          </Text>
+          <Image
+            source={require("../../assets/images/darkLogo.png")}
+            style={styles.logo}
+          />
         </View>
         <View style={styles.searchContainer}>
           <Searchbar
@@ -444,6 +445,7 @@ const styles = StyleSheet.create({
     height: 50,
     width: "100%",
     justifyContent: "center",
+    alignItems: "center",
   },
   header: {
     fontSize: 18,
@@ -460,6 +462,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 100,
     elevation: 5,
+    borderWidth: 0.5,
   },
   listContainer: {
     paddingBottom: 20,
@@ -605,5 +608,9 @@ const styles = StyleSheet.create({
   errorText: {
     color: "red",
     marginBottom: 10,
+  },
+  logo: {
+    height: 30,
+    width: 120,
   },
 });

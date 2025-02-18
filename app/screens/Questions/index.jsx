@@ -14,9 +14,10 @@ import {
   ActivityIndicator,
   Image,
   ToastAndroid,
+  TextInput,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { IconButton, TextInput, useTheme } from "react-native-paper";
+import { IconButton, useTheme } from "react-native-paper";
 import {
   GestureHandlerRootView,
   Swipeable,
@@ -166,7 +167,7 @@ const Questions = () => {
       <View style={styles.deleteContainer}>
         <IconButton
           icon="delete"
-          iconColor="white"
+          iconColor={theme.colors.primary}
           onPress={() => handleDeleteQuestion(questionId)}
         />
       </View>
@@ -193,10 +194,11 @@ const Questions = () => {
   );
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMoreQuestions) {
+    // Trigger loading more only if there are already some questions and not already loading
+    if (!isLoading && hasMoreQuestions && questions.length > 0) {
       loadQuestions(questionPage + 1);
     }
-  }, [isLoading, hasMoreQuestions, questionPage, loadQuestions]);
+  }, [isLoading, hasMoreQuestions, questionPage, loadQuestions, questions]);
 
   return (
     <GestureHandlerRootView
@@ -206,21 +208,43 @@ const Questions = () => {
         data={questions}
         keyExtractor={(item) => item.products_qna_id.toString()}
         renderItem={renderQuestionItem}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.01}
+        // onEndReached={handleLoadMore}
+        onEndReachedThreshold={0.5}
         ListFooterComponent={
-          isLoading && hasMoreQuestions ? (
-            <ActivityIndicator size="small" color={theme.colors.textColor} />
+          isLoading && questionPage > 1 ? (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.textColor}
+              style={[
+                styles.footerIndicator,
+                { color: theme.colors.textColor },
+              ]}
+            />
           ) : null
         }
       />
-      <AddQuestionInput
-        newQuestion={newQuestion}
-        setNewQuestion={setNewQuestion}
-        handleAddQuestion={handleAddQuestion}
-        isAddingQuestion={isAddingQuestion}
-        theme={theme}
-      />
+      <View
+        style={[
+          styles.addQuestionContainer,
+          { backgroundColor: theme.colors.primary },
+        ]}
+      >
+        <TextInput
+          value={newQuestion}
+          onChangeText={setNewQuestion}
+          placeholder="Write a question..."
+          placeholderTextColor="#999"
+          style={styles.questionInput}
+          multiline
+        />
+        <IconButton
+          icon="send"
+          onPress={handleAddQuestion}
+          iconColor={theme.colors.button}
+          disabled={isAddingQuestion}
+          accessibilityLabel="Send Question"
+        />
+      </View>
       <AlertDialog
         visible={isAlertVisible}
         title={alertConfig.title}
@@ -238,7 +262,15 @@ const Questions = () => {
 };
 
 const QuestionItem = memo(({ item, theme }) => (
-  <View style={styles.questionItem}>
+  <View
+    style={[
+      styles.questionItem,
+      {
+        backgroundColor: theme.colors.primary,
+        borderBottomColor: theme.colors.subInactiveColor,
+      },
+    ]}
+  >
     <View style={styles.questionHeader}>
       <Image
         source={
@@ -254,7 +286,11 @@ const QuestionItem = memo(({ item, theme }) => (
         >
           {item.consumer_name || "Anonymous"}
         </Text>
-        <Text style={styles.questionDate}>{item.date}</Text>
+        <Text
+          style={[styles.questionDate, { color: theme.colors.inactiveColor }]}
+        >
+          {item.date}
+        </Text>
       </View>
     </View>
     <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
@@ -267,51 +303,46 @@ const QuestionItem = memo(({ item, theme }) => (
             key={`${item.products_qna_id}_${ans.products_ana_id}`}
             style={styles.answerItem}
           >
-            <Text
-              style={[styles.answerText, { color: theme.colors.textColor }]}
-            >
-              {ans.answer}
-            </Text>
-            <Text style={styles.answerDate}>{ans.date}</Text>
+            <Image
+              source={
+                item.online_image_url
+                  ? { uri: item.online_image_url }
+                  : require("../../../assets/images/imageSkeleton.jpg")
+              }
+              style={styles.answerSellerPhoto}
+            />
+            <View>
+              <View>
+                <Text
+                  style={[
+                    styles.answerSellerName,
+                    { color: theme.colors.textColor },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {ans.seller_name}
+                </Text>
+                <Text
+                  style={[
+                    styles.answerDate,
+                    { color: theme.colors.inactiveColor },
+                  ]}
+                >
+                  {ans.date}
+                </Text>
+              </View>
+              <Text
+                style={[styles.answerText, { color: theme.colors.textColor }]}
+              >
+                {ans.answer}
+              </Text>
+            </View>
           </View>
         ))}
       </View>
     )}
   </View>
 ));
-
-const AddQuestionInput = memo(
-  ({
-    newQuestion,
-    setNewQuestion,
-    handleAddQuestion,
-    isAddingQuestion,
-    theme,
-  }) => (
-    <View
-      style={[
-        styles.addQuestionContainer,
-        { backgroundColor: theme.colors.primary },
-      ]}
-    >
-      <TextInput
-        value={newQuestion}
-        onChangeText={setNewQuestion}
-        placeholder="Write a question..."
-        placeholderTextColor="#999"
-        style={styles.questionInput}
-        multiline
-      />
-      <IconButton
-        icon="send"
-        onPress={handleAddQuestion}
-        iconColor={theme.colors.button}
-        disabled={isAddingQuestion}
-        accessibilityLabel="Send Question"
-      />
-    </View>
-  )
-);
 
 const styles = StyleSheet.create({
   container: {
@@ -344,17 +375,17 @@ const styles = StyleSheet.create({
   },
   questionAuthor: {
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "bold",
   },
   questionDate: {
     fontSize: 12,
-    color: "#666",
   },
   questionUserPhoto: {
     width: 40,
     height: 40,
     borderRadius: 20,
   },
+
   questionContent: {
     fontSize: 15,
     marginLeft: 50,
@@ -363,31 +394,47 @@ const styles = StyleSheet.create({
   answersContainer: {
     marginTop: 8,
     marginLeft: 50,
-    paddingLeft: 12,
+    paddingLeft: 5,
     borderLeftWidth: 2,
     borderLeftColor: "#ddd",
   },
   answerItem: {
     marginBottom: 4,
+    flexDirection: "row",
+  },
+  answerSellerPhoto: {
+    width: 35,
+    height: 35,
+    borderRadius: 20,
+    marginRight: 5,
   },
   answerText: {
     fontSize: 14,
+    paddingTop: 5,
   },
   answerDate: {
     fontSize: 12,
-    color: "#777",
   },
+  answerSellerName: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+
   addQuestionContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    elevation: 10,
+    paddingHorizontal: 10,
+    elevation: 20,
+    position: "absolute",
+    bottom: 0,
+    paddingBottom: 40,
   },
   questionInput: {
     flex: 1,
     borderWidth: 0.5,
     borderRadius: 20,
-    // paddingHorizontal: 10,
+    height: 45,
+    paddingHorizontal: 15,
   },
 });
 

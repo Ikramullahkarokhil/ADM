@@ -1,8 +1,10 @@
 import React, {
   useEffect,
   useLayoutEffect,
-  useState,
+  useMemo,
   useCallback,
+  useState,
+  memo,
 } from "react";
 import {
   StyleSheet,
@@ -14,19 +16,27 @@ import {
   Pressable,
   Share,
   ToastAndroid,
+  Dimensions,
+  RefreshControl,
 } from "react-native";
+import Carousel from "react-native-reanimated-carousel";
 import {
   Link,
   useLocalSearchParams,
   useNavigation,
   useRouter,
 } from "expo-router";
-import { FontAwesome } from "@expo/vector-icons";
-import useProductStore from "../../../components/api/useProductStore";
-import Ionicons from "@expo/vector-icons/Ionicons";
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { Button, IconButton, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
 import AlertDialog from "../../../components/ui/AlertDialog";
+import useProductStore from "../../../components/api/useProductStore";
+import {
+  GestureHandlerRootView,
+  Swipeable,
+} from "react-native-gesture-handler";
+
+const { width: screenWidth } = Dimensions.get("window");
 
 const ProductDetail = () => {
   const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
@@ -34,7 +44,7 @@ const ProductDetail = () => {
   const theme = useTheme();
   const router = useRouter();
 
-  const [product, setProduct] = useState(null);
+  // State variables
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
@@ -44,6 +54,9 @@ const ProductDetail = () => {
   const [alertConfirmText, setAlertConfirmText] = useState("Ok");
   const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
   const [questions, setQuestions] = useState([]);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const {
     user,
@@ -56,93 +69,119 @@ const ProductDetail = () => {
     cartItem,
     error,
     getProductQuestionList,
-    addProductQuestion,
     deleteProductQuestion,
   } = useProductStore();
 
+  // Derive the product from available data
+  const product = useMemo(() => {
+    try {
+      if (id) {
+        const data = productData?.data || [];
+        return data.find((item) => item.products_id.toString() === id) || null;
+      }
+      if (subcategoryId) {
+        const productList = productsBySubcategory[subcategoryId]?.data || [];
+        return (
+          productList.find(
+            (item) => item.products_id.toString() === categoryProductId
+          ) || null
+        );
+      }
+      return null;
+    } catch (err) {
+      console.error("Error finding product:", err);
+      return null;
+    }
+  }, [
+    id,
+    subcategoryId,
+    categoryProductId,
+    productData,
+    productsBySubcategory,
+  ]);
+
+  // Update header title and style
   useLayoutEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
+      headerStyle: { backgroundColor: theme.colors.primary },
       headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, product]);
+  }, [navigation, product, theme]);
 
-  // Update favorite status when product or favorites change
+  // Refresh questions when pulling down
+  const onRefresh = async () => {
+    if (!product) return;
+    setRefreshing(true);
+    try {
+      const questionData = await getProductQuestionList(product.products_id);
+      setQuestions(questionData.questions || []);
+      setTotalQuestions(questionData.total);
+    } catch (err) {
+      console.error("Refresh error:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Update favorite state when product or favorites change
   useEffect(() => {
     if (product && favProducts) {
-      const isFav = favProducts.some(
-        (item) => item.products_id === product.products_id
+      setIsFavorite(
+        favProducts.some((item) => item.products_id === product.products_id)
       );
-      setIsFavorite(isFav);
     }
   }, [product, favProducts]);
 
-  // Find product based on provided params
-  useEffect(() => {
-    const findProduct = async () => {
-      try {
-        if (id) {
-          const data = productData?.data || [];
-          const foundProduct = data.find(
-            (item) => item.products_id.toString() === id
-          );
-          setProduct(foundProduct || null);
-        } else if (subcategoryId) {
-          const productList = productsBySubcategory[subcategoryId]?.data || [];
-          const foundProduct = productList.find(
-            (item) => item.products_id.toString() === categoryProductId
-          );
-          setProduct(foundProduct || null);
-        }
-      } catch (err) {
-        console.error("Error finding product:", err);
-      }
-    };
-
-    findProduct();
-  }, [id, subcategoryId, productData, productsBySubcategory]);
-
-  // Fetch product questions once the product is loaded
+  // Fetch questions on product load
   useEffect(() => {
     if (product) {
-      getProductQuestionList(product.products_id)
-        .then((data) => {
-          // Assuming the API returns an object with a "questions" key
-          setQuestions(data.questions || []);
-        })
-        .catch((err) => console.error("Error fetching questions:", err));
+      const fetchQuestions = async () => {
+        const questionData = await getProductQuestionList(product.products_id);
+        setQuestions(questionData.questions || []);
+        setTotalQuestions(questionData.total);
+      };
+      fetchQuestions();
     }
   }, [product]);
 
+  // Helper to show alerts
+  const showAlert = useCallback(
+    (
+      title,
+      message,
+      confirmAction = () => setAlertVisible(false),
+      confirmText = "Ok"
+    ) => {
+      setAlertTitle(title);
+      setAlertMessage(message);
+      setAlertConfirmAction(() => confirmAction);
+      setAlertConfirmText(confirmText);
+      setAlertVisible(true);
+    },
+    []
+  );
+
+  // Add to cart handler
   const handleAddToCart = useCallback(async () => {
     if (!product) return;
-
     if (!user) {
-      setAlertTitle("Login Required");
-      setAlertMessage("Please login to add products to your cart.");
-      setAlertConfirmAction(() => () => {
-        setAlertVisible(false);
-        navigation.navigate("Login");
-      });
-      setAlertVisible(true);
+      showAlert(
+        "Login Required",
+        "Please login to add products to your cart.",
+        () => navigation.navigate("Login")
+      );
       return;
     }
-
-    const productExists = cartItem.some(
-      (item) => item.products_id === product.products_id
-    );
-    if (productExists) {
-      setAlertTitle("Product already in cart");
-      setAlertMessage("This product is already in your cart.");
-      setAlertConfirmText("Go to Cart");
-      setAlertConfirmAction(() => () => router.navigate("/screens/Cart"));
-      setAlertVisible(true);
+    if (cartItem.some((item) => item.products_id === product.products_id)) {
+      showAlert(
+        "Product already in cart",
+        "This product is already in your cart.",
+        () => router.navigate("/screens/Cart"),
+        "Go to Cart"
+      );
       return;
     }
-
     try {
       setAddedToCart(true);
       await addToCart({
@@ -150,15 +189,13 @@ const ProductDetail = () => {
         consumerID: user.consumer_id,
       });
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
-    } catch (error) {
-      setAlertTitle("Error");
-      setAlertMessage(error.message);
-      setAlertConfirmAction(() => () => setAlertVisible(false));
-      setAlertVisible(true);
+    } catch (err) {
+      showAlert("Error", err.message);
     }
-  }, [product, addToCart, cartItem, user, navigation]);
+  }, [product, user, cartItem]);
 
-  const handleShare = async () => {
+  // Share handler
+  const handleShare = useCallback(async () => {
     if (!product) return;
     try {
       const deepLink = Linking.createURL(
@@ -168,17 +205,15 @@ const ProductDetail = () => {
         message: `Check out ${product.title}: ${deepLink}`,
         title: product.title,
       });
-    } catch (error) {
-      console.error("Share error:", error);
+    } catch (err) {
+      console.error("Share error:", err);
     }
-  };
+  }, [product]);
 
-  const handleToggleFavorite = async () => {
-    if (!user) {
-      navigation.navigate("Login");
-      return;
-    }
-    if (isFavoriting) return;
+  // Toggle favorite handler
+  const handleToggleFavorite = useCallback(async () => {
+    if (!user) return navigation.navigate("Login");
+    if (isFavoriting || !product) return;
     setIsFavoriting(true);
     try {
       if (!isFavorite) {
@@ -203,63 +238,61 @@ const ProductDetail = () => {
         }
       }
       setIsFavorite(!isFavorite);
-    } catch (error) {
-      setAlertTitle("Error");
-      setAlertMessage(error.message);
-      setAlertConfirmAction(() => () => setAlertVisible(false));
-      setAlertVisible(true);
+    } catch (err) {
+      showAlert("Error", err.message);
     } finally {
       setIsFavoriting(false);
     }
-  };
+  }, [user, isFavorite, isFavoriting, product, favProducts]);
 
-  const renderRatingStars = useCallback(() => {
+  // Delete question handler
+  const handleDeleteQuestion = useCallback(
+    async (questionId) => {
+      if (!user) {
+        showAlert(
+          "Login Required",
+          "Please login to delete your question.",
+          () => navigation.navigate("Login")
+        );
+        return;
+      }
+      try {
+        await deleteProductQuestion({
+          consumerID: user.consumer_id,
+          questionId,
+        });
+        const updatedData = await getProductQuestionList(product.products_id);
+        setQuestions(updatedData.questions || []);
+        ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
+      } catch (err) {
+        showAlert("Error", err.message);
+      }
+    },
+    [user, product]
+  );
+
+  // Render rating stars
+  const ratingStars = useMemo(() => {
+    const rating = Math.floor(product?.average_rating || 0);
     return [...Array(5)].map((_, index) => (
       <FontAwesome
         key={index}
-        name={
-          index < Math.floor(product?.average_rating || 0) ? "star" : "star-o"
-        }
+        name={index < rating ? "star" : "star-o"}
         size={15}
-        color={
-          index < Math.floor(product?.average_rating || 0) ? "#FFD700" : "#ccc"
-        }
+        color={index < rating ? "#FFD700" : "#ccc"}
         style={styles.starIcon}
       />
     ));
-  }, [product]);
+  }, [product?.average_rating]);
 
-  // Handler to delete a product question
-  const handleDeleteQuestion = async (questionId) => {
-    if (!user) {
-      setAlertTitle("Login Required");
-      setAlertMessage("Please login to delete your question.");
-      setAlertConfirmAction(() => () => {
-        setAlertVisible(false);
-        navigation.navigate("Login");
-      });
-      setAlertVisible(true);
-      return;
-    }
-    try {
-      await deleteProductQuestion({
-        consumerID: user.consumer_id,
-        questionId, // questionId is expected to be products_qna_id
-      });
-      const updatedData = await getProductQuestionList(product.products_id);
-      setQuestions(updatedData.questions || []);
-      ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
-    } catch (error) {
-      setAlertTitle("Error");
-      setAlertMessage(error.message);
-      setAlertConfirmAction(() => () => setAlertVisible(false));
-      setAlertVisible(true);
-    }
-  };
-
-  // Show only the first 3 questions
+  // Prepare images and displayed questions (showing only a few)
   const displayedQuestions = questions.slice(0, 3);
+  const images =
+    product?.product_images?.length > 0
+      ? product.product_images
+      : [require("../../../assets/images/imageSkeleton.jpg")];
 
+  // Error and Product Not Found views
   if (error) {
     return (
       <View
@@ -268,7 +301,7 @@ const ProductDetail = () => {
           { backgroundColor: theme.colors.background },
         ]}
       >
-        <Text style={styles.errorText}>{error}</Text>
+        <Text style={styles.errorText}>Error loading product</Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: theme.colors.button }]}
           onPress={() => navigation.goBack()}
@@ -282,7 +315,6 @@ const ProductDetail = () => {
       </View>
     );
   }
-
   if (!product) {
     return (
       <View
@@ -311,6 +343,20 @@ const ProductDetail = () => {
     );
   }
 
+  // Render right actions for swipe-to-delete
+  const renderRightActions = useCallback(
+    (questionId) => (
+      <View style={styles.deleteContainer}>
+        <IconButton
+          icon="delete"
+          iconColor={theme.colors.primary}
+          onPress={() => handleDeleteQuestion(questionId)}
+        />
+      </View>
+    ),
+    [handleDeleteQuestion, theme.colors.primary]
+  );
+
   return (
     <>
       <ScrollView
@@ -319,16 +365,47 @@ const ProductDetail = () => {
           { backgroundColor: theme.colors.primary },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
-        <Image
-          source={
-            product.product_image
-              ? { uri: product.product_image }
-              : require("../../../assets/images/imageSkeleton.jpg")
-          }
-          style={[styles.image, { backgroundColor: theme.colors.primary }]}
-          resizeMode="cover"
-        />
+        {/* Image Carousel */}
+        <View style={styles.carouselContainer}>
+          <Carousel
+            width={screenWidth}
+            height={300}
+            data={images}
+            scrollAnimationDuration={300}
+            loop={false}
+            renderItem={({ item }) => (
+              <Image
+                source={typeof item === "string" ? { uri: item } : item}
+                style={styles.image}
+                resizeMode="cover"
+              />
+            )}
+            onProgressChange={(_, absoluteProgress) =>
+              setCurrentSlide(Math.round(absoluteProgress))
+            }
+          />
+          <View style={styles.dotContainer}>
+            {images.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.dot,
+                  currentSlide === index && {
+                    backgroundColor: theme.colors.button,
+                    width: 10,
+                    height: 10,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        </View>
+
+        {/* Product Information */}
         <View
           style={[
             styles.infoContainer,
@@ -354,22 +431,10 @@ const ProductDetail = () => {
               />
             </TouchableOpacity>
           </View>
-
-          <View style={styles.ratingContainer}>
-            {renderRatingStars()}
-            <Text
-              style={[styles.ratingText, { color: theme.colors.textColor }]}
-            >
-              {product.average_rating
-                ? `${product.average_rating}`
-                : "No ratings yet"}
-            </Text>
-          </View>
-
+          <View style={styles.ratingContainer}>{ratingStars}</View>
           <Text style={[styles.price, { color: theme.colors.button }]}>
             {product.spu}
           </Text>
-
           {product.description && (
             <Text
               style={[styles.description, { color: theme.colors.textColor }]}
@@ -377,7 +442,6 @@ const ProductDetail = () => {
               {product.description}
             </Text>
           )}
-
           {product.brand_title && (
             <View style={styles.detailsRow}>
               <Text
@@ -386,56 +450,44 @@ const ProductDetail = () => {
                 Brand
               </Text>
               <Text
-                style={[styles.detailValue, { color: theme.colors.textColor }]}
+                style={[styles.detailLabel, { color: theme.colors.textColor }]}
               >
                 {product.brand_title}
               </Text>
             </View>
           )}
-
-          {product.brand_title && (
-            <Link
-              href={{
-                pathname: "/screens/Comments",
-                params: { productId: product.products_id },
-              }}
-              asChild
+          <Link
+            href={{
+              pathname: "/screens/Comments",
+              params: { productId: product.products_id },
+            }}
+            asChild
+          >
+            <Pressable
+              style={styles.detailsRow}
+              android_ripple={theme.colors.riple}
             >
-              <Pressable
-                style={styles.detailsRow}
-                android_ripple={theme.colors.riple}
+              <Text
+                style={[styles.detailLabel, { color: theme.colors.textColor }]}
               >
-                <Text
-                  style={[
-                    styles.detailLabel,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  Comments
-                </Text>
-                <Text
-                  mode="outlined"
-                  style={[
-                    styles.showCommentsButton,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  {product.total_comments} , Comments
-                </Text>
-              </Pressable>
-            </Link>
-          )}
-
+                Comments
+              </Text>
+              <Text
+                style={[
+                  styles.showCommentsButton,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                {product.total_comments} , Comments
+              </Text>
+            </Pressable>
+          </Link>
           <View style={styles.detailsRow}>
             <Button
               textColor={theme.colors.primary}
               buttonColor={theme.colors.button}
               onPress={handleAddToCart}
-              rippleColor={theme.colors.riple}
-              style={[
-                styles.button,
-                { borderColor: theme.colors.button, borderWidth: 1 },
-              ]}
+              style={[styles.button, { borderColor: theme.colors.button }]}
               disabled={addedToCart}
             >
               {addedToCart ? "Added to cart" : "Add to Cart"}
@@ -443,14 +495,7 @@ const ProductDetail = () => {
             <Button
               onPress={handleShare}
               textColor={theme.colors.button}
-              style={[
-                styles.button,
-                {
-                  borderColor: theme.colors.button,
-                  borderRadius: 20,
-                  borderWidth: 1,
-                },
-              ]}
+              style={[styles.button, { borderColor: theme.colors.button }]}
               icon={() => (
                 <Ionicons
                   name="share-social"
@@ -464,126 +509,70 @@ const ProductDetail = () => {
           </View>
         </View>
 
-        {/* Product Questions Section */}
-        <View
-          style={[
-            styles.questionsSection,
-            { backgroundColor: theme.colors.primary },
-          ]}
-        >
-          <Text
-            style={[styles.questionsTitle, { color: theme.colors.textColor }]}
+        {/* Questions Section */}
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View
+            style={[
+              styles.questionsSection,
+              { backgroundColor: theme.colors.primary },
+            ]}
           >
-            Product Questions
-          </Text>
-          {displayedQuestions && displayedQuestions.length > 0 ? (
-            displayedQuestions.map((q) => (
-              <View
-                key={q.products_qna_id}
+            <Text
+              style={[styles.questionsTitle, { color: theme.colors.textColor }]}
+            >
+              Product Questions, ({totalQuestions})
+            </Text>
+            {displayedQuestions.length > 0 ? (
+              displayedQuestions.map((q) => {
+                const isUserQuestion =
+                  user && q.consumer_id === user.consumer_id;
+                return (
+                  <Swipeable
+                    key={q.products_qna_id}
+                    renderRightActions={
+                      isUserQuestion && (!q.answers || q.answers.length === 0)
+                        ? () => renderRightActions(q.products_qna_id)
+                        : null
+                    }
+                  >
+                    <QuestionItem item={q} theme={theme} />
+                  </Swipeable>
+                );
+              })
+            ) : (
+              <Text
                 style={[
-                  styles.questionItem,
-                  { backgroundColor: theme.colors.background },
+                  styles.noQuestionsText,
+                  { color: theme.colors.textColor },
                 ]}
               >
-                {/* Header with user name and date */}
-                <View style={styles.questionHeader}>
-                  <Text
-                    style={[
-                      styles.consumerName,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    {q.consumer_name}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dateText,
-                      ,
-                      { color: theme.colors.inactiveColor },
-                    ]}
-                  >
-                    {q.date}
-                  </Text>
-                </View>
-                {/* Question text */}
-                <Text
-                  style={[
-                    styles.questionText,
-                    ,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  {q.question}
-                </Text>
-                {/* Render answers if available */}
-                {q.answers && q.answers.length > 0 && (
-                  <View style={styles.answersContainer}>
-                    {q.answers.map((ans) => (
-                      <View key={ans.products_ana_id} style={styles.answerItem}>
-                        <Text
-                          style={[
-                            styles.answerText,
-                            ,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          {ans.answer}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.answerDate,
-                            ,
-                            { color: theme.colors.inactiveColor },
-                          ]}
-                        >
-                          {ans.date}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-                {/* Delete option only when there are no answers */}
-                {user &&
-                  q.consumer_id === user.consumer_id &&
-                  (!q.answers || q.answers.length === 0) && (
-                    <TouchableOpacity
-                      onPress={() => handleDeleteQuestion(q.products_qna_id)}
-                    >
-                      <Text style={styles.deleteQuestion}>Delete</Text>
-                    </TouchableOpacity>
-                  )}
-              </View>
-            ))
-          ) : (
-            <Text
-              style={[
-                styles.noQuestionsText,
-                { color: theme.colors.textColor },
-              ]}
+                No questions yet.
+              </Text>
+            )}
+            <Link
+              href={{
+                pathname: "/screens/Questions",
+                params: { productId: product.products_id },
+              }}
+              asChild
             >
-              No questions yet.
-            </Text>
-          )}
-
-          <Link
-            href={{
-              pathname: "screens/Questions",
-              params: { productId: product.products_id },
-            }}
-            asChild
-          >
-            <Button
-              mode="contained"
-              style={styles.showMoreButton}
-              buttonColor={theme.colors.button}
-              textColor={theme.colors.primary}
-            >
-              Show More
-            </Button>
-          </Link>
-        </View>
+              <Button
+                mode="outlined"
+                textColor={theme.colors.button}
+                style={[
+                  styles.askQuestion,
+                  { borderColor: theme.colors.button },
+                ]}
+                icon="comment-question-outline"
+              >
+                Ask a Question
+              </Button>
+            </Link>
+          </View>
+        </GestureHandlerRootView>
       </ScrollView>
 
+      {/* Alert Dialog */}
       <AlertDialog
         visible={alertVisible}
         title={alertTitle}
@@ -597,23 +586,112 @@ const ProductDetail = () => {
   );
 };
 
+// Memoized QuestionItem following a similar design to your Questions screen
+const QuestionItem = memo(({ item, theme }) => (
+  <View
+    style={[
+      styles.questionItem,
+      {
+        backgroundColor: theme.colors.background,
+        borderBottomColor: theme.colors.subInactiveColor,
+      },
+    ]}
+  >
+    <View style={styles.questionHeader}>
+      <Image
+        source={
+          item.online_image_url
+            ? { uri: item.online_image_url }
+            : require("../../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.questionUserPhoto}
+      />
+      <View style={styles.questionTitleContainer}>
+        <Text
+          style={[styles.questionAuthor, { color: theme.colors.textColor }]}
+        >
+          {item.consumer_name || "Anonymous"}
+        </Text>
+        <Text
+          style={[styles.questionDate, { color: theme.colors.inactiveColor }]}
+        >
+          {item.date}
+        </Text>
+      </View>
+    </View>
+    <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
+      {item.question}
+    </Text>
+    {item.answers && item.answers.length > 0 && (
+      <View style={styles.answersContainer}>
+        {item.answers.map((ans) => (
+          <View
+            key={`${item.products_qna_id}_${ans.products_ana_id}`}
+            style={styles.answerItem}
+          >
+            <Image
+              source={require("../../../assets/images/imageSkeleton.jpg")}
+              style={styles.answerSellerPhoto}
+            />
+            <View style={styles.answerContent}>
+              <Text
+                style={[
+                  styles.answerSellerName,
+                  { color: theme.colors.textColor },
+                ]}
+                numberOfLines={1}
+              >
+                {ans.seller_name}
+              </Text>
+              <Text
+                style={[
+                  styles.answerDate,
+                  { color: theme.colors.inactiveColor },
+                ]}
+              >
+                {ans.date}
+              </Text>
+              <Text
+                style={[styles.answerText, { color: theme.colors.textColor }]}
+              >
+                {ans.answer}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    )}
+  </View>
+));
+
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
     flexGrow: 1,
+  },
+  carouselContainer: {
+    marginBottom: 16,
+  },
+  image: {
+    height: "100%",
+  },
+  dotContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 10,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 10,
+    backgroundColor: "#ccc",
+    marginHorizontal: 4,
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
-  },
-  image: {
-    width: "100%",
-    height: 300,
-    borderRadius: 20,
-    marginBottom: 16,
-    elevation: 10,
   },
   infoContainer: {
     backgroundColor: "#fff",
@@ -624,6 +702,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 10,
+    marginHorizontal: 16,
+    marginTop: 5,
   },
   titleRow: {
     flexDirection: "row",
@@ -636,13 +716,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flex: 1,
   },
-  headerButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerButtonPressed: {
-    opacity: 0.7,
-  },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -650,10 +723,6 @@ const styles = StyleSheet.create({
   },
   starIcon: {
     marginRight: 2,
-  },
-  ratingText: {
-    marginLeft: 8,
-    fontSize: 16,
   },
   price: {
     fontSize: 24,
@@ -676,18 +745,10 @@ const styles = StyleSheet.create({
   detailLabel: {
     fontSize: 16,
   },
-  detailValue: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  cartContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   button: {
     width: "48%",
     elevation: 10,
+    borderWidth: 1,
   },
   errorText: {
     fontSize: 18,
@@ -709,10 +770,11 @@ const styles = StyleSheet.create({
   },
   questionsSection: {
     marginTop: 24,
-    padding: 16,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 12,
+    padding: 20,
+    borderRadius: 20,
     elevation: 10,
+    marginHorizontal: 16,
+    marginBottom: 20,
   },
   questionsTitle: {
     fontSize: 20,
@@ -720,58 +782,79 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   questionItem: {
-    marginBottom: 12,
-    padding: 12,
-    backgroundColor: "#fff",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
     borderRadius: 8,
+    marginVertical: 5,
   },
   questionHeader: {
-    justifyContent: "space-between",
-    marginBottom: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
   },
-  consumerName: {
+  questionUserPhoto: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  questionTitleContainer: {
+    marginLeft: 5,
+  },
+  questionAuthor: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#333",
+    fontWeight: "bold",
   },
-  dateText: {
-    fontSize: 14,
-    color: "#777",
+  questionDate: {
+    fontSize: 12,
   },
-  questionText: {
-    fontSize: 16,
-    marginBottom: 8,
-    color: "#444",
+  questionContent: {
+    fontSize: 15,
+    marginLeft: 50,
+    marginTop: 4,
   },
   answersContainer: {
     marginTop: 8,
-    paddingLeft: 12,
+    marginLeft: 50,
+    paddingLeft: 5,
     borderLeftWidth: 2,
     borderLeftColor: "#ddd",
   },
   answerItem: {
-    marginBottom: 6,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 4,
   },
-  answerText: {
-    fontSize: 15,
-    color: "#333",
+  answerSellerPhoto: {
+    width: 35,
+    height: 35,
+    borderRadius: 20,
+    marginRight: 5,
+  },
+  answerContent: {
+    flex: 1,
+  },
+  answerSellerName: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
   answerDate: {
-    fontSize: 13,
-    color: "#777",
+    fontSize: 12,
   },
-  deleteQuestion: {
-    color: "red",
-    marginTop: 4,
+  answerText: {
     fontSize: 14,
+    paddingTop: 5,
+  },
+  deleteContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    width: 60,
+    backgroundColor: "#ff4d4d",
+    borderRadius: 12,
   },
   noQuestionsText: {
     fontSize: 16,
-    fontStyle: "italic",
-  },
-  showMoreButton: {
-    marginTop: 12,
-    alignSelf: "center",
+    marginBottom: 20,
   },
 });
 

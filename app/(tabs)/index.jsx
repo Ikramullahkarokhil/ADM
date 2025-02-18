@@ -1,6 +1,6 @@
 import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { useTheme, IconButton, Badge, Button } from "react-native-paper";
+import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, useNavigation } from "expo-router";
 import useCartStore from "../../components/store/useCartStore";
 import useProductStore from "../../components/api/useProductStore";
@@ -8,6 +8,7 @@ import CategoriesSectionList from "../../components/ui/CategoriesList";
 import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
 import Fontisto from "@expo/vector-icons/Fontisto";
 import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet as RNStyleSheet } from "react-native"; // Add this import for StyleSheet.flatten
 
 const Home = () => {
   const theme = useTheme();
@@ -79,8 +80,18 @@ const Home = () => {
   }, [cartItem]);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+    <View
+      style={RNStyleSheet.flatten([
+        styles.container,
+        { backgroundColor: theme.colors.primary },
+      ])}
+    >
+      <View
+        style={RNStyleSheet.flatten([
+          styles.header,
+          { backgroundColor: theme.colors.primary },
+        ])}
+      >
         <Image
           source={require("../../assets/images/darkLogo.png")}
           style={styles.logo}
@@ -96,7 +107,7 @@ const Home = () => {
                 />
               )}
               iconColor={theme.colors.textColor}
-              style={[styles.searchBar]}
+              style={styles.searchBar} // Remove array, use just the object
             />
           </Link>
           <Link href={{ pathname: "/screens/Cart" }} asChild>
