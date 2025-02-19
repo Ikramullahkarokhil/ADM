@@ -1,6 +1,6 @@
 // components/AlertDialog.js
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { Button, useTheme } from "react-native-paper";
 import Modal from "react-native-modal";
 
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   },
   buttonsContainer: {
     flexDirection: "row",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
   },
   button: {
     marginLeft: 10,

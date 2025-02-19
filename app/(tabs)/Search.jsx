@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   Image,
   ScrollView,
+  TextInput,
 } from "react-native";
 import { Link, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -160,6 +161,25 @@ const Search = () => {
     });
   };
 
+  const RatingStars = ({ rating }) => {
+    let rating;
+    const renderStars = (rating) => {
+      let stars = [];
+      for (let i = 0; i < Math.floor(rating); i++) {
+        stars.push(<Feather key={i} name="star" size={16} color="#FFD700" />);
+      }
+      return stars;
+    };
+
+    return (
+      <View style={styles.ratingContainer}>
+        {renderStars(rating)}
+        <Text style={[styles.ratingText, { color: theme.colors.textColor }]}>
+          {rating || 0}
+        </Text>
+      </View>
+    );
+  };
   // Render product item
   const ProductItem = React.memo(({ item }) => (
     <Link
@@ -194,25 +214,25 @@ const Search = () => {
           >
             {item.title}
           </Text>
-          <Text
-            style={[styles.productPrice, { color: theme.colors.textColor }]}
-          >
-            ${item.spu}
+          <Text style={[styles.productPrice, { color: theme.colors.button }]}>
+            AF {item.spu}
           </Text>
           <View style={styles.categoryContainer}>
-            <Text
-              style={[styles.productCategory, { color: theme.colors.pimary }]}
-            >
-              {item.brand_title}
-            </Text>
-            <View style={styles.ratingContainer}>
-              <Feather name="star" size={16} color="#FFD700" />
+            {item.brand_title !== "none" && (
               <Text
-                style={[styles.ratingText, { color: theme.colors.textColor }]}
+                style={[
+                  styles.productCategory,
+                  { color: theme.colors.textColor },
+                ]}
               >
-                {item.average_rating || 0}
+                {item.brand_title}
               </Text>
-            </View>
+            )}
+          </View>
+          <View style={styles.ratingContainer}>
+            <Feather name="star" size={16} color="#FFD700" />
+
+            <RatingStars rating={item.average_rating || 0} />
           </View>
         </View>
       </TouchableOpacity>
@@ -368,7 +388,7 @@ const Search = () => {
           />
         </View>
         <View style={styles.searchContainer}>
-          <Searchbar
+          <TextInput
             accessibilityLabel="Search for products"
             style={[
               styles.searchInput,
@@ -460,9 +480,11 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    borderRadius: 100,
+    borderRadius: 10,
     elevation: 5,
     borderWidth: 0.5,
+    paddingHorizontal: 10,
+    height: 35,
   },
   listContainer: {
     paddingBottom: 20,
@@ -510,6 +532,7 @@ const styles = StyleSheet.create({
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 5,
   },
   ratingText: {
     marginLeft: 4,

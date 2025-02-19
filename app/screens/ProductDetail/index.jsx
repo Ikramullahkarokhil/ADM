@@ -358,7 +358,7 @@ const ProductDetail = () => {
   );
 
   return (
-    <>
+    <View style={styles.mainContainer}>
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -578,11 +578,14 @@ const ProductDetail = () => {
         title={alertTitle}
         message={alertMessage}
         onDismiss={() => setAlertVisible(false)}
-        onConfirm={alertConfirmAction}
+        onConfirm={() => {
+          alertConfirmAction();
+          setAlertVisible(false);
+        }}
         confirmText={alertConfirmText}
         cancelText="Cancel"
       />
-    </>
+    </View>
   );
 };
 
@@ -667,6 +670,9 @@ const QuestionItem = memo(({ item, theme }) => (
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
+  },
+  mainContainer: {
+    flex: 1,
   },
   carouselContainer: {
     marginBottom: 16,
@@ -787,6 +793,7 @@ const styles = StyleSheet.create({
     borderBottomColor: "#eee",
     borderRadius: 8,
     marginVertical: 5,
+    marginBottom: 20,
   },
   questionHeader: {
     flexDirection: "row",

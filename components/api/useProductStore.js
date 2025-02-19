@@ -22,6 +22,7 @@ const initialState = {
   cartItem: [],
   productsBySubcategory: {},
   productQuestions: {},
+  consumerBillingAddress: [],
   loginError: null,
   user: null,
   profileData: null,
@@ -113,7 +114,7 @@ const useProductStore = create(
       // Search Products
       searchProductData: async (searchTerm) => {
         const data = await get().apiRequest("/get-search-products", {
-          params: { search: searchTerm },
+          params: { search: searchTerm, limitData: 20 },
         });
         set({ productData: data });
         return data;
@@ -354,9 +355,49 @@ const useProductStore = create(
         return data;
       },
 
+      getBillingAddress: async (consumerID) => {
+        const data = await api.get(
+          `/consumer/billing-address?consumer_id=${consumerID}`
+        );
+        set({ consumerBillingAddress: data.data.addresses.data });
+        return data.data;
+      },
+
+      addBillingAddress: async (billingData) => {
+        const data = await api.post(
+          `/consumer/add-billing-address`,
+          billingData
+        );
+
+        const consumerID = billingData.consumer_id;
+        console.log(consumerID);
+        await get().getBillingAddress(consumerID);
+        return data.data;
+      },
+
+      editBillingAddress: async (billingData) => {
+        const data = await api.post(
+          `/consumer/edit-billing-address`,
+          billingData
+        );
+
+        const consumerID = billingData.consumer_id;
+        console.log(consumerID);
+        await get().getBillingAddress(consumerID);
+        return data.data;
+      },
+
+      deleteBillingAddress: async ({ consumerID, billingAddressID }) => {
+        const data = await api.delete(
+          `/consumer/delete-billing-address?consumer_id=${consumerID}&billing_address_id=${billingAddressID}`
+        );
+        await get().getBillingAddress(consumerID);
+        return data.data;
+      },
+
       // Logout User
       logout: () => {
-        set({ user: null, profileData: null, favProducts: [] });
+        set({ user: null, profileData: null, favProducts: [], cartItem: [] });
       },
 
       // Reset Store

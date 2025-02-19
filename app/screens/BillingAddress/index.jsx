@@ -8,217 +8,250 @@ import {
   ScrollView,
   SafeAreaView,
 } from "react-native";
-import { useTheme } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 import useProductStore from "../../../components/api/useProductStore";
+import * as Yup from "yup";
+import { Formik } from "formik";
 
 const BillingAddress = () => {
   const theme = useTheme();
-  const [address, setAddress] = useState({
-    fullName: "",
-    streetAddress: "",
-    city: "",
-    state: "",
-    postalCode: "",
-    country: "",
+  const {
+    consumerBillingAddress,
+    deleteBillingAddress,
+    addBillingAddress,
+    user,
+  } = useProductStore();
+  const [mode, setMode] = useState("view"); // 'view', 'add', 'edit'
+  const [selectedAddress, setSelectedAddress] = useState(null);
+
+  const validationSchema = Yup.object().shape({
+    name: Yup.string().required("Full Name is required"),
+    email: Yup.string().email("Invalid email").required("Email is required"),
+    phone: Yup.string().required("Phone is required"),
+    address: Yup.string().required("Street Address is required"),
+    district_name: Yup.string().required("City is required"),
+    province_name: Yup.string().required("State is required"),
+    postal_code: Yup.string().required("Postal Code is required"),
+    country_name: Yup.string().required("Country is required"),
   });
 
-  const { profileData } = useProductStore();
-  const handleSave = () => {
-    // Handle saving the billing address
-    console.log("Billing Address Saved:", address);
+  const handleSave = async (values) => {
+    const billingData = {
+      ...values,
+      consumer_id: user.consumer_id,
+    };
+    console.log(
+      mode === "add" ? "Adding new address:" : "Updating address:",
+      billingData
+    );
+    try {
+      const response = await addBillingAddress(billingData);
+      console.log(response);
+      setMode("view");
+      setSelectedAddress(null);
+    } catch (error) {
+      console.log(
+        "Error:",
+        error.response ? error.response.data : error.message
+      );
+    }
+  };
+
+  const handleDelete = async (address) => {
+    console.log("Deleting address:", address.consumer_billing_address_id);
+    try {
+      const response = await deleteBillingAddress({
+        consumerID: user.consumer_id,
+        billingAddressID: address.consumer_billing_address_id,
+      });
+      console.log(response);
+    } catch (error) {
+      console.log(error);
+    }
   };
 
   return (
     <SafeAreaView
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
+      style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Text style={[styles.title, { color: theme.colors.text }]}>
-          Billing Address
+          Billing Addresses
         </Text>
 
-        {/* Full Name Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>
-            Full Name
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="John Doe"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.fullName}
-            onChangeText={(text) => setAddress({ ...address, fullName: text })}
-          />
-        </View>
+        {mode === "view" ? (
+          <>
+            {consumerBillingAddress?.map((address) => (
+              <View
+                key={address.consumer_billing_address_id}
+                style={[
+                  styles.addressCard,
+                  { borderColor: theme.colors.inactiveColor },
+                ]}
+              >
+                <Text style={[styles.text, { color: theme.colors.text }]}>
+                  Name: {address.name}
+                </Text>
+                <Text style={[styles.text, { color: theme.colors.text }]}>
+                  Email: {address.email}
+                </Text>
+                <Text style={[styles.text, { color: theme.colors.text }]}>
+                  Phone: {address.phone}
+                </Text>
+                <Text style={[styles.text, { color: theme.colors.text }]}>
+                  Address: {address.address}
+                </Text>
 
-        {/* Street Address Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>
-            Street Address
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="123 Main St"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.streetAddress}
-            onChangeText={(text) =>
-              setAddress({ ...address, streetAddress: text })
-            }
-          />
-        </View>
+                <View style={styles.buttonGroup}>
+                  <Button
+                    style={[
+                      styles.editButton,
+                      { borderColor: theme.colors.button },
+                    ]}
+                    textColor={theme.colors.button}
+                    mode="outlined"
+                    onPress={() => {
+                      setSelectedAddress(address);
+                      setMode("edit");
+                    }}
+                  >
+                    Edit
+                  </Button>
 
-        {/* City Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>City</Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="New York"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.city}
-            onChangeText={(text) => setAddress({ ...address, city: text })}
-          />
-        </View>
-
-        {/* State Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>
-            State
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="NY"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.state}
-            onChangeText={(text) => setAddress({ ...address, state: text })}
-          />
-        </View>
-
-        {/* Postal Code Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>
-            Postal Code
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="10001"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.postalCode}
-            onChangeText={(text) =>
-              setAddress({ ...address, postalCode: text })
-            }
-          />
-        </View>
-
-        {/* Country Input */}
-        <View style={styles.inputContainer}>
-          <Text style={[styles.label, { color: theme.colors.text }]}>
-            Country
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-              },
-            ]}
-            placeholder="United States"
-            placeholderTextColor={theme.colors.placeholder}
-            value={address.country}
-            onChangeText={(text) => setAddress({ ...address, country: text })}
-          />
-        </View>
-
-        {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, { backgroundColor: theme.colors.primary }]}
-          onPress={handleSave}
-        >
-          <Text style={styles.saveButtonText}>Save Address</Text>
-        </TouchableOpacity>
+                  <Button
+                    textColor={theme.colors.primary}
+                    style={[styles.deleteButton]}
+                    onPress={() => handleDelete(address)}
+                    buttonColor={theme.colors.button}
+                  >
+                    Delete
+                  </Button>
+                </View>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={styles.button}
+              onPress={() => setMode("add")}
+            >
+              <Text
+                style={[styles.buttonText, { color: theme.colors.textColor }]}
+              >
+                Add New Address
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <Formik
+            initialValues={{
+              name: selectedAddress?.name || "",
+              email: selectedAddress?.email || "",
+              phone: selectedAddress?.phone || "",
+              address: selectedAddress?.address || "",
+              district_name: selectedAddress?.district_name || "",
+              province_name: selectedAddress?.province_name || "",
+              postal_code: selectedAddress?.postal_code || "",
+              country_name: selectedAddress?.country_name || "",
+            }}
+            validationSchema={validationSchema}
+            onSubmit={handleSave}
+          >
+            {({
+              handleChange,
+              handleBlur,
+              handleSubmit,
+              values,
+              errors,
+              touched,
+            }) => (
+              <>
+                {Object.keys(values).map((field) => (
+                  <View style={styles.inputContainer} key={field}>
+                    <Text style={[styles.label, { color: theme.colors.text }]}>
+                      {field.replace("_", " ").toUpperCase()}
+                    </Text>
+                    <TextInput
+                      style={[
+                        styles.input,
+                        {
+                          backgroundColor: theme.colors.surface,
+                          color: theme.colors.text,
+                        },
+                      ]}
+                      placeholder={field.replace("_", " ")}
+                      placeholderTextColor={theme.colors.placeholder}
+                      onChangeText={handleChange(field)}
+                      onBlur={handleBlur(field)}
+                      value={values[field]}
+                      keyboardType={
+                        field === "phone" || field === "postal_code"
+                          ? "phone-pad"
+                          : "default"
+                      }
+                    />
+                    {touched[field] && errors[field] && (
+                      <Text style={styles.errorText}>{errors[field]}</Text>
+                    )}
+                  </View>
+                ))}
+                <View style={styles.buttonGroup}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.saveButton]}
+                    onPress={handleSubmit}
+                  >
+                    <Text style={styles.buttonText}>Save</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.button, styles.cancelButton]}
+                    onPress={() => {
+                      setMode("view");
+                      setSelectedAddress(null);
+                    }}
+                  >
+                    <Text style={styles.buttonText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Formik>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 };
 
-export default BillingAddress;
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, padding: 20 },
+  scrollContainer: { flexGrow: 1, paddingBottom: 20 },
+  title: { fontSize: 20, fontWeight: "bold", marginBottom: 20 },
+  addressCard: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 15,
+    marginBottom: 15,
   },
-  scrollContainer: {
-    padding: 20,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 8,
-  },
-  input: {
-    height: 50,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    fontSize: 16,
-    elevation: 2, // Shadow for Android
-    shadowColor: "#000", // Shadow for iOS
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  saveButton: {
-    height: 50,
-    borderRadius: 10,
-    justifyContent: "center",
+  inputContainer: { marginBottom: 15 },
+  label: { fontSize: 14, marginBottom: 5 },
+  input: { borderWidth: 1, borderRadius: 5, padding: 10 },
+  errorText: { color: "red", fontSize: 12, marginTop: 5 },
+  text: { fontSize: 14, marginBottom: 5 },
+  button: {
+    padding: 10,
+    borderRadius: 5,
     alignItems: "center",
-    marginTop: 20,
-    elevation: 2,
-    shadowColor: "#000", // Shadow for iOS
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    marginVertical: 5,
   },
-  saveButtonText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
+  buttonText: { color: "white", fontSize: 16 },
+  buttonGroup: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 5,
+    buttonText: { color: "white", fontSize: 16 },
+    marginTop: 10,
   },
+  editButton: { flex: 1 },
+  deleteButton: { flex: 1 },
+  saveButton: { backgroundColor: "green", flex: 1, marginRight: 5 },
+  cancelButton: { backgroundColor: "gray", flex: 1, marginLeft: 5 },
 });
+
+export default BillingAddress;

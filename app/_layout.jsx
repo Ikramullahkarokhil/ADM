@@ -25,6 +25,7 @@ const Layout = () => {
     fetchFavProducts,
     fetchProfile,
     searchProductData,
+    getBillingAddress,
     logout,
     user,
   } = useProductStore();
@@ -70,8 +71,9 @@ const Layout = () => {
       if (user?.consumer_id) {
         await Promise.all([
           fetchProfile(user.consumer_id),
-          fetchFavProducts(user.consumer_id),
-          listCart(user.consumer_id),
+          // fetchFavProducts(user.consumer_id),
+          // listCart(user.consumer_id),
+          // getBillingAddress(user.consumer_id),
           // searchProductData(),
         ]);
       }

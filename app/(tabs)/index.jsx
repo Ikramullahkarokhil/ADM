@@ -1,21 +1,21 @@
-import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
-import { Link, useNavigation } from "expo-router";
-import useCartStore from "../../components/store/useCartStore";
+import { Link, router, useNavigation, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import useProductStore from "../../components/api/useProductStore";
 import CategoriesSectionList from "../../components/ui/CategoriesList";
 import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
-import Fontisto from "@expo/vector-icons/Fontisto";
-import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet as RNStyleSheet } from "react-native"; // Add this import for StyleSheet.flatten
+import AlertDialog from "../../components/ui/AlertDialog"; // import your AlertDialog
 
 const Home = () => {
   const theme = useTheme();
+  const navigation = useNavigation();
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
     useState([]);
-  const navigation = useNavigation();
+  const [alertVisible, setAlertVisible] = useState(false);
 
   const {
     user,
@@ -79,21 +79,25 @@ const Home = () => {
     }, []);
   }, [cartItem]);
 
+  // Handler for the cart button press
+  const handleCartPress = () => {
+    if (!user?.consumer_id) {
+      setAlertVisible(true);
+    } else {
+      router.navigate("/screens/Cart");
+    }
+  };
+
   return (
-    <View
-      style={RNStyleSheet.flatten([
-        styles.container,
-        { backgroundColor: theme.colors.primary },
-      ])}
-    >
-      <View
-        style={RNStyleSheet.flatten([
-          styles.header,
-          { backgroundColor: theme.colors.primary },
-        ])}
-      >
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+        {/* Show light logo in dark mode and dark logo in light mode */}
         <Image
-          source={require("../../assets/images/darkLogo.png")}
+          source={
+            theme.dark
+              ? require("../../assets/images/lightLogo.png")
+              : require("../../assets/images/darkLogo.png")
+          }
           style={styles.logo}
         />
         <View style={styles.iconsContainer}>
@@ -107,24 +111,23 @@ const Home = () => {
                 />
               )}
               iconColor={theme.colors.textColor}
-              style={styles.searchBar} // Remove array, use just the object
+              style={styles.searchBar}
             />
           </Link>
-          <Link href={{ pathname: "/screens/Cart" }} asChild>
-            <Pressable
-              android_ripple={{ color: theme.colors.ripple }}
-              style={styles.iconButton}
-            >
-              <IconButton
-                icon="cart"
-                size={24}
-                iconColor={theme.colors.textColor}
-              />
-              {groupedCartItems.length > 0 && (
-                <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
-              )}
-            </Pressable>
-          </Link>
+          <Pressable
+            onPress={handleCartPress}
+            android_ripple={{ color: theme.colors.ripple }}
+            style={styles.iconButton}
+          >
+            <IconButton
+              icon="cart"
+              size={24}
+              iconColor={theme.colors.textColor}
+            />
+            {groupedCartItems.length > 0 && (
+              <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
+            )}
+          </Pressable>
         </View>
       </View>
 
@@ -141,6 +144,20 @@ const Home = () => {
           <CategoriesSectionList data={categoriesWithSubCategories} />
         )}
       </View>
+
+      {/* AlertDialog to prompt login when needed */}
+      <AlertDialog
+        visible={alertVisible}
+        title="Login Required"
+        message="Please log in to access your cart."
+        onDismiss={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          navigation.navigate("Login"); // Navigate to login if needed
+        }}
+        confirmText="Login"
+        cancelText="Cancel"
+      />
     </View>
   );
 };
@@ -158,7 +175,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   searchBar: {},
   iconsContainer: {
     flexDirection: "row",
