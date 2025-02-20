@@ -302,8 +302,8 @@ const useProductStore = create(
               ...response.data.data,
               timestamp: Date.now(),
             };
-            set({ loginLoading: false });
-            return { success: true, user: userWithTimestamp };
+            set({ loginLoading: false, user: userWithTimestamp });
+            return { success: true };
           } else {
             throw new Error(response.data.message || "Signup failed");
           }
@@ -311,10 +311,17 @@ const useProductStore = create(
           console.log("Signup error:", error);
           let errorMessage = "An error occurred during signup.";
           if (error.response) {
-            console.log(error);
+            console.log("Response data:", error.response.data); // Log the full response
             if (error.response.status === 422) {
-              errorMessage =
-                "This email is already registered. Please log in or use a different email.";
+              const errors = error.response.data.errors;
+              if (errors) {
+                // Combine all validation errors into a single message
+                errorMessage = Object.values(errors).flat().join(", ");
+              } else {
+                errorMessage =
+                  error.response.data.message ||
+                  "This email is already registered. Please log in or use a different email.";
+              }
             } else if (error.response.status === 400) {
               errorMessage =
                 error.response.data.message || "Invalid signup data.";

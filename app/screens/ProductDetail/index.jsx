@@ -12,7 +12,6 @@ import {
   View,
   Image,
   ScrollView,
-  TouchableOpacity,
   Pressable,
   Share,
   ToastAndroid,
@@ -47,7 +46,7 @@ const ProductDetail = () => {
   // State variables
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
-  const [addedToCart, setAddedToCart] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
@@ -100,6 +99,12 @@ const ProductDetail = () => {
     productsBySubcategory,
   ]);
 
+  // Check if product is in cart
+  const isInCart = useMemo(
+    () => cartItem.some((item) => item.products_id === product?.products_id),
+    [cartItem, product]
+  );
+
   // Update header title and style
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -110,7 +115,7 @@ const ProductDetail = () => {
   }, [navigation, product, theme]);
 
   // Refresh questions when pulling down
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     if (!product) return;
     setRefreshing(true);
     try {
@@ -122,7 +127,7 @@ const ProductDetail = () => {
     } finally {
       setRefreshing(false);
     }
-  };
+  }, [product, getProductQuestionList]);
 
   // Update favorite state when product or favorites change
   useEffect(() => {
@@ -143,7 +148,7 @@ const ProductDetail = () => {
       };
       fetchQuestions();
     }
-  }, [product]);
+  }, [product, getProductQuestionList]);
 
   // Helper to show alerts
   const showAlert = useCallback(
@@ -173,7 +178,7 @@ const ProductDetail = () => {
       );
       return;
     }
-    if (cartItem.some((item) => item.products_id === product.products_id)) {
+    if (isInCart) {
       showAlert(
         "Product already in cart",
         "This product is already in your cart.",
@@ -183,7 +188,7 @@ const ProductDetail = () => {
       return;
     }
     try {
-      setAddedToCart(true);
+      setIsAddingToCart(true);
       await addToCart({
         productID: product.products_id,
         consumerID: user.consumer_id,
@@ -191,8 +196,10 @@ const ProductDetail = () => {
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
     } catch (err) {
       showAlert("Error", err.message);
+    } finally {
+      setIsAddingToCart(false);
     }
-  }, [product, user, cartItem]);
+  }, [product, user, isInCart, addToCart, showAlert, navigation, router]);
 
   // Share handler
   const handleShare = useCallback(async () => {
@@ -243,7 +250,17 @@ const ProductDetail = () => {
     } finally {
       setIsFavoriting(false);
     }
-  }, [user, isFavorite, isFavoriting, product, favProducts]);
+  }, [
+    user,
+    isFavorite,
+    isFavoriting,
+    product,
+    favProducts,
+    addToFavorite,
+    removeFavorite,
+    showAlert,
+    navigation,
+  ]);
 
   // Delete question handler
   const handleDeleteQuestion = useCallback(
@@ -268,7 +285,14 @@ const ProductDetail = () => {
         showAlert("Error", err.message);
       }
     },
-    [user, product]
+    [
+      user,
+      product,
+      deleteProductQuestion,
+      getProductQuestionList,
+      showAlert,
+      navigation,
+    ]
   );
 
   // Render rating stars
@@ -285,7 +309,7 @@ const ProductDetail = () => {
     ));
   }, [product?.average_rating]);
 
-  // Prepare images and displayed questions (showing only a few)
+  // Prepare images and displayed questions
   const displayedQuestions = questions.slice(0, 3);
   const images =
     product?.product_images?.length > 0
@@ -302,16 +326,17 @@ const ProductDetail = () => {
         ]}
       >
         <Text style={styles.errorText}>Error loading product</Text>
-        <TouchableOpacity
+        <Pressable
           style={[styles.retryButton, { backgroundColor: theme.colors.button }]}
           onPress={() => navigation.goBack()}
+          android_ripple={{ color: theme.colors.ripple }}
         >
           <Text
             style={[styles.retryButtonText, { color: theme.colors.textColor }]}
           >
             Go Back
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   }
@@ -326,19 +351,20 @@ const ProductDetail = () => {
         <Text style={[styles.errorText, { color: theme.colors.textColor }]}>
           Product not found
         </Text>
-        <TouchableOpacity
+        <Pressable
           style={[
             styles.retryButton,
             { backgroundColor: theme.colors.background },
           ]}
           onPress={() => navigation.goBack()}
+          android_ripple={{ color: theme.colors.ripple }}
         >
           <Text
             style={[styles.retryButtonText, { color: theme.colors.textColor }]}
           >
             Go Back
           </Text>
-        </TouchableOpacity>
+        </Pressable>
       </View>
     );
   }
@@ -419,9 +445,13 @@ const ProductDetail = () => {
             >
               {product.title}
             </Text>
-            <TouchableOpacity
+            <Pressable
               onPress={handleToggleFavorite}
               disabled={isFavoriting}
+              android_ripple={{ color: theme.colors.ripple }}
+              accessibilityLabel={
+                isFavorite ? "Remove from favorites" : "Add to favorites"
+              }
             >
               <Ionicons
                 name={isFavorite ? "heart" : "heart-outline"}
@@ -429,11 +459,11 @@ const ProductDetail = () => {
                 color={isFavorite ? "#FF0000" : "#333"}
                 style={isFavoriting && { opacity: 0.5 }}
               />
-            </TouchableOpacity>
+            </Pressable>
           </View>
           <View style={styles.ratingContainer}>{ratingStars}</View>
           <Text style={[styles.price, { color: theme.colors.button }]}>
-            {product.spu}
+            {product.spu} {/* Assuming spu is price; adjust if incorrect */}
           </Text>
           {product.description && (
             <Text
@@ -465,7 +495,7 @@ const ProductDetail = () => {
           >
             <Pressable
               style={styles.detailsRow}
-              android_ripple={theme.colors.riple}
+              android_ripple={{ color: theme.colors.ripple }}
             >
               <Text
                 style={[styles.detailLabel, { color: theme.colors.textColor }]}
@@ -478,19 +508,21 @@ const ProductDetail = () => {
                   { color: theme.colors.textColor },
                 ]}
               >
-                {product.total_comments} , Comments
+                {product.total_comments} Comments
               </Text>
             </Pressable>
           </Link>
-          <View style={styles.detailsRow}>
+          <View style={styles.buttonRow}>
             <Button
               textColor={theme.colors.primary}
               buttonColor={theme.colors.button}
               onPress={handleAddToCart}
               style={[styles.button, { borderColor: theme.colors.button }]}
-              disabled={addedToCart}
+              disabled={isInCart}
+              loading={isAddingToCart}
+              accessibilityLabel={isInCart ? "Product in cart" : "Add to cart"}
             >
-              {addedToCart ? "Added to cart" : "Add to Cart"}
+              {isInCart ? "Added to Cart" : "Add to Cart"}
             </Button>
             <Button
               onPress={handleShare}
@@ -503,6 +535,7 @@ const ProductDetail = () => {
                   color={theme.colors.button}
                 />
               )}
+              accessibilityLabel="Share product"
             >
               Share
             </Button>
@@ -520,7 +553,7 @@ const ProductDetail = () => {
             <Text
               style={[styles.questionsTitle, { color: theme.colors.textColor }]}
             >
-              Product Questions, ({totalQuestions})
+              Product Questions ({totalQuestions})
             </Text>
             {displayedQuestions.length > 0 ? (
               displayedQuestions.map((q) => {
@@ -564,6 +597,7 @@ const ProductDetail = () => {
                   { borderColor: theme.colors.button },
                 ]}
                 icon="comment-question-outline"
+                accessibilityLabel="Ask a question"
               >
                 Ask a Question
               </Button>
@@ -589,7 +623,7 @@ const ProductDetail = () => {
   );
 };
 
-// Memoized QuestionItem following a similar design to your Questions screen
+// Memoized QuestionItem
 const QuestionItem = memo(({ item, theme }) => (
   <View
     style={[
@@ -678,6 +712,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   image: {
+    width: "100%", // Ensure full width
     height: "100%",
   },
   dotContainer: {
@@ -689,7 +724,7 @@ const styles = StyleSheet.create({
   dot: {
     width: 8,
     height: 8,
-    borderRadius: 10,
+    borderRadius: 4,
     backgroundColor: "#ccc",
     marginHorizontal: 4,
   },
@@ -707,9 +742,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 10,
+    elevation: 5,
     marginHorizontal: 16,
-    marginTop: 5,
+    marginBottom: 24,
   },
   titleRow: {
     flexDirection: "row",
@@ -721,6 +756,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "bold",
     flex: 1,
+    marginRight: 10,
   },
   ratingContainer: {
     flexDirection: "row",
@@ -728,7 +764,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   starIcon: {
-    marginRight: 2,
+    marginRight: 4,
   },
   price: {
     fontSize: 24,
@@ -748,12 +784,20 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
   },
+  buttonRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 15,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
   detailLabel: {
     fontSize: 16,
   },
   button: {
     width: "48%",
-    elevation: 10,
+    elevation: 2,
     borderWidth: 1,
   },
   errorText: {
@@ -778,7 +822,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     padding: 20,
     borderRadius: 20,
-    elevation: 10,
+    elevation: 5,
     marginHorizontal: 16,
     marginBottom: 20,
   },
@@ -788,17 +832,15 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   questionItem: {
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
     borderRadius: 8,
     marginVertical: 5,
-    marginBottom: 20,
   },
   questionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   questionUserPhoto: {
     width: 40,
@@ -806,7 +848,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   questionTitleContainer: {
-    marginLeft: 5,
+    marginLeft: 10,
   },
   questionAuthor: {
     fontSize: 16,
@@ -823,20 +865,20 @@ const styles = StyleSheet.create({
   answersContainer: {
     marginTop: 8,
     marginLeft: 50,
-    paddingLeft: 5,
+    paddingLeft: 8,
     borderLeftWidth: 2,
     borderLeftColor: "#ddd",
   },
   answerItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   answerSellerPhoto: {
     width: 35,
     height: 35,
-    borderRadius: 20,
-    marginRight: 5,
+    borderRadius: 17.5,
+    marginRight: 8,
   },
   answerContent: {
     flex: 1,
@@ -862,6 +904,9 @@ const styles = StyleSheet.create({
   noQuestionsText: {
     fontSize: 16,
     marginBottom: 20,
+  },
+  askQuestion: {
+    marginTop: 10,
   },
 });
 

@@ -55,10 +55,7 @@ const Layout = () => {
   }, []);
 
   // Initialize theme and set the navigation bar color.
-  const navBarBackgroundColor = useMemo(
-    () => theme.colors.primary,
-    [theme.colors.primary]
-  );
+  const navBarBackgroundColor = useMemo(() => theme.colors.primary, [theme]);
 
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
@@ -144,10 +141,7 @@ const Layout = () => {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ActionSheetProvider>
         <PaperProvider theme={theme}>
-          <StatusBar
-            style={isDarkTheme ? "light" : "dark"}
-            backgroundColor={theme.colors.primary}
-          />
+          <StatusBar style={isDarkTheme ? "light" : "dark"} />
           {!hasAcceptedTerms ? (
             <TermsModal
               onAccept={handleAcceptTerms}

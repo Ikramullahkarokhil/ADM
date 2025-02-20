@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -6,34 +6,66 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Animated,
 } from "react-native";
 import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../components/api/useProductStore";
-import { Link, useNavigation, useRouter } from "expo-router";
+import { Link, useRouter } from "expo-router";
 import { Button, useTheme } from "react-native-paper";
+import { LinearGradient } from "expo-linear-gradient";
+import * as NavigationBar from "expo-navigation-bar";
 
 const loginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
   password: Yup.string().min(6, "Too Short!").required("Required"),
 });
 
-const FormikInput = ({ fieldName, ...props }) => {
+const FormikInput = ({
+  fieldName,
+  theme,
+  secureTextEntry,
+  toggleSecure,
+  ...props
+}) => {
   const [field, meta, helpers] = useField(fieldName);
   return (
-    <>
-      <TextInput
-        value={field.value}
-        onChangeText={helpers.setValue}
-        onBlur={() => helpers.setTouched(true)}
-        {...props}
-        style={[styles.input, meta.touched && meta.error && styles.errorInput]}
-      />
+    <View style={styles.inputContainer}>
+      <View style={styles.inputWrapper}>
+        <TextInput
+          value={field.value}
+          onChangeText={helpers.setValue}
+          onBlur={() => helpers.setTouched(true)}
+          style={[
+            styles.input,
+            {
+              backgroundColor: theme.colors.surface,
+              color: theme.colors.text,
+              borderColor: "rgba(255, 255, 255, 0.4)",
+            },
+            meta.touched && meta.error && styles.errorInput,
+          ]}
+          placeholderTextColor={theme.colors.inactiveColor}
+          secureTextEntry={secureTextEntry}
+          {...props}
+        />
+        {fieldName === "password" && (
+          <TouchableOpacity onPress={toggleSecure} style={styles.eyeIcon}>
+            <Text style={{ color: theme.colors.textColor }}>
+              {secureTextEntry ? "👁️" : "👁️‍🗨️"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
       {meta.touched && meta.error && (
-        <Text style={styles.errorText}>{meta.error}</Text>
+        <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
+          {meta.error}
+        </Text>
       )}
-    </>
+    </View>
   );
 };
 
@@ -41,6 +73,30 @@ const Login = () => {
   const router = useRouter();
   const { loginUser, loginLoading, loginError } = useProductStore();
   const theme = useTheme();
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [secureTextEntry, setSecureTextEntry] = useState(true);
+
+  React.useEffect(() => {
+    // Fade-in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+
+    // Set navigation bar color to match gradient
+    const setNavigationBarColor = async () => {
+      try {
+        await NavigationBar.setBackgroundColorAsync(theme.colors.gradientEnd);
+        await NavigationBar.setButtonStyleAsync(
+          theme === theme.darkTheme ? "light" : "dark"
+        ); // Adjust button style based on theme
+      } catch (error) {
+        console.error("Error setting navigation bar color:", error);
+      }
+    };
+    setNavigationBarColor();
+  }, [fadeAnim, theme]);
 
   const handleLogin = async (values) => {
     try {
@@ -51,69 +107,120 @@ const Login = () => {
     }
   };
 
+  const toggleSecure = () => setSecureTextEntry((prev) => !prev);
+
   return (
-    <View style={styles.container}>
-      <Link href={{ pathname: "(tabs)" }} asChild style={styles.skipButton}>
-        <Button
-          buttonColor={theme.colors.button}
-          textColor={theme.colors.primary}
-        >
-          Skip
-        </Button>
-      </Link>
-      <Text style={styles.title}>Welcome Back</Text>
-
-      <Formik
-        initialValues={{ email: "", password: "" }}
-        validationSchema={loginSchema}
-        onSubmit={handleLogin}
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={styles.container}
+    >
+      <LinearGradient
+        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+        style={styles.gradientBackground}
       >
-        {({
-          handleChange,
-          handleBlur,
-          handleSubmit,
-          values,
-          errors,
-          touched,
-        }) => (
-          <View style={styles.form}>
-            <FormikInput
-              fieldName="email"
-              placeholder="Email"
-              keyboardType="email-address"
-              autoCapitalize="none"
+        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require("../assets/images/darkLogo.png")}
+              style={styles.logo}
+              resizeMode="contain"
+              accessibilityLabel="App Logo"
             />
-
-            <FormikInput
-              fieldName="password"
-              placeholder="Password"
-              secureTextEntry
-              autoCapitalize="none"
-            />
-
-            {loginError && <Text style={styles.error}>{loginError}</Text>}
-
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.colors.button }]}
-              onPress={handleSubmit}
-              disabled={loginLoading}
-            >
-              {loginLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* <GoogleSigninButton onPress={signIn} /> */}
-
-            <Link href={{ pathname: "/screens/Signup" }} asChild>
-              <Text style={styles.link}>Don't have an account? Sign Up</Text>
-            </Link>
           </View>
-        )}
-      </Formik>
-    </View>
+
+          <Text style={[styles.title, { color: theme.colors.textColor }]}>
+            Welcome Back
+          </Text>
+          <Text
+            style={[styles.subtitle, { color: theme.colors.inactiveColor }]}
+          >
+            Sign in to your account
+          </Text>
+
+          <Formik
+            initialValues={{ email: "", password: "" }}
+            validationSchema={loginSchema}
+            onSubmit={handleLogin}
+          >
+            {({ handleSubmit }) => (
+              <View
+                style={[
+                  styles.form,
+                  { backgroundColor: "rgba(255, 255, 255, 0.05)" },
+                ]}
+              >
+                <FormikInput
+                  fieldName="email"
+                  placeholder="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  theme={theme}
+                  accessibilityLabel="Email input"
+                />
+                <FormikInput
+                  fieldName="password"
+                  placeholder="Password"
+                  secureTextEntry={secureTextEntry}
+                  toggleSecure={toggleSecure}
+                  autoCapitalize="none"
+                  theme={theme}
+                  accessibilityLabel="Password input"
+                />
+                {loginError && (
+                  <Text
+                    style={[styles.error, { color: theme.colors.deleteButton }]}
+                  >
+                    {loginError}
+                  </Text>
+                )}
+                <LinearGradient
+                  colors={[
+                    theme.colors.buttonGradientStart,
+                    theme.colors.buttonGradientEnd,
+                  ]}
+                  style={styles.button}
+                >
+                  <TouchableOpacity
+                    onPress={handleSubmit}
+                    disabled={loginLoading}
+                    accessibilityLabel="Sign in button"
+                    style={styles.buttonInner}
+                  >
+                    {loginLoading ? (
+                      <ActivityIndicator color={theme.colors.activeColor} />
+                    ) : (
+                      <Text style={styles.buttonText}>Sign In</Text>
+                    )}
+                  </TouchableOpacity>
+                </LinearGradient>
+
+                <View style={styles.footer}>
+                  <Link href="/screens/Signup" asChild>
+                    <Text
+                      style={[styles.link, { color: theme.colors.textColor }]}
+                    >
+                      Don’t have an account?{" "}
+                      <Text style={{ color: theme.colors.button }}>
+                        Sign Up
+                      </Text>
+                    </Text>
+                  </Link>
+                  <Link href="(tabs)" asChild>
+                    <Button
+                      mode="text"
+                      textColor={theme.colors.textColor}
+                      style={styles.skipButton}
+                    >
+                      Skip
+                    </Button>
+                  </Link>
+                </View>
+              </View>
+            )}
+          </Formik>
+        </Animated.View>
+      </LinearGradient>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -122,70 +229,97 @@ export default Login;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
-    padding: 20,
+  },
+  gradientBackground: {
+    flex: 1,
     justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  content: {
+    alignItems: "center",
+  },
+  logoContainer: {
+    marginBottom: 48,
+  },
+  logo: {
+    width: 180,
+    height: 60,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 34,
+    fontWeight: "800",
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  subtitle: {
+    fontSize: 16,
     marginBottom: 40,
-    textAlign: "center",
+    opacity: 0.8,
   },
   form: {
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    width: "100%",
+    borderRadius: 20,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  inputWrapper: {
+    position: "relative",
+    flexDirection: "row",
+    alignItems: "center",
   },
   input: {
-    height: 50,
-    borderColor: "#ddd",
+    flex: 1,
+    height: 60,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    fontSize: 16,
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    marginBottom: 5,
-    fontSize: 16,
   },
-  button: {
-    backgroundColor: "#007bff",
-    borderRadius: 8,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 10,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  error: {
-    color: "#ff4444",
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  link: {
-    color: "#007bff",
-    textAlign: "center",
-    marginTop: 10,
-    textDecorationLine: "underline",
+  eyeIcon: {
+    position: "absolute",
+    right: 20,
   },
   errorInput: {
     borderColor: "red",
   },
   errorText: {
-    color: "red",
-    marginBottom: 5,
+    fontSize: 12,
+    marginTop: 6,
+  },
+  button: {
+    height: 60,
+    borderRadius: 16,
+    marginTop: 24,
+    overflow: "hidden",
+  },
+  buttonInner: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  buttonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  error: {
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  footer: {
+    marginTop: 28,
+    alignItems: "center",
+    gap: 16,
+  },
+  link: {
+    fontSize: 14,
   },
   skipButton: {
-    position: "absolute",
-    top: 50,
-    right: 20,
+    paddingHorizontal: 0,
   },
 });

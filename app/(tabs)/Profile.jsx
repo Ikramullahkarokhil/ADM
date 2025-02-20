@@ -1,4 +1,9 @@
-import React, { useLayoutEffect, useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -8,10 +13,9 @@ import {
   Text,
   Alert,
 } from "react-native";
-import { useTheme, Divider, TouchableRipple } from "react-native-paper";
+import { useTheme, Divider, TouchableRipple, Avatar } from "react-native-paper";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useNavigation, useRouter } from "expo-router";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -38,22 +42,17 @@ const ProfileHeader = ({
         accessibilityLabel="Change profile picture"
         accessibilityRole="button"
       >
-        <Image
+        <Avatar.Image
           source={{ uri: profileImage }}
-          style={[
-            styles.profileImage,
-            { borderColor: theme.colors.inactiveColor },
-          ]}
-          accessibilityLabel="Profile picture"
+          size={80}
+          style={{ backgroundColor: theme.colors.surface }}
         />
       </TouchableRipple>
       <View style={styles.headerTextContainer}>
-        <Text style={[styles.username, { color: theme.colors.textColor }]}>
+        <Text style={[styles.username, { color: theme.colors.text }]}>
           {username}
         </Text>
-        <Text
-          style={[styles.membershipText, { color: theme.colors.inactiveColor }]}
-        >
+        <Text style={[styles.membershipText, { color: theme.colors.text }]}>
           {membership}
         </Text>
       </View>
@@ -73,21 +72,14 @@ const Profile = () => {
     useState(false);
 
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
+    navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const handleThemeSelect = () => {
+  const handleThemeSelect = useCallback(() => {
     const options = ["System Default", "Light", "Dark", "Cancel"];
     const cancelButtonIndex = options.length - 1;
-
     showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex,
-        title: "Select Theme",
-      },
+      { options, cancelButtonIndex, title: "Select Theme" },
       async (selectedIndex) => {
         if (
           selectedIndex !== undefined &&
@@ -95,140 +87,106 @@ const Profile = () => {
         ) {
           const themeOptions = ["system", "light", "dark"];
           const selectedTheme = themeOptions[selectedIndex];
-
-          if (selectedTheme === "system") {
-            await setThemeMode("system", false);
-          } else {
-            await setThemeMode(selectedTheme);
-          }
+          await setThemeMode(
+            selectedTheme === "system" ? "system" : selectedTheme
+          );
         }
       }
     );
-  };
+  }, [showActionSheetWithOptions, setThemeMode]);
 
-  const handleNavigation = (screen) => {
-    router.push(screen);
-  };
+  const handleNavigation = useCallback(
+    (screen) => {
+      router.push(screen);
+    },
+    [router]
+  );
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await logout();
       router.replace("/Login");
     } catch (error) {
       Alert.alert("Error", "Failed to logout. Please try again.");
     }
-  };
+  }, [logout, router]);
 
-  const getMembershipDuration = (regDateString) => {
+  const getMembershipDuration = useCallback((regDateString) => {
     if (!regDateString) return "";
     const regDate = new Date(regDateString.replace(" ", "T"));
     const now = new Date();
     const diffMs = now - regDate;
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays < 30) {
+    if (diffDays < 30)
       return `Member for ${diffDays} ${diffDays === 1 ? "day" : "days"}`;
-    }
-
     const diffMonths = Math.floor(diffDays / 30);
-    if (diffMonths < 12) {
+    if (diffMonths < 12)
       return `Member for ${diffMonths} ${
         diffMonths === 1 ? "month" : "months"
       }`;
-    }
-
     const diffYears = Math.floor(diffMonths / 12);
     return `Member for ${diffYears} ${diffYears === 1 ? "year" : "years"}`;
-  };
+  }, []);
 
-  const handleProfileImagePick = async () => {
+  const handleProfileImagePick = useCallback(async () => {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (permissionResult.granted === false) {
+    if (!permissionResult.granted) {
       Alert.alert("Permission to access gallery is required!");
       return;
     }
-
-    let result = await ImagePicker.launchImageLibraryAsync({
+    const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: "images",
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
     });
+    if (!result.canceled) setImage(result.assets[0].uri);
+  }, []);
 
-    if (!result.canceled) {
-      setImage(result.assets[0].uri);
-    }
-  };
-
-  const handleUpload = async () => {
-    if (!image) {
-      Alert.alert("Please select an image first.");
-      return;
-    }
-
+  const handleUpload = useCallback(async () => {
+    if (!image) return Alert.alert("Please select an image first.");
     const MAX_SIZE = 100 * 1024; // 100KB
     let fileInfo = await FileSystem.getInfoAsync(image);
-
-    // If image is larger than 100KB, attempt to compress it iteratively.
-    if (fileInfo.size && fileInfo.size > MAX_SIZE) {
+    if (fileInfo.size > MAX_SIZE) {
       let currentUri = image;
-      let currentFileInfo = fileInfo;
-      let quality = 0.7; // initial compression quality
+      let quality = 0.7;
       let iterations = 0;
       const maxIterations = 5;
-
-      while (currentFileInfo.size > MAX_SIZE && iterations < maxIterations) {
+      while (fileInfo.size > MAX_SIZE && iterations < maxIterations) {
         const manipResult = await ImageManipulator.manipulateAsync(
           currentUri,
           [],
-          {
-            compress: quality,
-            format: ImageManipulator.SaveFormat.JPEG,
-          }
+          { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
         );
         currentUri = manipResult.uri;
-        currentFileInfo = await FileSystem.getInfoAsync(currentUri);
-        quality *= 0.7; // further reduce quality for next iteration if needed
+        fileInfo = await FileSystem.getInfoAsync(currentUri);
+        quality *= 0.7;
         iterations++;
       }
-
-      if (currentFileInfo.size > MAX_SIZE) {
+      if (fileInfo.size > MAX_SIZE) {
         Alert.alert(
           "Image too large",
-          "Could not compress the image below 100KB. Please choose a different image."
+          "Could not compress the image below 100KB."
         );
         return;
       }
-
-      // Update the image state to the compressed image and exit.
       setImage(currentUri);
-      return;
     }
-
     try {
-      const response = await uploadConsumerImage({
-        image: {
-          uri: image,
-          name: "photo.jpg",
-          type: "image/jpeg",
-        },
+      await uploadConsumerImage({
+        image: { uri: image, name: "photo.jpg", type: "image/jpeg" },
         consumer_id: profileData?.consumer_id,
       });
-      console.log("Upload response:", response);
       Alert.alert("Success", "Image uploaded successfully!");
     } catch (error) {
-      console.log("Upload error:", error);
       Alert.alert("Upload failed", error.message);
     }
-  };
+  }, [image, profileData?.consumer_id, uploadConsumerImage]);
 
   useEffect(() => {
-    if (image) {
-      handleUpload();
-    }
-  }, [image]);
+    if (image) handleUpload();
+  }, [image, handleUpload]);
 
   const accountSettings = [
     { label: "Update Profile", screen: "UpdateProfile" },
@@ -255,26 +213,26 @@ const Profile = () => {
         styles.menuSection,
         {
           backgroundColor: theme.colors.primary,
-          borderColor: theme.colors.subInactiveColor,
         },
       ]}
     >
       {items.map((item, index) => (
         <View key={index}>
           <TouchableRipple
-            onPress={() => {
-              if (item.screen) {
-                handleNavigation(item.screen);
-              } else if (item.onPress) {
-                item.onPress();
-              }
-            }}
+            onPress={() =>
+              item.screen ? handleNavigation(item.screen) : item.onPress?.()
+            }
+            accessibilityLabel={item.label}
           >
             <View style={styles.menuItem}>
               <Text
                 style={[
-                  { color: theme.colors.textColor },
-                  item.special ? styles.logoutText : null,
+                  styles.menuText,
+                  {
+                    color: item.special
+                      ? theme.colors.error
+                      : theme.colors.text,
+                  },
                 ]}
               >
                 {item.label}
@@ -283,10 +241,7 @@ const Profile = () => {
           </TouchableRipple>
           {index < items.length - 1 && (
             <Divider
-              style={[
-                styles.menuDivider,
-                { backgroundColor: theme.colors.subInactiveColor },
-              ]}
+              style={{ backgroundColor: theme.colors.subInactiveColor }}
             />
           )}
         </View>
@@ -296,7 +251,7 @@ const Profile = () => {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: theme.colors.background }]}
+      style={[styles.safeArea, { backgroundColor: theme.colors.primary }]}
     >
       <ScrollView contentContainerStyle={styles.container}>
         <ProfileHeader
@@ -309,11 +264,9 @@ const Profile = () => {
           theme={theme}
           onProfileImagePick={handleProfileImagePick}
         />
-
         {renderMenuGroup(accountSettings)}
         {renderMenuGroup(appSettings)}
         {renderMenuGroup(accountActions)}
-
         <ChangePasswordModal
           isVisible={isChangePasswordModalVisible}
           onClose={() => setChangePasswordModalVisible(false)}
@@ -326,50 +279,26 @@ const Profile = () => {
 export default Profile;
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  container: {
-    paddingBottom: 32,
-  },
+  safeArea: { flex: 1 },
+  container: { paddingBottom: 32 },
   headerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 40,
-    marginBottom: 20,
-    paddingBottom: 5,
-    paddingHorizontal: 10,
-    elevation: 5,
+    paddingTop: 20,
+    paddingHorizontal: 16,
+    elevation: 4,
   },
-  profileImage: {
-    width: 45,
-    height: 45,
-    borderRadius: 50,
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  headerTextContainer: {
-    marginLeft: 12,
-  },
-  username: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  membershipText: {
-    fontSize: 14,
-  },
+  headerTextContainer: { marginLeft: 16 },
+  username: { fontSize: 20, fontWeight: "bold" },
+  membershipText: { fontSize: 14, marginTop: 4 },
   menuSection: {
     marginBottom: 16,
-    borderWidth: 1,
+    marginTop: 16,
     borderRadius: 12,
     overflow: "hidden",
-    marginHorizontal: 10,
+    marginHorizontal: 16,
+    elevation: 5,
   },
-  menuItem: {
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-  },
-  logoutText: {
-    color: "#e53935",
-  },
+  menuItem: { paddingVertical: 16, paddingHorizontal: 16 },
+  menuText: { fontSize: 16 },
 });

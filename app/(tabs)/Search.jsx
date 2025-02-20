@@ -162,7 +162,6 @@ const Search = () => {
   };
 
   const RatingStars = ({ rating }) => {
-    let rating;
     const renderStars = (rating) => {
       let stars = [];
       for (let i = 0; i < Math.floor(rating); i++) {

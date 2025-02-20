@@ -52,6 +52,7 @@ const CategoriesSectionList = ({ data }) => {
           <Pressable
             android_ripple={{ color: theme.colors.ripple }}
             style={[styles.product, { backgroundColor: theme.colors.primary }]}
+            accessibilityLabel={`View products in ${item.title}`}
           >
             <Image
               source={
@@ -97,7 +98,11 @@ const CategoriesSectionList = ({ data }) => {
           />
           <Pressable
             onPress={() => handleShowMore(item.main_category_id)}
-            style={styles.showMoreButton}
+            style={[
+              styles.showMoreButton,
+              { backgroundColor: theme.colors.button },
+            ]}
+            accessibilityLabel={`Show more in ${item.name}`}
           >
             <Text
               style={[styles.showMoreText, { color: theme.colors.textColor }]}
@@ -108,7 +113,7 @@ const CategoriesSectionList = ({ data }) => {
         </View>
       );
     },
-    [renderSubcategoryItem, handleShowMore]
+    [renderSubcategoryItem, handleShowMore, theme]
   );
 
   const footerComponent = useMemo(
@@ -142,11 +147,6 @@ const CategoriesSectionList = ({ data }) => {
       onRefresh={onRefresh}
       initialNumToRender={5}
       windowSize={5}
-      getItemLayout={(data, index) => ({
-        length: 150,
-        offset: 150 * index,
-        index,
-      })}
     />
   );
 };
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   },
   categoryContainer: {
     marginBottom: 10,
-    paddingHorizontal: 10,
+    padding: 10, // Added padding for better spacing
   },
   header: {
     fontSize: 20,
@@ -197,9 +197,10 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: "center",
     borderRadius: 8,
+    // Removed textDecorationLine, styled as a button
   },
   showMoreText: {
-    textDecorationLine: "underline",
+    fontWeight: "bold", // Bold text for emphasis
   },
   separator: {
     borderBottomWidth: 0.5,
