@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useCallback,
-  useState,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -14,18 +9,13 @@ import {
   Share,
   ToastAndroid,
 } from "react-native";
-import {
-  Link,
-  useLocalSearchParams,
-  useNavigation,
-  useRouter,
-} from "expo-router";
+import { Link, useLocalSearchParams, useNavigation } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
-import { Icon, useTheme } from "react-native-paper";
-import { FontAwesome, Ionicons } from "@expo/vector-icons";
+import { useTheme } from "react-native-paper";
+import { FontAwesome } from "@expo/vector-icons";
 import ProductSkeleton from "../../../components/skeleton/productSkeleton";
-import Modal from "react-native-modal";
-import AlertDialog from "../../../components/ui/AlertDialog"; // Import your custom alert dialog
+import { useActionSheet } from "@expo/react-native-action-sheet";
+import AlertDialog from "../../../components/ui/AlertDialog";
 
 const ProductList = () => {
   const { subcategoryId, mainCategoryId, showmore, subCategorieName } =
@@ -42,29 +32,23 @@ const ProductList = () => {
     cartItem,
   } = useProductStore();
   const [products, setProducts] = useState([]);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertState, setAlertState] = useState({
+    title: "",
+    message: "",
+    confirmText: "Ok",
+    confirmAction: () => setAlertVisible(false),
+  });
+
   const theme = useTheme();
   const navigation = useNavigation();
-  const router = useRouter();
+  const { showActionSheetWithOptions } = useActionSheet();
 
-  // State for our long press modal
-  const [isModalVisible, setModalVisible] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [modalPosition, setModalPosition] = useState({ top: 0, left: 0 });
-
-  // State for the AlertDialog
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertTitle, setAlertTitle] = useState("");
-  const [alertMessage, setAlertMessage] = useState("");
-  const [alertConfirmText, setAlertConfirmText] = useState("Ok");
-  const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: subCategorieName,
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
-    });
-  }, [navigation, theme, subCategorieName]);
+  navigation.setOptions({
+    title: subCategorieName,
+    headerStyle: { backgroundColor: theme.colors.primary },
+    headerTintColor: theme.colors.textColor,
+  });
 
   const loadProducts = useCallback(async () => {
     try {
@@ -79,22 +63,23 @@ const ProductList = () => {
   }, [loadProducts]);
 
   useEffect(() => {
-    if (showmore) {
-      (async () => {
+    const fetchProducts = async () => {
+      if (showmore) {
         try {
           const subCategoryIds =
-            subcategories[mainCategoryId]?.data?.map(
+            subcategories[mainCategoryId]?.map(
               (subCat) => subCat.categories_id
             ) || [];
           const response = await fetchProductByCategories(subCategoryIds);
-          setProducts(response?.data || []);
+          setProducts(response);
         } catch (err) {
           console.error("Failed to fetch products for all subcategories:", err);
         }
-      })();
-    } else {
-      setProducts(productsBySubcategory[subcategoryId]?.data || []);
-    }
+      } else {
+        setProducts(productsBySubcategory[subcategoryId] || []);
+      }
+    };
+    fetchProducts();
   }, [
     showmore,
     mainCategoryId,
@@ -104,53 +89,47 @@ const ProductList = () => {
     fetchProductByCategories,
   ]);
 
-  const handleLongPress = (item, event) => {
-    const { pageX, pageY } = event.nativeEvent;
-    setSelectedProduct(item);
-    setModalPosition({ top: pageY - 50, left: pageX - 75 });
-    setModalVisible(true);
-  };
+  const handleAddToCart = useCallback(
+    async (product) => {
+      if (!user) {
+        setAlertState({
+          title: "Login Required",
+          message: "Please log in to add products to your cart.",
+          confirmAction: () => navigation.navigate("Login"),
+        });
+        setAlertVisible(true);
+        return;
+      }
 
-  // Updated add-to-cart handler that uses AlertDialog for errors
-  const handleAddToCart = async (product) => {
-    if (!user) {
-      setAlertTitle("Login Required");
-      setAlertMessage("Please log in to add products to your cart.");
-      setAlertConfirmAction(() => () => {
-        setAlertVisible(false);
-        router.navigate("/Login");
-      });
-      setAlertVisible(true);
-      return;
-    }
+      if (cartItem.some((item) => item.products_id === product.products_id)) {
+        setAlertState({
+          title: "Product already in cart",
+          message: "This product is already in your cart.",
+          confirmText: "Go to Cart",
+          confirmAction: () => navigation.navigate("screens/Cart"),
+        });
+        setAlertVisible(true);
+        return;
+      }
 
-    const productExists = cartItem.some(
-      (item) => item.products_id === product.products_id
-    );
-    if (productExists) {
-      setAlertTitle("Product already in cart");
-      setAlertMessage("This product is already in your cart.");
-      setAlertConfirmText("Go to Cart");
-      setAlertConfirmAction(() => () => router.navigate("/screens/Cart"));
-      setAlertVisible(true);
-      return;
-    }
+      try {
+        await addToCart({
+          productID: product.products_id,
+          consumerID: user.consumer_id,
+        });
+        ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
+      } catch (error) {
+        setAlertState({
+          title: "Error",
+          message: error.message || "Error adding product to cart",
+        });
+        setAlertVisible(true);
+      }
+    },
+    [user, cartItem, addToCart, navigation]
+  );
 
-    try {
-      await addToCart({
-        productID: product.products_id,
-        consumerID: user.consumer_id,
-      });
-      ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
-    } catch (error) {
-      setAlertTitle("Error");
-      setAlertMessage(error.message || "Error adding product to cart");
-      setAlertConfirmAction(() => () => setAlertVisible(false));
-      setAlertVisible(true);
-    }
-  };
-
-  const shareProduct = async (product) => {
+  const shareProduct = useCallback(async (product) => {
     try {
       await Share.share({
         message: `Check out this product: ${product.title}`,
@@ -159,49 +138,88 @@ const ProductList = () => {
     } catch (error) {
       console.error("Error sharing product:", error);
     }
-  };
+  }, []);
+
+  const showProductOptions = useCallback(
+    (product) => {
+      const options = ["Add to Cart", "Share"];
+      const cancelButtonIndex = 2;
+
+      showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          tintColor: theme.colors.button,
+        },
+        (buttonIndex) => {
+          switch (buttonIndex) {
+            case 0:
+              handleAddToCart(product);
+              break;
+            case 1:
+              shareProduct(product);
+              break;
+          }
+        }
+      );
+    },
+    [handleAddToCart, shareProduct, theme.colors.button]
+  );
 
   const renderRatingStars = useCallback(
-    (item) => (
-      <FontAwesome
-        name={item?.average_rating >= 1 ? "star" : "star-o"}
-        size={14}
-        color={item?.average_rating >= 1 ? "#FFD700" : "#ccc"}
-        style={styles.starIcon}
-      />
-    ),
-    []
+    (item) => {
+      if (!item?.average_rating || item.average_rating === 0) {
+        return null;
+      }
+      return (
+        <View style={styles.ratingContainer}>
+          <FontAwesome
+            name={item.average_rating >= 1 ? "star" : "star-o"}
+            size={14}
+            color={item.average_rating >= 1 ? "#FFD700" : "#ccc"}
+            style={styles.starIcon}
+          />
+          <Text style={{ color: theme.colors.textColor, paddingLeft: 5 }}>
+            {item.average_rating}
+          </Text>
+        </View>
+      );
+    },
+    [theme.colors.textColor]
   );
 
   const renderItem = useCallback(
     ({ item }) => (
-      <Link
-        href={{
-          pathname: "/screens/ProductDetail",
-          params: {
-            subcategoryId: item.categories_id,
-            categoryProductId: item.products_id,
-          },
-        }}
-        asChild
-      >
-        <TouchableOpacity
-          style={styles.cardContainer}
-          onLongPress={(event) => handleLongPress(item, event)}
-          delayLongPress={500}
+      <View style={styles.cardContainer}>
+        <Link
+          href={{
+            pathname: "/screens/ProductDetail",
+            params: {
+              subcategoryId: item.categories_id,
+              categoryProductId: item.products_id,
+            },
+          }}
+          asChild
         >
-          <View style={styles.card}>
-            <Image
-              source={
-                item.product_image
-                  ? { uri: item.product_image }
-                  : require("../../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.productImage}
-              resizeMode="cover"
-            />
-            <View style={styles.cardContent}>
-              <View>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onLongPress={() => {
+              console.log("Long press detected:", item.title); // Debug log
+              showProductOptions(item);
+            }}
+            delayLongPress={500}
+          >
+            <View style={styles.card}>
+              <Image
+                source={
+                  item.product_image
+                    ? { uri: item.product_image }
+                    : require("../../../assets/images/imageSkeleton.jpg")
+                }
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+              <View style={styles.cardContent}>
                 <Text
                   style={[
                     styles.productTitle,
@@ -216,48 +234,37 @@ const ProductList = () => {
                 >
                   {item.spu}
                 </Text>
-                <View style={{ flexDirection: "row" }}>
+                <View style={styles.brandContainer}>
                   <Text
                     style={[styles.brand, { color: theme.colors.textColor }]}
                   >
-                    Brand:{" "}
-                  </Text>
-                  <Text
-                    style={[styles.brand, { color: theme.colors.textColor }]}
-                  >
-                    {item.brand_title}
+                    Brand: {item.brand_title}
                   </Text>
                 </View>
-                <View style={styles.ratingContainer}>
-                  {renderRatingStars(item)}
-                  <Text
-                    style={{
-                      color: theme.colors.textColor,
-                      paddingLeft: 5,
-                    }}
-                  >
-                    {item.average_rating}
-                  </Text>
-                </View>
+                {renderRatingStars(item)}
               </View>
             </View>
-          </View>
-        </TouchableOpacity>
-      </Link>
+          </TouchableOpacity>
+        </Link>
+      </View>
     ),
-    [navigation, theme]
+    [theme, showProductOptions, renderRatingStars]
   );
 
-  return error ? (
-    <View
-      style={[
-        styles.centerContainer,
-        { backgroundColor: theme.colors.primary },
-      ]}
-    >
-      <Text style={styles.errorText}>Error: {error}</Text>
-    </View>
-  ) : (
+  if (error) {
+    return (
+      <View
+        style={[
+          styles.centerContainer,
+          { backgroundColor: theme.colors.primary },
+        ]}
+      >
+        <Text style={styles.errorText}>Error: {error}</Text>
+      </View>
+    );
+  }
+
+  return (
     <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
       <FlatList
         data={loading ? Array(6).fill(null) : products}
@@ -278,116 +285,29 @@ const ProductList = () => {
           { backgroundColor: theme.colors.background },
         ]}
         ListEmptyComponent={
-          <View style={styles.centerContainer}>
-            <Text
-              style={[styles.messageText, { color: theme.colors.textColor }]}
-            >
-              No products found.
-            </Text>
-          </View>
+          !loading && (
+            <View style={styles.centerContainer}>
+              <Text
+                style={[styles.messageText, { color: theme.colors.textColor }]}
+              >
+                No products found.
+              </Text>
+            </View>
+          )
         }
         initialNumToRender={10}
+        maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews
       />
 
-      {selectedProduct && (
-        <Modal
-          isVisible={isModalVisible}
-          onBackdropPress={() => setModalVisible(false)}
-          onBackButtonPress={() => setModalVisible(false)}
-          animationIn="zoomIn"
-          animationOut="zoomOut"
-          backdropOpacity={0}
-          style={[
-            styles.modal,
-            {
-              top: modalPosition.top,
-              left: modalPosition.left,
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.modalContainer,
-              { backgroundColor: theme.colors.primary },
-            ]}
-          >
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                handleAddToCart(selectedProduct);
-                setModalVisible(false);
-              }}
-            >
-              <Ionicons
-                name="cart-outline"
-                size={16}
-                color={theme.colors.button}
-              />
-              <Text
-                style={[styles.modalButtonText, { color: theme.colors.button }]}
-              >
-                Add to Cart
-              </Text>
-            </TouchableOpacity>
-            <View
-              style={{
-                borderWidth: 0.5,
-                borderColor: "#ccc",
-                width: "100%",
-              }}
-            />
-            <TouchableOpacity
-              style={styles.modalButton}
-              onPress={() => {
-                shareProduct(selectedProduct);
-                setModalVisible(false);
-              }}
-            >
-              <Ionicons
-                name="share-social-outline"
-                size={16}
-                color={theme.colors.button}
-              />
-              <Text
-                style={[styles.modalButtonText, { color: theme.colors.button }]}
-              >
-                Share
-              </Text>
-            </TouchableOpacity>
-            <View
-              style={{
-                borderWidth: 0.5,
-                borderColor: "#ccc",
-                width: "100%",
-              }}
-            />
-            <TouchableOpacity
-              style={styles.modalCancelButton}
-              onPress={() => setModalVisible(false)}
-            >
-              <Text
-                style={[
-                  styles.modalCancelButtonText,
-                  { color: theme.colors.inactiveColor },
-                ]}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Modal>
-      )}
-
-      {/* Alert Dialog Component */}
       <AlertDialog
         visible={alertVisible}
-        title={alertTitle}
-        message={alertMessage}
+        title={alertState.title}
+        message={alertState.message}
         onDismiss={() => setAlertVisible(false)}
-        onConfirm={alertConfirmAction}
-        confirmText={alertConfirmText}
+        onConfirm={alertState.confirmAction}
+        confirmText={alertState.confirmText}
         cancelText="Cancel"
       />
     </View>
@@ -407,7 +327,6 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 16,
-    color: "#555",
     textAlign: "center",
   },
   cardContainer: {
@@ -427,7 +346,6 @@ const styles = StyleSheet.create({
   cardContent: {
     flex: 1,
     paddingLeft: 15,
-    flexDirection: "row",
   },
   productTitle: {
     fontSize: 16,
@@ -437,6 +355,12 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 18,
     fontWeight: "bold",
+  },
+  brandContainer: {
+    paddingTop: 5,
+  },
+  brand: {
+    fontSize: 14,
   },
   separator: {
     borderTopWidth: 0.5,
@@ -448,37 +372,6 @@ const styles = StyleSheet.create({
   starIcon: {
     marginRight: 1,
   },
-  brand: {
-    paddingTop: 5,
-  },
-  modalContainer: {
-    borderRadius: 10,
-    alignItems: "center",
-    elevation: 100,
-    width: 150,
-  },
-  modalButton: {
-    padding: 10,
-    width: "100%",
-    flexDirection: "row",
-  },
-  modalButtonText: {
-    fontSize: 16,
-    textAlign: "left",
-    paddingLeft: 4,
-  },
-  modalCancelButton: {
-    width: "100%",
-    padding: 10,
-  },
-  modalCancelButtonText: {
-    fontSize: 16,
-    textAlign: "left",
-  },
-  modal: {
-    position: "absolute",
-    margin: 0,
-  },
 });
 
-export default ProductList;
+export default React.memo(ProductList);

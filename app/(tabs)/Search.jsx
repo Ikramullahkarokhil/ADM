@@ -47,7 +47,7 @@ const Search = () => {
 
   const { searchProductData, productData, error, subcategories } =
     useProductStore();
-  const data = productData?.data ?? [];
+  const data = productData;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -72,29 +72,31 @@ const Search = () => {
 
   // Get unique brands for filter options
   const brands = useMemo(() => {
-    const uniqueBrands = [...new Set(data.map((item) => item.brand_title))];
+    const uniqueBrands = [
+      ...new Set(productData.map((item) => item.brand_title)),
+    ];
     return uniqueBrands.length > 0 ? uniqueBrands : ["No brands available"];
-  }, [data]);
+  }, [productData]);
 
   // Get unique subcategories from product data (by their IDs)
   const categoriesFromData = useMemo(() => {
     const uniqueCategories = [
-      ...new Set(data.map((item) => item.categories_id)),
+      ...new Set(productData.map((item) => item.categories_id)),
     ];
     return uniqueCategories;
-  }, [data]);
+  }, [productData]);
 
   const categoryOptions = useMemo(() => {
     if (!subcategories || !categoriesFromData)
       return [{ id: 0, name: "No categories available" }];
     return Object.values(subcategories)
-      .flatMap((category) => category?.data || [])
+      .flatMap((category) => category)
       .filter((subcat) => subcat && categoriesFromData.includes(subcat.id));
   }, [subcategories, categoriesFromData]);
 
   const priceBounds = useMemo(() => {
-    if (data.length === 0) return [0, 10000];
-    const prices = data
+    if (productData.length === 0) return [0, 10000];
+    const prices = productData
       .map((item) => parseFloat(item.spu))
       .filter(
         (price) => !isNaN(price) && price !== null && price !== undefined
@@ -102,11 +104,11 @@ const Search = () => {
     return prices.length > 0
       ? [Math.min(...prices), Math.max(...prices)]
       : [0, 10000];
-  }, [data]);
+  }, [productData]);
 
   // Memoized filtered products
   const filteredProducts = useMemo(() => {
-    return data.filter((product) => {
+    return productData.filter((product) => {
       // Rating filter
       if (filters.minRating > 0) {
         const rating = product.average_rating || 0;
@@ -136,7 +138,7 @@ const Search = () => {
 
       return true;
     });
-  }, [data, filters]);
+  }, [productData, filters]);
 
   // Refresh control
   const onRefresh = () => {
@@ -286,19 +288,21 @@ const Search = () => {
           <View style={styles.filterSection}>
             <Text style={styles.filterTitle}>Brands</Text>
             <View style={styles.chipContainer}>
-              {brands.map((brand) => (
-                <TouchableOpacity
-                  key={brand}
-                  style={[
-                    styles.filterChip,
-                    filters.selectedBrands.includes(brand) &&
-                      styles.selectedChip,
-                  ]}
-                  onPress={() => handleChipPress("selectedBrands", brand)}
-                >
-                  <Text style={styles.chipText}>{brand}</Text>
-                </TouchableOpacity>
-              ))}
+              {brands
+                .filter((brand) => brand.toLowerCase() !== "none")
+                .map((brand) => (
+                  <TouchableOpacity
+                    key={brand}
+                    style={[
+                      styles.filterChip,
+                      filters.selectedBrands.includes(brand) &&
+                        styles.selectedChip,
+                    ]}
+                    onPress={() => handleChipPress("selectedBrands", brand)}
+                  >
+                    <Text style={styles.chipText}>{brand}</Text>
+                  </TouchableOpacity>
+                ))}
             </View>
           </View>
 
@@ -616,6 +620,7 @@ const styles = StyleSheet.create({
     height: 20,
     width: 20,
     borderRadius: 10,
+    marginLeft: 20,
   },
   selectedTrack: {
     backgroundColor: "#2196f3",

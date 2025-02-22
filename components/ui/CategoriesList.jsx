@@ -18,13 +18,7 @@ const CategoriesSectionList = ({ data }) => {
   const { width } = useWindowDimensions();
   const numColumns = width > 550 ? 4 : 2;
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
   const { isDarkTheme } = useThemeStore();
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
-  }, []);
 
   const handleShowMore = useCallback(
     (mainCategoryId) => {
@@ -100,7 +94,7 @@ const CategoriesSectionList = ({ data }) => {
             onPress={() => handleShowMore(item.main_category_id)}
             style={[
               styles.showMoreButton,
-              { backgroundColor: theme.colors.button },
+              { backgroundColor: theme.colors.primary },
             ]}
             accessibilityLabel={`Show more in ${item.name}`}
           >
@@ -142,9 +136,6 @@ const CategoriesSectionList = ({ data }) => {
       keyExtractor={(item) => item.main_category_id.toString()}
       contentContainerStyle={styles.container}
       ItemSeparatorComponent={() => <View style={styles.separator} />}
-      ListFooterComponent={footerComponent}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
       initialNumToRender={5}
       windowSize={5}
     />
@@ -164,7 +155,7 @@ const styles = StyleSheet.create({
   },
   categoryContainer: {
     marginBottom: 10,
-    padding: 10, // Added padding for better spacing
+    padding: 10,
   },
   header: {
     fontSize: 20,
@@ -197,6 +188,7 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: "center",
     borderRadius: 8,
+    elevation: 5,
     // Removed textDecorationLine, styled as a button
   },
   showMoreText: {

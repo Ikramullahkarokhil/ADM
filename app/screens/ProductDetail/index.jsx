@@ -34,6 +34,7 @@ import {
   GestureHandlerRootView,
   Swipeable,
 } from "react-native-gesture-handler";
+import { useActionSheet } from "@expo/react-native-action-sheet"; // Import the action sheet hook
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -42,6 +43,7 @@ const ProductDetail = () => {
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();
+  const { showActionSheetWithOptions } = useActionSheet(); // Initialize action sheet
 
   // State variables
   const [isFavorite, setIsFavorite] = useState(false);
@@ -71,17 +73,17 @@ const ProductDetail = () => {
     deleteProductQuestion,
   } = useProductStore();
 
-  // Derive the product from available data
+  // Derive the product
   const product = useMemo(() => {
     try {
       if (id) {
-        const data = productData?.data || [];
-        return data.find((item) => item.products_id.toString() === id) || null;
+        return (
+          productData.find((item) => item.products_id.toString() === id) || null
+        );
       }
       if (subcategoryId) {
-        const productList = productsBySubcategory[subcategoryId]?.data || [];
         return (
-          productList.find(
+          productsBySubcategory[subcategoryId].find(
             (item) => item.products_id.toString() === categoryProductId
           ) || null
         );
@@ -105,7 +107,7 @@ const ProductDetail = () => {
     [cartItem, product]
   );
 
-  // Update header title and style
+  // Update header
   useLayoutEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
@@ -114,13 +116,13 @@ const ProductDetail = () => {
     });
   }, [navigation, product, theme]);
 
-  // Refresh questions when pulling down
+  // Refresh questions
   const onRefresh = useCallback(async () => {
     if (!product) return;
     setRefreshing(true);
     try {
       const questionData = await getProductQuestionList(product.products_id);
-      setQuestions(questionData.questions || []);
+      setQuestions(questionData);
       setTotalQuestions(questionData.total);
     } catch (err) {
       console.error("Refresh error:", err);
@@ -129,7 +131,7 @@ const ProductDetail = () => {
     }
   }, [product, getProductQuestionList]);
 
-  // Update favorite state when product or favorites change
+  // Update favorite state
   useEffect(() => {
     if (product && favProducts) {
       setIsFavorite(
@@ -138,19 +140,19 @@ const ProductDetail = () => {
     }
   }, [product, favProducts]);
 
-  // Fetch questions on product load
+  // Fetch questions
   useEffect(() => {
     if (product) {
       const fetchQuestions = async () => {
         const questionData = await getProductQuestionList(product.products_id);
-        setQuestions(questionData.questions || []);
+        setQuestions(questionData);
         setTotalQuestions(questionData.total);
       };
       fetchQuestions();
     }
   }, [product, getProductQuestionList]);
 
-  // Helper to show alerts
+  // Show alert helper
   const showAlert = useCallback(
     (
       title,
@@ -222,8 +224,10 @@ const ProductDetail = () => {
     if (!user) return navigation.navigate("Login");
     if (isFavoriting || !product) return;
     setIsFavoriting(true);
+    const previousFavorite = isFavorite;
+    setIsFavorite(!previousFavorite);
     try {
-      if (!isFavorite) {
+      if (!previousFavorite) {
         await addToFavorite({
           productID: product.products_id,
           consumerID: user.consumer_id,
@@ -244,8 +248,8 @@ const ProductDetail = () => {
           );
         }
       }
-      setIsFavorite(!isFavorite);
     } catch (err) {
+      setIsFavorite(previousFavorite);
       showAlert("Error", err.message);
     } finally {
       setIsFavoriting(false);
@@ -295,6 +299,45 @@ const ProductDetail = () => {
     ]
   );
 
+  // Update question handler (placeholder - implement your logic)
+  const handleUpdateQuestion = useCallback(
+    (questionId) => {
+      ToastAndroid.show(
+        "Update functionality not implemented",
+        ToastAndroid.SHORT
+      );
+    },
+    [router]
+  );
+
+  // Show action sheet for a question
+  const showQuestionActionSheet = useCallback(
+    (questionId) => {
+      const options = ["Edit", "Delete"];
+      const destructiveButtonIndex = 1; // "Delete" is destructive
+      const cancelButtonIndex = 2;
+
+      showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          destructiveButtonIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            // Update
+            handleUpdateQuestion(questionId);
+          } else if (buttonIndex === 1) {
+            // Delete
+            handleDeleteQuestion(questionId);
+          }
+          // Cancel does nothing
+        }
+      );
+    },
+    [showActionSheetWithOptions, handleUpdateQuestion, handleDeleteQuestion]
+  );
+
   // Render rating stars
   const ratingStars = useMemo(() => {
     const rating = Math.floor(product?.average_rating || 0);
@@ -309,14 +352,14 @@ const ProductDetail = () => {
     ));
   }, [product?.average_rating]);
 
-  // Prepare images and displayed questions
+  // Prepare images and questions
   const displayedQuestions = questions.slice(0, 3);
   const images =
     product?.product_images?.length > 0
       ? product.product_images
       : [require("../../../assets/images/imageSkeleton.jpg")];
 
-  // Error and Product Not Found views
+  // Error and Not Found views
   if (error) {
     return (
       <View
@@ -368,20 +411,6 @@ const ProductDetail = () => {
       </View>
     );
   }
-
-  // Render right actions for swipe-to-delete
-  const renderRightActions = useCallback(
-    (questionId) => (
-      <View style={styles.deleteContainer}>
-        <IconButton
-          icon="delete"
-          iconColor={theme.colors.primary}
-          onPress={() => handleDeleteQuestion(questionId)}
-        />
-      </View>
-    ),
-    [handleDeleteQuestion, theme.colors.primary]
-  );
 
   return (
     <View style={styles.mainContainer}>
@@ -463,7 +492,7 @@ const ProductDetail = () => {
           </View>
           <View style={styles.ratingContainer}>{ratingStars}</View>
           <Text style={[styles.price, { color: theme.colors.button }]}>
-            {product.spu} {/* Assuming spu is price; adjust if incorrect */}
+            {product.spu}
           </Text>
           {product.description && (
             <Text
@@ -543,67 +572,64 @@ const ProductDetail = () => {
         </View>
 
         {/* Questions Section */}
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <View
-            style={[
-              styles.questionsSection,
-              { backgroundColor: theme.colors.primary },
-            ]}
+
+        <View
+          style={[
+            styles.questionsSection,
+            { backgroundColor: theme.colors.primary },
+          ]}
+        >
+          <Text
+            style={[styles.questionsTitle, { color: theme.colors.textColor }]}
           >
+            Product Questions ({totalQuestions})
+          </Text>
+          {displayedQuestions.length > 0 ? (
+            displayedQuestions.map((q) => {
+              const isUserQuestion = user && q.consumer_id === user.consumer_id;
+              const canEditOrDelete =
+                isUserQuestion && (!q.answers || q.answers.length === 0);
+              return (
+                <Pressable
+                  onPress={
+                    canEditOrDelete
+                      ? () => showQuestionActionSheet(q.products_qna_id)
+                      : undefined
+                  }
+                  key={q.products_qna_id}
+                >
+                  <QuestionItem item={q} theme={theme} />
+                </Pressable>
+              );
+            })
+          ) : (
             <Text
-              style={[styles.questionsTitle, { color: theme.colors.textColor }]}
+              style={[
+                styles.noQuestionsText,
+                { color: theme.colors.textColor },
+              ]}
             >
-              Product Questions ({totalQuestions})
+              No questions yet.
             </Text>
-            {displayedQuestions.length > 0 ? (
-              displayedQuestions.map((q) => {
-                const isUserQuestion =
-                  user && q.consumer_id === user.consumer_id;
-                return (
-                  <Swipeable
-                    key={q.products_qna_id}
-                    renderRightActions={
-                      isUserQuestion && (!q.answers || q.answers.length === 0)
-                        ? () => renderRightActions(q.products_qna_id)
-                        : null
-                    }
-                  >
-                    <QuestionItem item={q} theme={theme} />
-                  </Swipeable>
-                );
-              })
-            ) : (
-              <Text
-                style={[
-                  styles.noQuestionsText,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                No questions yet.
-              </Text>
-            )}
-            <Link
-              href={{
-                pathname: "/screens/Questions",
-                params: { productId: product.products_id },
-              }}
-              asChild
+          )}
+          <Link
+            href={{
+              pathname: "/screens/Questions",
+              params: { productId: product.products_id },
+            }}
+            asChild
+          >
+            <Button
+              mode="outlined"
+              textColor={theme.colors.button}
+              style={[styles.askQuestion, { borderColor: theme.colors.button }]}
+              icon="comment-question-outline"
+              accessibilityLabel="Ask a question"
             >
-              <Button
-                mode="outlined"
-                textColor={theme.colors.button}
-                style={[
-                  styles.askQuestion,
-                  { borderColor: theme.colors.button },
-                ]}
-                icon="comment-question-outline"
-                accessibilityLabel="Ask a question"
-              >
-                Ask a Question
-              </Button>
-            </Link>
-          </View>
-        </GestureHandlerRootView>
+              Ask a Question
+            </Button>
+          </Link>
+        </View>
       </ScrollView>
 
       {/* Alert Dialog */}
@@ -629,7 +655,7 @@ const QuestionItem = memo(({ item, theme }) => (
     style={[
       styles.questionItem,
       {
-        backgroundColor: theme.colors.background,
+        backgroundColor: theme.colors.primary,
         borderBottomColor: theme.colors.subInactiveColor,
       },
     ]}
@@ -701,6 +727,7 @@ const QuestionItem = memo(({ item, theme }) => (
   </View>
 ));
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
@@ -712,7 +739,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   image: {
-    width: "100%", // Ensure full width
+    width: "100%",
     height: "100%",
   },
   dotContainer: {

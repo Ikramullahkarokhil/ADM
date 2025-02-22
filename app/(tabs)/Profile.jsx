@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   View,
-  Image,
   Text,
   Alert,
 } from "react-native";
@@ -44,7 +43,7 @@ const ProfileHeader = ({
       >
         <Avatar.Image
           source={{ uri: profileImage }}
-          size={80}
+          size={60}
           style={{ backgroundColor: theme.colors.surface }}
         />
       </TouchableRipple>
@@ -64,8 +63,9 @@ const Profile = () => {
   const theme = useTheme();
   const { setThemeMode } = useThemeStore();
   const { showActionSheetWithOptions } = useActionSheet();
-  const { uploadConsumerImage, profileData, logout } = useProductStore();
-  const [image, setImage] = useState(null);
+  const { uploadConsumerImage, profileData, logout, fetchProfileData } =
+    useProductStore();
+  const [imageUri, setImageUri] = useState(null);
   const navigation = useNavigation();
   const router = useRouter();
   const [isChangePasswordModalVisible, setChangePasswordModalVisible] =
@@ -132,61 +132,87 @@ const Profile = () => {
     const permissionResult =
       await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) {
-      Alert.alert("Permission to access gallery is required!");
+      Alert.alert(
+        "Permission Denied",
+        "Permission to access gallery is required!"
+      );
       return;
     }
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: "images",
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
       aspect: [1, 1],
       quality: 1,
     });
-    if (!result.canceled) setImage(result.assets[0].uri);
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
   }, []);
 
   const handleUpload = useCallback(async () => {
-    if (!image) return Alert.alert("Please select an image first.");
-    const MAX_SIZE = 100 * 1024; // 100KB
-    let fileInfo = await FileSystem.getInfoAsync(image);
-    if (fileInfo.size > MAX_SIZE) {
-      let currentUri = image;
-      let quality = 0.7;
-      let iterations = 0;
-      const maxIterations = 5;
-      while (fileInfo.size > MAX_SIZE && iterations < maxIterations) {
-        const manipResult = await ImageManipulator.manipulateAsync(
-          currentUri,
-          [],
-          { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        currentUri = manipResult.uri;
-        fileInfo = await FileSystem.getInfoAsync(currentUri);
-        quality *= 0.7;
-        iterations++;
-      }
-      if (fileInfo.size > MAX_SIZE) {
-        Alert.alert(
-          "Image too large",
-          "Could not compress the image below 100KB."
-        );
-        return;
-      }
-      setImage(currentUri);
-    }
+    if (!imageUri) return;
+
+    const MAX_SIZE = 100 * 1024;
+    let manipResult = { uri: imageUri };
+
     try {
-      await uploadConsumerImage({
-        image: { uri: image, name: "photo.jpg", type: "image/jpeg" },
-        consumer_id: profileData?.consumer_id,
+      const info = await FileSystem.getInfoAsync(imageUri);
+      let size = info.size;
+
+      if (size > MAX_SIZE) {
+        let quality = 0.7;
+        let iterations = 0;
+        const maxIterations = 5;
+
+        while (size > MAX_SIZE && iterations < maxIterations) {
+          manipResult = await ImageManipulator.manipulateAsync(
+            manipResult.uri,
+            [],
+            { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          const newInfo = await FileSystem.getInfoAsync(manipResult.uri);
+          size = newInfo.size;
+          quality *= 0.7;
+          iterations++;
+        }
+
+        if (size > MAX_SIZE) {
+          Alert.alert(
+            "Image Too Large",
+            "Could not compress the image below 100KB."
+          );
+          return;
+        }
+      }
+
+      const apiUrl =
+        "https://demo.ucsofficialstore.com/api/consumer/upload-image";
+      const response = await FileSystem.uploadAsync(apiUrl, manipResult.uri, {
+        httpMethod: "POST",
+        headers: { Accept: "application/json" },
+        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+        fieldName: "image",
+        parameters: { consumer_id: profileData?.consumer_id },
       });
-      Alert.alert("Success", "Image uploaded successfully!");
+
+      const result = JSON.parse(response.body);
+      if (response.status === 200) {
+        Alert.alert("Success", "Profile image uploaded successfully!");
+        setImageUri(null);
+        await fetchProfileData(); // Refresh profile data
+      } else {
+        Alert.alert("Upload Failed", result.message || "Upload failed");
+      }
     } catch (error) {
-      Alert.alert("Upload failed", error.message);
+      Alert.alert("Error", error.message || "Failed to upload image");
     }
-  }, [image, profileData?.consumer_id, uploadConsumerImage]);
+  }, [imageUri, profileData?.consumer_id, fetchProfileData]);
 
   useEffect(() => {
-    if (image) handleUpload();
-  }, [image, handleUpload]);
+    if (imageUri) handleUpload();
+  }, [imageUri, handleUpload]);
 
   const accountSettings = [
     { label: "Update Profile", screen: "UpdateProfile" },
@@ -209,12 +235,7 @@ const Profile = () => {
 
   const renderMenuGroup = (items) => (
     <View
-      style={[
-        styles.menuSection,
-        {
-          backgroundColor: theme.colors.primary,
-        },
-      ]}
+      style={[styles.menuSection, { backgroundColor: theme.colors.primary }]}
     >
       {items.map((item, index) => (
         <View key={index}>
@@ -251,7 +272,7 @@ const Profile = () => {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: theme.colors.primary }]}
+      style={[styles.safeArea, { backgroundColor: theme.colors.background }]}
     >
       <ScrollView contentContainerStyle={styles.container}>
         <ProfileHeader
@@ -284,7 +305,7 @@ const styles = StyleSheet.create({
   headerContainer: {
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 20,
+    paddingTop: 35,
     paddingHorizontal: 16,
     elevation: 4,
   },

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback, useEffect, memo } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,65 +10,78 @@ import {
   KeyboardAvoidingView,
   Platform,
   Animated,
+  Pressable,
 } from "react-native";
 import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../components/api/useProductStore";
 import { Link, useRouter } from "expo-router";
 import { Button, useTheme } from "react-native-paper";
-import { LinearGradient } from "expo-linear-gradient";
 import * as NavigationBar from "expo-navigation-bar";
 
+// Validation schema
 const loginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
   password: Yup.string().min(6, "Too Short!").required("Required"),
 });
 
-const FormikInput = ({
-  fieldName,
-  theme,
-  secureTextEntry,
-  toggleSecure,
-  ...props
-}) => {
-  const [field, meta, helpers] = useField(fieldName);
-  return (
-    <View style={styles.inputContainer}>
-      <View style={styles.inputWrapper}>
-        <TextInput
-          value={field.value}
-          onChangeText={helpers.setValue}
-          onBlur={() => helpers.setTouched(true)}
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.colors.surface,
-              color: theme.colors.text,
-              borderColor: "rgba(255, 255, 255, 0.4)",
-            },
-            meta.touched && meta.error && styles.errorInput,
-          ]}
-          placeholderTextColor={theme.colors.inactiveColor}
-          secureTextEntry={secureTextEntry}
-          {...props}
-        />
-        {fieldName === "password" && (
-          <TouchableOpacity onPress={toggleSecure} style={styles.eyeIcon}>
-            <Text style={{ color: theme.colors.textColor }}>
-              {secureTextEntry ? "👁️" : "👁️‍🗨️"}
-            </Text>
-          </TouchableOpacity>
+// Memoized FormikInput component
+const FormikInput = memo(
+  ({ fieldName, theme, secureTextEntry, toggleSecure, ...props }) => {
+    const [field, meta, helpers] = useField(fieldName);
+
+    const handleChange = useCallback(
+      (text) => {
+        helpers.setValue(text);
+      },
+      [helpers]
+    );
+
+    const handleBlur = useCallback(() => {
+      helpers.setTouched(true);
+    }, [helpers]);
+
+    return (
+      <View style={styles.inputContainer}>
+        <View style={styles.inputWrapper}>
+          <TextInput
+            value={field.value}
+            onChangeText={handleChange}
+            onBlur={handleBlur}
+            style={[
+              styles.input,
+              {
+                backgroundColor: theme.colors.surface,
+                color: theme.colors.text,
+                borderColor: theme.colors.borderColor,
+              },
+              meta.touched && meta.error && styles.errorInput,
+            ]}
+            placeholderTextColor={theme.colors.inactiveColor}
+            secureTextEntry={secureTextEntry}
+            {...props}
+          />
+          {fieldName === "password" && (
+            <TouchableOpacity onPress={toggleSecure} style={styles.eyeIcon}>
+              <Text style={{ color: theme.colors.textColor }}>
+                {secureTextEntry ? "👁️" : "👁️‍🗨️"}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {meta.touched && meta.error && (
+          <Text
+            style={[styles.errorText, { color: theme.colors.deleteButton }]}
+          >
+            {meta.error}
+          </Text>
         )}
       </View>
-      {meta.touched && meta.error && (
-        <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
-          {meta.error}
-        </Text>
-      )}
-    </View>
-  );
-};
+    );
+  }
+);
 
+// Main Login component
 const Login = () => {
   const router = useRouter();
   const { loginUser, loginLoading, loginError } = useProductStore();
@@ -76,7 +89,7 @@ const Login = () => {
   const [fadeAnim] = useState(new Animated.Value(0));
   const [secureTextEntry, setSecureTextEntry] = useState(true);
 
-  React.useEffect(() => {
+  useEffect(() => {
     // Fade-in animation
     Animated.timing(fadeAnim, {
       toValue: 1,
@@ -84,13 +97,13 @@ const Login = () => {
       useNativeDriver: true,
     }).start();
 
-    // Set navigation bar color to match gradient
+    // Set navigation bar color
     const setNavigationBarColor = async () => {
       try {
-        await NavigationBar.setBackgroundColorAsync(theme.colors.gradientEnd);
+        await NavigationBar.setBackgroundColorAsync(theme.colors.primary);
         await NavigationBar.setButtonStyleAsync(
           theme === theme.darkTheme ? "light" : "dark"
-        ); // Adjust button style based on theme
+        );
       } catch (error) {
         console.error("Error setting navigation bar color:", error);
       }
@@ -98,145 +111,131 @@ const Login = () => {
     setNavigationBarColor();
   }, [fadeAnim, theme]);
 
-  const handleLogin = async (values) => {
-    try {
-      await loginUser(values);
-      router.push("(tabs)");
-    } catch (error) {
-      console.error("Login Error:", error);
-    }
-  };
+  const handleLogin = useCallback(
+    async (values) => {
+      try {
+        await loginUser(values);
+        router.push("(tabs)");
+      } catch (error) {
+        console.error("Login Error:", error);
+      }
+    },
+    [loginUser, router]
+  );
 
-  const toggleSecure = () => setSecureTextEntry((prev) => !prev);
+  const toggleSecure = useCallback(() => {
+    setSecureTextEntry((prev) => !prev);
+  }, []);
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <LinearGradient
-        colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-        style={styles.gradientBackground}
-      >
-        <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          <View style={styles.logoContainer}>
-            <Image
-              source={require("../assets/images/darkLogo.png")}
-              style={styles.logo}
-              resizeMode="contain"
-              accessibilityLabel="App Logo"
-            />
-          </View>
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../assets/images/darkLogo.png")}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="App Logo"
+          />
+        </View>
 
-          <Text style={[styles.title, { color: theme.colors.textColor }]}>
-            Welcome Back
-          </Text>
-          <Text
-            style={[styles.subtitle, { color: theme.colors.inactiveColor }]}
-          >
-            Sign in to your account
-          </Text>
+        <Text style={[styles.title, { color: theme.colors.textColor }]}>
+          Welcome Back
+        </Text>
+        <Text style={[styles.subtitle, { color: theme.colors.inactiveColor }]}>
+          Sign in to your account
+        </Text>
 
-          <Formik
-            initialValues={{ email: "", password: "" }}
-            validationSchema={loginSchema}
-            onSubmit={handleLogin}
-          >
-            {({ handleSubmit }) => (
-              <View
-                style={[
-                  styles.form,
-                  { backgroundColor: "rgba(255, 255, 255, 0.05)" },
-                ]}
-              >
-                <FormikInput
-                  fieldName="email"
-                  placeholder="Email"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  theme={theme}
-                  accessibilityLabel="Email input"
-                />
-                <FormikInput
-                  fieldName="password"
-                  placeholder="Password"
-                  secureTextEntry={secureTextEntry}
-                  toggleSecure={toggleSecure}
-                  autoCapitalize="none"
-                  theme={theme}
-                  accessibilityLabel="Password input"
-                />
-                {loginError && (
-                  <Text
-                    style={[styles.error, { color: theme.colors.deleteButton }]}
-                  >
-                    {loginError}
-                  </Text>
-                )}
-                <LinearGradient
-                  colors={[
-                    theme.colors.buttonGradientStart,
-                    theme.colors.buttonGradientEnd,
-                  ]}
-                  style={styles.button}
+        <Formik
+          initialValues={{ email: "", password: "" }}
+          validationSchema={loginSchema}
+          onSubmit={handleLogin}
+        >
+          {({ handleSubmit }) => (
+            <View style={styles.form}>
+              <FormikInput
+                fieldName="email"
+                placeholder="Email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                theme={theme}
+                accessibilityLabel="Email input"
+              />
+              <FormikInput
+                fieldName="password"
+                placeholder="Password"
+                secureTextEntry={secureTextEntry}
+                toggleSecure={toggleSecure}
+                autoCapitalize="none"
+                theme={theme}
+                accessibilityLabel="Password input"
+              />
+              {loginError && (
+                <Text
+                  style={[styles.error, { color: theme.colors.deleteButton }]}
                 >
-                  <TouchableOpacity
-                    onPress={handleSubmit}
-                    disabled={loginLoading}
-                    accessibilityLabel="Sign in button"
-                    style={styles.buttonInner}
-                  >
-                    {loginLoading ? (
-                      <ActivityIndicator color={theme.colors.activeColor} />
-                    ) : (
-                      <Text style={styles.buttonText}>Sign In</Text>
-                    )}
-                  </TouchableOpacity>
-                </LinearGradient>
+                  {loginError}
+                </Text>
+              )}
+              <TouchableOpacity
+                onPress={handleSubmit}
+                disabled={loginLoading}
+                style={[
+                  styles.button,
+                  { backgroundColor: theme.colors.button },
+                ]}
+                accessibilityLabel="Sign in button"
+              >
+                {loginLoading ? (
+                  <ActivityIndicator color={theme.colors.activeColor} />
+                ) : (
+                  <Text style={styles.buttonText}>Sign In</Text>
+                )}
+              </TouchableOpacity>
 
-                <View style={styles.footer}>
-                  <Link href="/screens/Signup" asChild>
+              <View style={styles.footer}>
+                <Link href="/screens/Signup" asChild>
+                  <Pressable style={{ flexDirection: "row" }}>
                     <Text
                       style={[styles.link, { color: theme.colors.textColor }]}
                     >
                       Don’t have an account?{" "}
-                      <Text style={{ color: theme.colors.button }}>
-                        Sign Up
-                      </Text>
                     </Text>
-                  </Link>
-                  <Link href="(tabs)" asChild>
-                    <Button
-                      mode="text"
-                      textColor={theme.colors.textColor}
-                      style={styles.skipButton}
-                    >
-                      Skip
-                    </Button>
-                  </Link>
-                </View>
+                    <Text style={[styles.link, { color: theme.colors.button }]}>
+                      Sign Up
+                    </Text>
+                  </Pressable>
+                </Link>
+                <Link href="(tabs)" asChild>
+                  <Button
+                    mode="text"
+                    textColor={theme.colors.textColor}
+                    style={styles.skipButton}
+                  >
+                    Skip
+                  </Button>
+                </Link>
               </View>
-            )}
-          </Formik>
-        </Animated.View>
-      </LinearGradient>
+            </View>
+          )}
+        </Formik>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 };
-
-export default Login;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradientBackground: {
+  content: {
     flex: 1,
+    alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
-  },
-  content: {
-    alignItems: "center",
   },
   logoContainer: {
     marginBottom: 48,
@@ -260,6 +259,7 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 20,
     padding: 24,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
   },
@@ -294,10 +294,6 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 16,
     marginTop: 24,
-    overflow: "hidden",
-  },
-  buttonInner: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -323,3 +319,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
   },
 });
+
+export default memo(Login);

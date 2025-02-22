@@ -5,7 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 
 const CategoriesSkeleton = () => {
   return (
-    <View style={{ padding: 10, flex: 1 }}>
+    <View style={{ padding: 5, paddingTop: 10, flex: 1 }}>
       <Skeleton
         LinearGradientComponent={LinearGradient}
         animation="wave"

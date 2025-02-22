@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  Image,
   ScrollView,
 } from "react-native";
 import { Formik, useField } from "formik";
@@ -16,7 +15,6 @@ import { Link, useNavigation, useRouter } from "expo-router";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
 import { ProgressBar, useTheme } from "react-native-paper";
-import * as ImagePicker from "expo-image-picker";
 import CountryCodeDropdownPicker from "react-native-dropdown-country-picker";
 import { LinearGradient } from "expo-linear-gradient";
 
@@ -43,63 +41,14 @@ const step3Schema = Yup.object().shape({
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
-  consumer_image: Yup.string().required("Profile picture is required"),
+  confirmPassword: Yup.string()
+    .oneOf([Yup.ref("password"), null], "Passwords must match")
+    .required("Confirm Password is required"),
 });
 
 const steps = [step1Schema, step2Schema, step3Schema];
 
 // Formik Components
-const FormikImagePicker = ({ fieldName }) => {
-  const [field, meta, helpers] = useField(fieldName);
-  const theme = useTheme();
-
-  const pickImage = async () => {
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert("Permission to access gallery is required!");
-      return;
-    }
-
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1], // Square aspect ratio for profile pic
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      helpers.setValue(uri);
-      helpers.setTouched(true);
-    }
-  };
-
-  return (
-    <>
-      <TouchableOpacity onPress={pickImage} style={styles.imagePicker}>
-        {field.value ? (
-          <Image source={{ uri: field.value }} style={styles.image} />
-        ) : (
-          <Text
-            style={[
-              styles.placeholderText,
-              { color: theme.colors.inactiveColor },
-            ]}
-          >
-            Select Profile Picture
-          </Text>
-        )}
-      </TouchableOpacity>
-      {meta.touched && meta.error && (
-        <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
-          {meta.error}
-        </Text>
-      )}
-    </>
-  );
-};
-
 const FormikInput = ({ fieldName, ...props }) => {
   const [field, meta, helpers] = useField(fieldName);
   const theme = useTheme();
@@ -287,8 +236,7 @@ const StepIndicator = ({ currentStep, totalSteps }) => {
 };
 
 const Signup = () => {
-  const { user, signupUser, uploadConsumerImage, loginLoading, loginError } =
-    useProductStore();
+  const { signupUser, loginLoading, loginError } = useProductStore();
   const router = useRouter();
   const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState(0);
@@ -303,40 +251,19 @@ const Signup = () => {
   const handleSignup = async (values) => {
     console.log("Submitting form data:", values);
     try {
-      // Step 1: Register user without image
-      const { consumer_image, dob, ...userData } = values; // Exclude image and adjust dob
       const signupData = {
-        ...userData,
-        dob: dob ? dob.toISOString().split("T")[0] : null, // Format date as YYYY-MM-DD
+        name: values.name,
+        email: values.email,
+        password: values.password,
+        phone: values.phone,
+        dob: values.dob ? values.dob.toISOString().split("T")[0] : "",
+        gender: values.gender,
+        code: values.code,
       };
+
       const signupResponse = await signupUser(signupData);
-
       if (signupResponse.success) {
-        console.log("user Registered");
-        const consumerId = signupResponse.user.id; // Assuming response includes user id
-        console.log(user.consumer_id);
-        // Step 2: Upload image if provided
-        if (consumer_image) {
-          const imageBlob = await fetch(consumer_image).then((res) =>
-            res.blob()
-          );
-          const imageFile = {
-            uri: consumer_image,
-            type: imageBlob.type || "image/jpeg", // Default to JPEG if unknown
-            name: "profile.jpg",
-          };
-
-          const uploadResponse = await uploadConsumerImage({
-            image: imageFile,
-            consumer_id: consumerId,
-          });
-
-          if (uploadResponse.status !== "success") {
-            console.error("Image upload failed:", uploadResponse.message);
-            // Proceed anyway, but log the issue
-          }
-        }
-
+        console.log("Signup successful:", signupResponse.user);
         router.replace("Login");
       } else {
         throw new Error(signupResponse.message || "Signup failed");
@@ -360,214 +287,195 @@ const Signup = () => {
   };
 
   return (
-    <LinearGradient
-      colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-      style={styles.container}
+    <ScrollView
+      contentContainerStyle={[
+        styles.scrollContent,
+        { backgroundColor: theme.colors.primary },
+      ]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <Text style={[styles.title, { color: theme.colors.textColor }]}>
-          Create Your Account
-        </Text>
-        <StepIndicator currentStep={currentStep} totalSteps={3} />
+      <Text style={[styles.title, { color: theme.colors.textColor }]}>
+        Create Your Account
+      </Text>
+      <StepIndicator currentStep={currentStep} totalSteps={3} />
 
-        <Formik
-          initialValues={{
-            name: "",
-            phone: "",
-            email: "",
-            dob: null,
-            gender: "",
-            password: "",
-            code: "4357",
-            // consumer_image: null,
-          }}
-          onSubmit={handleSignup}
-        >
-          {({
-            handleSubmit,
-            values,
-            setErrors,
-            setFieldValue,
-            setFieldTouched,
-          }) => (
-            <View style={styles.form}>
-              {currentStep === 0 && (
-                <>
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Full Name
-                  </Text>
-                  <FormikInput
-                    fieldName="name"
-                    placeholder="Full Name"
-                    autoCapitalize="words"
-                  />
-
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Phone Number
-                  </Text>
-                  <PhoneInputWithCountryCode
-                    value={values.phone}
-                    onChangeText={(text) => setFieldValue("phone", text)}
-                    onBlur={() => setFieldTouched("phone", true)}
-                  />
-
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Email
-                  </Text>
-                  <FormikInput
-                    fieldName="email"
-                    placeholder="Email"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                  />
-                </>
-              )}
-
-              {currentStep === 1 && (
-                <>
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Date of Birth
-                  </Text>
-                  <FormikDatePicker fieldName="dob" />
-
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Gender
-                  </Text>
-                  <FormikPicker fieldName="gender" />
-                </>
-              )}
-
-              {currentStep === 2 && (
-                <>
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Password
-                  </Text>
-                  <FormikInput
-                    fieldName="password"
-                    placeholder="Password"
-                    secureTextEntry
-                    autoCapitalize="none"
-                  />
-
-                  <Text
-                    style={[
-                      styles.inputLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Profile Picture
-                  </Text>
-                  <FormikImagePicker fieldName="consumer_image" />
-                </>
-              )}
-
-              {loginError && (
+      <Formik
+        initialValues={{
+          name: "",
+          phone: "",
+          email: "",
+          dob: null,
+          gender: "",
+          password: "",
+          confirmPassword: "",
+          code: "4337",
+        }}
+        onSubmit={handleSignup}
+      >
+        {({
+          handleSubmit,
+          values,
+          setErrors,
+          setFieldValue,
+          setFieldTouched,
+        }) => (
+          <View style={styles.form}>
+            {currentStep === 0 && (
+              <>
                 <Text
-                  style={[
-                    styles.errorText,
-                    { color: theme.colors.deleteButton },
-                  ]}
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
                 >
-                  {loginError}
+                  Full Name
                 </Text>
+                <FormikInput
+                  fieldName="name"
+                  placeholder="Full Name"
+                  autoCapitalize="words"
+                />
+
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Phone Number
+                </Text>
+                <PhoneInputWithCountryCode
+                  value={values.phone}
+                  onChangeText={(text) => setFieldValue("phone", text)}
+                  onBlur={() => setFieldTouched("phone", true)}
+                />
+
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Email
+                </Text>
+                <FormikInput
+                  fieldName="email"
+                  placeholder="Email"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </>
+            )}
+
+            {currentStep === 1 && (
+              <>
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Date of Birth
+                </Text>
+                <FormikDatePicker fieldName="dob" />
+
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Gender
+                </Text>
+                <FormikPicker fieldName="gender" />
+              </>
+            )}
+
+            {currentStep === 2 && (
+              <>
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Password
+                </Text>
+                <FormikInput
+                  fieldName="password"
+                  placeholder="Password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+
+                <Text
+                  style={[styles.inputLabel, { color: theme.colors.textColor }]}
+                >
+                  Confirm Password
+                </Text>
+                <FormikInput
+                  fieldName="confirmPassword"
+                  placeholder="Confirm Password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                />
+              </>
+            )}
+
+            {loginError && (
+              <Text
+                style={[styles.errorText, { color: theme.colors.deleteButton }]}
+              >
+                {loginError}
+              </Text>
+            )}
+
+            <View style={styles.buttonContainer}>
+              {currentStep > 0 && (
+                <TouchableOpacity
+                  style={[styles.button, styles.prevButton]}
+                  onPress={() => setCurrentStep((prev) => prev - 1)}
+                >
+                  <LinearGradient
+                    colors={[
+                      theme.colors.buttonGradientStart,
+                      theme.colors.buttonGradientEnd,
+                    ]}
+                    style={styles.gradientButton}
+                  >
+                    <Text style={styles.buttonText}>Back</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               )}
 
-              <View style={styles.buttonContainer}>
-                {currentStep > 0 && (
-                  <TouchableOpacity
-                    style={[styles.button, styles.prevButton]}
-                    onPress={() => setCurrentStep((prev) => prev - 1)}
+              {currentStep < 2 ? (
+                <TouchableOpacity
+                  style={[styles.button, styles.nextButton]}
+                  onPress={() => handleNext(values, setErrors)}
+                >
+                  <LinearGradient
+                    colors={[
+                      theme.colors.buttonGradientStart,
+                      theme.colors.buttonGradientEnd,
+                    ]}
+                    style={styles.gradientButton}
                   >
-                    <LinearGradient
-                      colors={[
-                        theme.colors.buttonGradientStart,
-                        theme.colors.buttonGradientEnd,
-                      ]}
-                      style={styles.gradientButton}
-                    >
-                      <Text style={styles.buttonText}>Back</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
-
-                {currentStep < 2 ? (
-                  <TouchableOpacity
-                    style={[styles.button, styles.nextButton]}
-                    onPress={() => handleNext(values, setErrors)}
+                    <Text style={styles.buttonText}>Next</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.button}
+                  onPress={handleSubmit}
+                  disabled={loginLoading}
+                >
+                  <LinearGradient
+                    colors={[
+                      theme.colors.buttonGradientStart,
+                      theme.colors.buttonGradientEnd,
+                    ]}
+                    style={styles.gradientButton}
                   >
-                    <LinearGradient
-                      colors={[
-                        theme.colors.buttonGradientStart,
-                        theme.colors.buttonGradientEnd,
-                      ]}
-                      style={styles.gradientButton}
-                    >
-                      <Text style={styles.buttonText}>Next</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.button}
-                    onPress={handleSubmit}
-                    disabled={loginLoading}
-                  >
-                    <LinearGradient
-                      colors={[
-                        theme.colors.buttonGradientStart,
-                        theme.colors.buttonGradientEnd,
-                      ]}
-                      style={styles.gradientButton}
-                    >
-                      {loginLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.buttonText}>Sign Up</Text>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                )}
-              </View>
+                    {loginLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.buttonText}>Sign Up</Text>
+                    )}
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
             </View>
-          )}
-        </Formik>
+          </View>
+        )}
+      </Formik>
 
-        <Link href={{ pathname: "/Login" }} asChild>
-          <Text style={[styles.link, { color: theme.colors.button }]}>
-            Already have an account? Sign In
-          </Text>
-        </Link>
-      </ScrollView>
-    </LinearGradient>
+      <Link href={{ pathname: "/Login" }} asChild>
+        <Text style={[styles.link, { color: theme.colors.button }]}>
+          Already have an account? Sign In
+        </Text>
+      </Link>
+    </ScrollView>
   );
 };
 
@@ -666,22 +574,6 @@ const styles = StyleSheet.create({
   },
   datepicker: {
     justifyContent: "center",
-  },
-  imagePicker: {
-    alignItems: "center",
-    justifyContent: "center",
-    height: 100,
-    marginBottom: 20,
-  },
-  image: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 1,
-    borderColor: "#fff", // White border for contrast on gradient
-  },
-  placeholderText: {
-    fontSize: 16,
   },
 });
 

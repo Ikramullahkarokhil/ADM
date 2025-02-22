@@ -1,5 +1,5 @@
-import { BackHandler, useColorScheme } from "react-native";
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useColorScheme } from "react-native";
+import React, { useEffect, useState, useCallback } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -9,112 +9,88 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import { ActivityIndicator, View } from "react-native";
+import NetInfo from "@react-native-community/netinfo";
 
-// Custom hooks and components
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
 import TermsModal from "./screens/ConsentScreen/index";
+import AlertDialog from "../components/ui/NoInternetAlert";
 
 const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const {
-    listCart,
-    fetchFavProducts,
-    fetchProfile,
-    searchProductData,
-    getBillingAddress,
-    logout,
-    user,
-  } = useProductStore();
+  const { fetchProfile, logout, user } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [checkedTerms, setCheckedTerms] = useState(false);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
+  const [isConnected, setIsConnected] = useState(true);
+  const [showAlert, setShowAlert] = useState(false);
   const router = useRouter();
 
-  // Prevent auto-hiding the splash screen on mount.
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
-  }, []);
-
-  // Check for terms acceptance.
-  useEffect(() => {
-    (async () => {
+    const checkTerms = async () => {
       try {
         const value = await AsyncStorage.getItem("hasAcceptedTerms");
         setHasAcceptedTerms(value === "true");
       } catch (error) {
         console.error("Error checking terms acceptance:", error);
       } finally {
-        setCheckedTerms(true);
-      }
-    })();
-  }, []);
-
-  // Initialize theme and set the navigation bar color.
-  const navBarBackgroundColor = useMemo(() => theme.colors.primary, [theme]);
-
-  useEffect(() => {
-    initializeTheme(colorScheme === "dark");
-    NavigationBar.setBackgroundColorAsync(navBarBackgroundColor);
-  }, [colorScheme, initializeTheme, navBarBackgroundColor]);
-
-  // Fetch profile, favorite products, and product data concurrently.
-  useEffect(() => {
-    const fetchData = async () => {
-      if (user?.consumer_id) {
-        await Promise.all([
-          fetchProfile(user.consumer_id),
-          // fetchFavProducts(user.consumer_id),
-          // listCart(user.consumer_id),
-          // getBillingAddress(user.consumer_id),
-          // searchProductData(),
-        ]);
-      }
-    };
-
-    fetchData();
-  }, [user?.consumer_id, fetchProfile, fetchFavProducts, searchProductData]);
-
-  useEffect(() => {
-    const checkAuthentication = async () => {
-      try {
-        if (user && user.timestamp) {
-          const oneWeekInMs = 7 * 24 * 60 * 60 * 1000;
-          const isExpired = Date.now() - user.timestamp > oneWeekInMs;
-          if (isExpired) {
-            await logout();
-            setIsLoggedIn(false);
-          } else {
-            setIsLoggedIn(true);
-          }
-        } else {
-          setIsLoggedIn(false);
-        }
-      } catch (error) {
-        console.error("Authentication check failed:", error);
-        setIsLoggedIn(false);
-      } finally {
         setIsLoading(false);
       }
     };
-
-    if (checkedTerms) {
-      checkAuthentication();
-    }
-  }, [checkedTerms, user, logout]);
+    checkTerms();
+  }, []);
 
   useEffect(() => {
-    if (checkedTerms && !isLoading) {
-      SplashScreen.hideAsync();
-      if (hasAcceptedTerms) {
-        router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+    initializeTheme(colorScheme === "dark");
+    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+  }, [colorScheme, initializeTheme, theme.colors.primary]);
+
+  const fetchUserData = useCallback(async () => {
+    if (user?.consumer_id) {
+      try {
+        await fetchProfile(user.consumer_id);
+      } catch (error) {
+        console.error("Error fetching user data:", error);
       }
     }
-  }, [checkedTerms, isLoading, hasAcceptedTerms, isLoggedIn, router]);
+  }, [user?.consumer_id, fetchProfile]);
+
+  useEffect(() => {
+    const checkAuthentication = async () => {
+      if (!hasAcceptedTerms || user === null) return;
+
+      const isLoggedIn = user?.timestamp
+        ? Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000
+        : false;
+
+      if (!isLoggedIn && user) await logout();
+
+      if (!isLoading) {
+        SplashScreen.hideAsync();
+        router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+      }
+    };
+
+    checkAuthentication();
+  }, [hasAcceptedTerms, user, logout, isLoading, router]);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const connected = state.isConnected;
+      setIsConnected(connected);
+      setShowAlert(!connected);
+
+      if (connected && hasAcceptedTerms) {
+        router.replace(user ? "/(tabs)" : "/Login");
+        fetchUserData();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, router, fetchUserData, hasAcceptedTerms]);
 
   const handleAcceptTerms = useCallback(async () => {
     try {
@@ -125,8 +101,11 @@ const Layout = () => {
     }
   }, []);
 
-  const handleDeclineTerms = useCallback(() => {
-    BackHandler.exitApp();
+  const handleRefresh = useCallback(() => {
+    NetInfo.fetch().then((state) => {
+      setIsConnected(state.isConnected);
+      setShowAlert(!state.isConnected);
+    });
   }, []);
 
   if (hasAcceptedTerms === null || isLoading) {
@@ -145,18 +124,22 @@ const Layout = () => {
           {!hasAcceptedTerms ? (
             <TermsModal
               onAccept={handleAcceptTerms}
-              onDecline={handleDeclineTerms}
+              onDecline={() => BackHandler.exitApp()}
             />
           ) : (
-            <Stack
-              screenOptions={{
-                headerTitleAlign: "center",
-              }}
-            >
+            <Stack screenOptions={{ headerTitleAlign: "center" }}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
           )}
+          <AlertDialog
+            visible={showAlert}
+            title="No Internet Connection"
+            message="Please check your internet connection and try again."
+            onDismiss={() => {}}
+            onConfirm={handleRefresh}
+            confirmText="Refresh"
+          />
         </PaperProvider>
       </ActionSheetProvider>
     </GestureHandlerRootView>

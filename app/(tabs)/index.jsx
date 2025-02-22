@@ -1,21 +1,30 @@
-import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useCallback,
+} from "react";
 import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
-import { Link, router, useNavigation, useRouter } from "expo-router";
+import { Link, router, useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import useProductStore from "../../components/api/useProductStore";
 import CategoriesSectionList from "../../components/ui/CategoriesList";
 import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
-import AlertDialog from "../../components/ui/AlertDialog"; // import your AlertDialog
+import AlertDialog from "../../components/ui/AlertDialog";
+import * as NavigationBar from "expo-navigation-bar";
+import NetInfo from "@react-native-community/netinfo";
 
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
     useState([]);
   const [alertVisible, setAlertVisible] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
 
   const {
     user,
@@ -26,42 +35,68 @@ const Home = () => {
   } = useProductStore();
 
   useEffect(() => {
-    const initialize = async () => {
-      setLoading(true);
-      try {
-        const response = await fetchMainCategories();
-        const categories = response?.data ?? [];
+    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+  }, [theme]);
 
-        if (categories.length > 0) {
-          const categoriesData = await Promise.all(
-            categories.map(async (category) => {
-              const subCategoriesResponse = await fetchSubcategories(
-                category.main_category_id
-              );
-              return {
-                ...category,
-                subCategories: subCategoriesResponse?.data ?? [],
-              };
-            })
-          );
-          setCategoriesWithSubCategories(categoriesData);
-        }
-      } catch (err) {
-        console.error("Failed to fetch data:", err);
-      } finally {
-        setLoading(false);
-        if (user?.consumer_id) {
-          fetchFavProducts(user.consumer_id);
-        }
+  const fetchCategories = useCallback(async () => {
+    setLoading(true);
+    setRefreshing(true);
+    try {
+      const categories = await fetchMainCategories();
+      if (categories.length > 0) {
+        const categoriesData = await Promise.all(
+          categories.map(async (category) => {
+            const subCategoriesResponse = await fetchSubcategories(
+              category.main_category_id
+            );
+            return {
+              ...category,
+              subCategories: subCategoriesResponse,
+            };
+          })
+        );
+        setCategoriesWithSubCategories(categoriesData);
+      } else {
+        setCategoriesWithSubCategories([]);
       }
-    };
-    initialize();
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+      setCategoriesWithSubCategories([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      if (user?.consumer_id) {
+        // fetchFavProducts(user.consumer_id);
+      }
+    }
   }, [
     fetchMainCategories,
     fetchSubcategories,
-    fetchFavProducts,
+    // fetchFavProducts,
     user?.consumer_id,
   ]);
+
+  // Monitor internet connectivity within Home
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setIsConnected(state.isConnected);
+
+      // If internet reconnects, fetch data
+      if (state.isConnected) {
+        fetchCategories();
+      }
+    });
+
+    // Initial connectivity check
+    NetInfo.fetch().then((state) => {
+      setIsConnected(state.isConnected);
+      if (state.isConnected) {
+        fetchCategories();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [fetchCategories]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -79,7 +114,6 @@ const Home = () => {
     }, []);
   }, [cartItem]);
 
-  // Handler for the cart button press
   const handleCartPress = () => {
     if (!user?.consumer_id) {
       setAlertVisible(true);
@@ -91,7 +125,6 @@ const Home = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        {/* Show light logo in dark mode and dark logo in light mode */}
         <Image
           source={
             theme.dark
@@ -110,7 +143,6 @@ const Home = () => {
                   color={theme.colors.textColor}
                 />
               )}
-              iconColor={theme.colors.textColor}
               style={styles.searchBar}
             />
           </Link>
@@ -131,21 +163,25 @@ const Home = () => {
         </View>
       </View>
 
-      <View style={styles.productsList}>
-        {loading ? (
-          <FlatList
-            data={Array(6).fill(null)}
-            renderItem={CategoriesSkeleton}
-            keyExtractor={(_, index) => index.toString()}
-            numColumns={2}
-            contentContainerStyle={styles.productsListContent}
-          />
-        ) : (
-          <CategoriesSectionList data={categoriesWithSubCategories} />
-        )}
-      </View>
+      <FlatList
+        data={loading ? Array(6).fill(null) : categoriesWithSubCategories}
+        renderItem={({ item }) =>
+          loading ? (
+            <CategoriesSkeleton />
+          ) : (
+            <CategoriesSectionList data={[item]} />
+          )
+        }
+        keyExtractor={(item, index) => index.toString()}
+        numColumns={loading ? 2 : 1}
+        key={loading ? "skeleton" : "data"}
+        contentContainerStyle={
+          loading ? styles.skeletonContainer : styles.dataContainer
+        }
+        refreshing={refreshing}
+        onRefresh={fetchCategories}
+      />
 
-      {/* AlertDialog to prompt login when needed */}
       <AlertDialog
         visible={alertVisible}
         title="Login Required"
@@ -153,7 +189,7 @@ const Home = () => {
         onDismiss={() => setAlertVisible(false)}
         onConfirm={() => {
           setAlertVisible(false);
-          navigation.navigate("Login"); // Navigate to login if needed
+          navigation.navigate("Login");
         }}
         confirmText="Login"
         cancelText="Cancel"
@@ -163,9 +199,7 @@ const Home = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     paddingHorizontal: 15,
     paddingTop: 40,
@@ -175,14 +209,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  searchBar: {},
-  iconsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  iconButton: {
-    position: "relative",
-  },
+  iconsContainer: { flexDirection: "row", alignItems: "center" },
+  iconButton: { position: "relative" },
   badge: {
     position: "absolute",
     top: 5,
@@ -190,16 +218,13 @@ const styles = StyleSheet.create({
     backgroundColor: "red",
     color: "white",
   },
-  productsList: {
-    flex: 1,
+  productsListContent: { marginTop: 5 },
+  logo: { height: 30, width: 120 },
+  skeletonContainer: {
+    marginTop: 50,
+    marginHorizontal: 10,
   },
-  productsListContent: {
-    marginTop: 40,
-  },
-  logo: {
-    height: 30,
-    width: 120,
-  },
+  dataContainer: {},
 });
 
 export default Home;

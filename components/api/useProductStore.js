@@ -82,7 +82,7 @@ const useProductStore = create(
       fetchMainCategories: async () => {
         const data = await get().apiRequest("/get-main-categories");
         set({ mainCategories: data });
-        return data;
+        return data?.data ?? [];
       },
 
       // Fetch Subcategories
@@ -94,7 +94,7 @@ const useProductStore = create(
             [id]: data,
           },
         }));
-        return data;
+        return data?.data ?? [];
       },
 
       // Fetch Products by Subcategory
@@ -105,10 +105,10 @@ const useProductStore = create(
         set((state) => ({
           productsBySubcategory: {
             ...state.productsBySubcategory,
-            [subcategoryId]: data,
+            [subcategoryId]: data?.data || [],
           },
         }));
-        return data;
+        return data?.data || [];
       },
 
       // Search Products
@@ -116,8 +116,8 @@ const useProductStore = create(
         const data = await get().apiRequest("/get-search-products", {
           params: { search: searchTerm, limitData: 20 },
         });
-        set({ productData: data });
-        return data;
+        set({ productData: data?.data || [] });
+        return data?.data || [];
       },
 
       fetchProductByCategories: async (subCategoryIds = []) => {
@@ -216,35 +216,10 @@ const useProductStore = create(
         }
       },
 
-      uploadConsumerImage: async ({ image, consumer_id }) => {
-        set({ loading: true, error: null });
-        try {
-          const formData = new FormData();
-          formData.append("image", image);
-          formData.append("consumer_id", consumer_id);
-
-          const response = await api.post("/consumer/upload-image", formData, {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          });
-          return response.data;
-        } catch (error) {
-          const errorMessage = error.response?.data?.message || error.message;
-          set({ error: errorMessage, loading: false });
-          throw new Error(errorMessage);
-        } finally {
-          set({ loading: false });
-        }
-      },
-
       changePassword: async ({ consumerID, password }) => {
         const data = await api.post(
-          `/consumer/change-password?consumer_id=${consumerID}&password=${password},`,
-          {
-            method: "POST",
-          }
-        );
+          `/consumer/change-password?consumer_id=${consumerID}&password=${password}`
+        ); // Fixed trailing comma in URL
         return data;
       },
 
@@ -252,8 +227,8 @@ const useProductStore = create(
         const data = await get().apiRequest(
           `/questions/list?product_id=${productID}`
         );
-        set({ productQuestions: data });
-        return data;
+        set({ productQuestions: data.questions || [] });
+        return data.questions || [];
       },
 
       addProductQuestion: async ({ consumerID, productID, question }) => {
@@ -290,10 +265,17 @@ const useProductStore = create(
         }
       },
 
-      signupUser: async (userData) => {
+      signupUser: async (formData) => {
         set({ loginLoading: true, loginError: null });
         try {
-          const response = await api.post("/consumer/register", userData);
+          console.log("Sending FormData to /consumer/register:", formData);
+          const response = await api.post("/consumer/register", formData, {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              Accept: "application/json",
+            },
+          });
+          console.log("Signup response:", response.data);
           if (
             response.status === 201 ||
             response.data.message === "Consumer registered successfully!"
@@ -302,26 +284,28 @@ const useProductStore = create(
               ...response.data.data,
               timestamp: Date.now(),
             };
-            set({ loginLoading: false, user: userWithTimestamp });
-            return { success: true };
+            set({ loginLoading: false });
+            return { success: true, user: userWithTimestamp };
           } else {
             throw new Error(response.data.message || "Signup failed");
           }
         } catch (error) {
           console.log("Signup error:", error);
+          console.log("Response data:", error.response?.data);
           let errorMessage = "An error occurred during signup.";
           if (error.response) {
-            console.log("Response data:", error.response.data); // Log the full response
             if (error.response.status === 422) {
               const errors = error.response.data.errors;
               if (errors) {
-                // Combine all validation errors into a single message
                 errorMessage = Object.values(errors).flat().join(", ");
               } else {
                 errorMessage =
                   error.response.data.message ||
                   "This email is already registered. Please log in or use a different email.";
               }
+            } else if (error.response.status === 406) {
+              errorMessage =
+                "The server rejected the request format. Please check the data.";
             } else if (error.response.status === 400) {
               errorMessage =
                 error.response.data.message || "Invalid signup data.";
@@ -336,7 +320,31 @@ const useProductStore = create(
         }
       },
 
-      // Fetch comments (optionally, pass an identifier like postID if needed)
+      uploadConsumerImage: async (formData) => {
+        set({ loading: true, error: null });
+        try {
+          const response = await api.post("/consumer/upload-image", formData);
+          console.log("API Response:", response.data);
+          return response.data;
+        } catch (error) {
+          console.log("Upload Error:", error);
+          let errorMessage = error.response?.data?.message || error.message;
+          if (error.response?.status === 413) {
+            errorMessage =
+              "Image file too large. Please upload a smaller file.";
+          } else if (error.response?.status === 400) {
+            errorMessage = "Invalid image data. Please try again.";
+          } else if (error.response?.status === 406) {
+            errorMessage =
+              "Server rejected the request format. Check API requirements.";
+          }
+          set({ error: errorMessage, loading: false });
+          throw new Error(errorMessage);
+        } finally {
+          set({ loading: false });
+        }
+      },
+
       fetchComments: async ({ productID, page }) => {
         const response = await get().apiRequest(
           `/comment/list?product_id=${productID}&page=${page}`
@@ -344,7 +352,6 @@ const useProductStore = create(
         return response.comments.data;
       },
 
-      // Add a comment. Pass the comment data in the request body.
       addComment: async (commentData) => {
         const data = await get().apiRequest("/comment/add", {
           method: "POST",
@@ -353,7 +360,6 @@ const useProductStore = create(
         return data;
       },
 
-      // Delete a comment by its ID.
       deleteComment: async ({ commentId, consumerID }) => {
         const data = await get().apiRequest("/comment/delete", {
           method: "DELETE",
@@ -375,10 +381,7 @@ const useProductStore = create(
           `/consumer/add-billing-address`,
           billingData
         );
-
         const consumerID = billingData.consumer_id;
-        console.log(consumerID);
-        await get().getBillingAddress(consumerID);
         return data.data;
       },
 
@@ -387,10 +390,7 @@ const useProductStore = create(
           `/consumer/edit-billing-address`,
           billingData
         );
-
         const consumerID = billingData.consumer_id;
-        console.log(consumerID);
-        await get().getBillingAddress(consumerID);
         return data.data;
       },
 
@@ -402,12 +402,10 @@ const useProductStore = create(
         return data.data;
       },
 
-      // Logout User
       logout: () => {
         set({ user: null, profileData: null, favProducts: [], cartItem: [] });
       },
 
-      // Reset Store
       resetStore: () => {
         set(initialState);
       },

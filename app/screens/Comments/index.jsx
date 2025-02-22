@@ -14,20 +14,26 @@ import {
   TextInput,
   Image,
   ToastAndroid,
+  TouchableWithoutFeedback,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { IconButton, useTheme } from "react-native-paper";
-import {
-  GestureHandlerRootView,
-  Swipeable,
-} from "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../../components/api/useProductStore";
-import AlertDialog from "../../../components/ui/AlertDialog"; // Import the AlertDialog
+import AlertDialog from "../../../components/ui/AlertDialog";
+import { FlashList } from "@shopify/flash-list";
 
 const Comments = () => {
   const { productId } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
+  const { showActionSheetWithOptions } = useActionSheet();
 
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
@@ -42,7 +48,8 @@ const Comments = () => {
     onConfirm: () => {},
   });
 
-  const { user, fetchComments, addComment, deleteComment } = useProductStore();
+  const { user, fetchComments, addComment, deleteComment, updateComment } =
+    useProductStore();
 
   const isLoadingRef = useRef(false);
 
@@ -56,10 +63,9 @@ const Comments = () => {
     });
   }, [navigation, theme.colors.primary, theme.colors.textColor]);
 
-  // Load the first page of comments on initial load
   useEffect(() => {
     loadComments(1);
-  }, []);
+  }, [loadComments]);
 
   const loadComments = useCallback(
     async (page = 1) => {
@@ -69,12 +75,12 @@ const Comments = () => {
       try {
         const data = await fetchComments({ productID: productId, page });
         if (page === 1) {
-          setComments(data || []); // Replace comments for the first page
+          setComments(data || []);
         } else {
-          setComments((prev) => [...prev, ...data]); // Append comments for subsequent pages
+          setComments((prev) => [...prev, ...data]);
         }
         setCommentPage(page);
-        setHasMoreComments(data?.length > 0); // Check if there are more comments to load
+        setHasMoreComments(data?.length > 0);
       } catch (err) {
         console.error("Error fetching comments:", err);
         showAlert("Error", "Failed to load comments.", () => {});
@@ -83,7 +89,7 @@ const Comments = () => {
         setIsLoading(false);
       }
     },
-    [fetchComments, productId]
+    [fetchComments, productId, showAlert]
   );
 
   const showAlert = (title, message, onConfirm) => {
@@ -91,7 +97,7 @@ const Comments = () => {
     setAlertVisible(true);
   };
 
-  const handleAddComment = useCallback(async () => {
+  const handleAddComment = useCallback(() => {
     const trimmedComment = newComment.trim();
     if (!trimmedComment) {
       showAlert(
@@ -101,53 +107,146 @@ const Comments = () => {
       );
       return;
     }
-    if (!user) {
+    if (!user?.consumer_id) {
       showAlert("Login Required", "Please login to add a comment.", () => {});
       return;
     }
-    setIsAddingComment(true);
-    try {
-      await addComment({
-        product_id: productId,
-        comment: trimmedComment,
-        consumer_id: user.consumer_id,
-      });
-      setNewComment("");
-      ToastAndroid.show("Comment added", ToastAndroid.SHORT);
-      loadComments(1); // Reload the first page to show the new comment
-    } catch (err) {
-      showAlert("Error", err.message, () => {});
-    } finally {
-      setIsAddingComment(false);
-    }
-  }, [newComment, user, addComment, productId, loadComments]);
 
-  const handleDeleteComment = useCallback(
-    async (commentId) => {
-      try {
-        await deleteComment({
-          commentId: commentId,
-          consumerID: user.consumer_id,
-        });
-        ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+    setIsAddingComment(true);
+
+    // Create temporary comment with a unique temporary ID
+    const tempId = `temp_${Date.now()}`;
+    const newLocalComment = {
+      product_comments_id: tempId,
+      product_id: productId,
+      comment: trimmedComment,
+      consumer_id: user.consumer_id,
+      date: new Date().toISOString(),
+      consumer_name: user.name || "Anonymous",
+      consumer_photo: user.photo || null,
+    };
+
+    // Add comment locally first
+    setComments((prev) => [...prev, newLocalComment]);
+    setNewComment("");
+    Keyboard.dismiss();
+    ToastAndroid.show("Comment added", ToastAndroid.SHORT);
+
+    // Then sync with server in background
+    addComment({
+      product_id: productId,
+      comment: trimmedComment,
+      consumer_id: user.consumer_id,
+    })
+      .then((newCommentFromServer) => {
+        // Update the temporary comment with server data
         setComments((prev) =>
-          prev.filter((comment) => comment.product_comments_id !== commentId)
+          prev.map((comment) =>
+            comment.product_comments_id === tempId
+              ? { ...comment, ...newCommentFromServer }
+              : comment
+          )
         );
-      } catch (err) {
-        showAlert("Error", err.message, () => {});
-      }
+      })
+      .catch((err) => {
+        console.error("Error syncing comment to server:", err);
+        // Remove the comment if server sync fails
+        setComments((prev) =>
+          prev.filter((comment) => comment.product_comments_id !== tempId)
+        );
+        ToastAndroid.show("Failed to save comment", ToastAndroid.SHORT);
+      })
+      .finally(() => {
+        setIsAddingComment(false);
+      });
+  }, [newComment, user, addComment, productId, showAlert]);
+
+  const handleEditComment = useCallback(
+    (comment) => {
+      Alert.prompt(
+        "Edit Comment",
+        "Modify your comment below:",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Save",
+            onPress: (newText) => {
+              if (newText && newText.trim()) {
+                const updatedComment = { ...comment, comment: newText.trim() };
+                setComments((prev) =>
+                  prev.map((c) =>
+                    c.product_comments_id === comment.product_comments_id
+                      ? updatedComment
+                      : c
+                  )
+                );
+                // Perform API update in background
+                updateComment({
+                  commentId: comment.product_comments_id,
+                  comment: newText.trim(),
+                  consumerID: user.consumer_id,
+                }).catch((err) => {
+                  console.error("Error updating comment:", err);
+                  ToastAndroid.show(
+                    "Failed to update comment",
+                    ToastAndroid.SHORT
+                  );
+                });
+              }
+            },
+          },
+        ],
+        "plain-text",
+        comment.comment
+      );
     },
-    [user, deleteComment]
+    [updateComment, user]
   );
 
-  const renderRightActions = (commentId) => (
-    <View style={styles.deleteContainer}>
-      <IconButton
-        icon="delete"
-        iconColor="white"
-        onPress={() => handleDeleteComment(commentId)}
-      />
-    </View>
+  const handleDeleteComment = useCallback(
+    (commentId) => {
+      setComments((prev) =>
+        prev.filter((c) => c.product_comments_id !== commentId)
+      );
+      ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+
+      // Then sync with server in background
+      deleteComment({
+        commentId: commentId,
+        consumerID: user.consumer_id,
+      }).catch((err) => {
+        console.error("Error deleting comment from server:", err);
+        ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
+      });
+    },
+    [deleteComment, user, comments]
+  );
+
+  const showCommentOptions = useCallback(
+    (comment) => {
+      const options = ["Edit", "Delete", "Cancel"];
+      const cancelButtonIndex = 2;
+      const destructiveButtonIndex = 1;
+
+      showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          destructiveButtonIndex,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            handleEditComment(comment);
+          } else if (buttonIndex === 1) {
+            handleDeleteComment(comment.product_comments_id);
+          }
+        }
+      );
+    },
+    [showActionSheetWithOptions, handleEditComment, handleDeleteComment]
   );
 
   const renderCommentItem = useCallback(
@@ -163,6 +262,7 @@ const Comments = () => {
                   : require("../../../assets/images/imageSkeleton.jpg")
               }
               style={styles.commentUserPhoto}
+              accessibilityLabel="User Photo"
             />
             <View style={styles.commentTitleContainer}>
               <Text
@@ -184,23 +284,19 @@ const Comments = () => {
         </View>
       );
       return isUserComment ? (
-        <Swipeable
-          renderRightActions={() =>
-            renderRightActions(item.product_comments_id)
-          }
-        >
+        <TouchableOpacity onPress={() => showCommentOptions(item)}>
           {CommentComponent}
-        </Swipeable>
+        </TouchableOpacity>
       ) : (
         CommentComponent
       );
     },
-    [user, theme.colors.textColor, handleDeleteComment]
+    [user, theme.colors.textColor, showCommentOptions]
   );
 
   const handleLoadMore = useCallback(() => {
     if (!isLoading && hasMoreComments) {
-      loadComments(commentPage + 1); // Load the next page
+      loadComments(commentPage + 1);
     }
   }, [isLoading, hasMoreComments, commentPage, loadComments]);
 
@@ -208,44 +304,59 @@ const Comments = () => {
     <GestureHandlerRootView
       style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <FlatList
+      <FlashList
         data={comments}
         keyExtractor={(item) => item.product_comments_id.toString()}
         renderItem={renderCommentItem}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
-        ListFooterComponent={
+        contentContainerStyle={styles.flatListContent}
+        estimatedItemSize={96}
+        ListEmptyComponent={
           isLoading && hasMoreComments ? (
             <ActivityIndicator
               size="small"
               color={theme.colors.textColor}
               style={styles.listFooter}
             />
-          ) : null
+          ) : (
+            <View style={styles.emptyCommentContainer}>
+              <Text style={{ color: theme.colors.textColor, fontSize: 18 }}>
+                No comments
+              </Text>
+            </View>
+          )
         }
       />
-      <View
-        style={[
-          styles.addCommentContainer,
-          { backgroundColor: theme.colors.primary },
-        ]}
-      >
-        <TextInput
-          value={newComment}
-          onChangeText={setNewComment}
-          placeholder="Write a comment..."
-          placeholderTextColor="#999"
-          style={styles.commentInput}
-          multiline
-        />
-        <IconButton
-          icon="send"
-          onPress={handleAddComment}
-          iconColor={theme.colors.button}
-          disabled={isAddingComment}
-          accessibilityLabel="Send Comment"
-        />
-      </View>
+      <KeyboardAvoidingView>
+        <View
+          style={[
+            styles.addCommentContainer,
+            { backgroundColor: theme.colors.primary },
+          ]}
+        >
+          <TextInput
+            value={newComment}
+            onChangeText={setNewComment}
+            placeholder="Write a comment..."
+            placeholderTextColor="#999"
+            style={[
+              styles.commentInput,
+              { backgroundColor: theme.colors.surface },
+            ]}
+            multiline
+            accessibilityLabel="Comment Input"
+          />
+          <IconButton
+            icon="send"
+            onPress={handleAddComment}
+            iconColor={theme.colors.button}
+            disabled={isAddingComment}
+            accessibilityLabel="Send Comment"
+          />
+        </View>
+      </KeyboardAvoidingView>
+
       <AlertDialog
         visible={isAlertVisible}
         title={alertConfig.title}
@@ -266,15 +377,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  deleteContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 60,
-    backgroundColor: "#ff4d4d",
-    borderRadius: 12,
+  flatListContent: {
+    // flexGrow: 1,
+    paddingBottom: 80,
   },
   commentItem: {
-    padding: 10,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
   },
@@ -292,7 +400,6 @@ const styles = StyleSheet.create({
   commentContent: {
     fontSize: 15,
     paddingTop: 5,
-
     marginLeft: 45,
   },
   commentDate: {
@@ -307,21 +414,29 @@ const styles = StyleSheet.create({
   addCommentContainer: {
     flexDirection: "row",
     alignItems: "center",
-    position: "absolute",
     padding: 10,
-    elevation: 10,
     paddingBottom: 40,
+    position: "absolute",
     bottom: 0,
+    elevation: 10,
   },
   commentInput: {
     flex: 1,
-    borderWidth: 0.5,
-    borderRadius: 40,
+    borderWidth: 1,
+    borderRadius: 25,
     paddingHorizontal: 15,
-    height: 45,
+    paddingVertical: 8,
+    backgroundColor: "#fff",
+    fontSize: 15,
+    maxHeight: 100,
   },
   listFooter: {
-    marginBottom: 120,
+    marginBottom: 20,
+  },
+  emptyCommentContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
