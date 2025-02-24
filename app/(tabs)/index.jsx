@@ -15,6 +15,7 @@ import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
 import AlertDialog from "../../components/ui/AlertDialog";
 import * as NavigationBar from "expo-navigation-bar";
 import NetInfo from "@react-native-community/netinfo";
+import useThemeStore from "../../components/store/useThemeStore";
 
 const Home = () => {
   const theme = useTheme();
@@ -25,14 +26,9 @@ const Home = () => {
     useState([]);
   const [alertVisible, setAlertVisible] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
+  const { isDarkTheme } = useThemeStore();
 
-  const {
-    user,
-    cartItem,
-    fetchFavProducts,
-    fetchMainCategories,
-    fetchSubcategories,
-  } = useProductStore();
+  const { user, fetchMainPageData, cartItem } = useProductStore();
 
   useEffect(() => {
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
@@ -42,39 +38,15 @@ const Home = () => {
     setLoading(true);
     setRefreshing(true);
     try {
-      const categories = await fetchMainCategories();
-      if (categories.length > 0) {
-        const categoriesData = await Promise.all(
-          categories.map(async (category) => {
-            const subCategoriesResponse = await fetchSubcategories(
-              category.main_category_id
-            );
-            return {
-              ...category,
-              subCategories: subCategoriesResponse,
-            };
-          })
-        );
-        setCategoriesWithSubCategories(categoriesData);
-      } else {
-        setCategoriesWithSubCategories([]);
-      }
+      setCategoriesWithSubCategories(await fetchMainPageData());
     } catch (err) {
       console.error("Failed to fetch data:", err);
       setCategoriesWithSubCategories([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
-      if (user?.consumer_id) {
-        // fetchFavProducts(user.consumer_id);
-      }
     }
-  }, [
-    fetchMainCategories,
-    fetchSubcategories,
-    // fetchFavProducts,
-    user?.consumer_id,
-  ]);
+  }, []);
 
   // Monitor internet connectivity within Home
   useEffect(() => {
@@ -102,18 +74,6 @@ const Home = () => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const groupedCartItems = useMemo(() => {
-    return cartItem.reduce((acc, item) => {
-      const existingItem = acc.find((i) => i.products_id === item.products_id);
-      if (existingItem) {
-        existingItem.quantity += 1;
-      } else {
-        acc.push({ ...item, quantity: 1 });
-      }
-      return acc;
-    }, []);
-  }, [cartItem]);
-
   const handleCartPress = () => {
     if (!user?.consumer_id) {
       setAlertVisible(true);
@@ -127,9 +87,9 @@ const Home = () => {
       <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
         <Image
           source={
-            theme.dark
-              ? require("../../assets/images/lightLogo.png")
-              : require("../../assets/images/darkLogo.png")
+            !isDarkTheme
+              ? require("../../assets/images/darkLogo.png")
+              : require("../../assets/images/lightLogo.png")
           }
           style={styles.logo}
         />
@@ -156,8 +116,8 @@ const Home = () => {
               size={24}
               iconColor={theme.colors.textColor}
             />
-            {groupedCartItems.length > 0 && (
-              <Badge style={styles.badge}>{groupedCartItems.length}</Badge>
+            {cartItem.length > 0 && (
+              <Badge style={styles.badge}>{cartItem.length}</Badge>
             )}
           </Pressable>
         </View>

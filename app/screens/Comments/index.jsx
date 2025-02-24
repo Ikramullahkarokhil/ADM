@@ -236,6 +236,8 @@ const Comments = () => {
           options,
           cancelButtonIndex,
           destructiveButtonIndex,
+          tintColor: theme.colors.textColor,
+          containerStyle: { backgroundColor: theme.colors.primary },
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
@@ -339,10 +341,14 @@ const Comments = () => {
             value={newComment}
             onChangeText={setNewComment}
             placeholder="Write a comment..."
-            placeholderTextColor="#999"
+            placeholderTextColor={theme.colors.inactiveColor}
             style={[
               styles.commentInput,
-              { backgroundColor: theme.colors.surface },
+              {
+                backgroundColor: theme.colors.primary,
+                borderColor: theme.colors.inactiveColor,
+                color: theme.colors.textColor,
+              },
             ]}
             multiline
             accessibilityLabel="Comment Input"

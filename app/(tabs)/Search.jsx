@@ -19,7 +19,6 @@ import { Link, useNavigation } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
   PaperProvider,
-  Searchbar,
   IconButton,
   Button,
   useTheme,
@@ -29,6 +28,7 @@ import Modal from "react-native-modal";
 import { debounce } from "lodash";
 import useProductStore from "../../components/api/useProductStore";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
+import useThemeStore from "../../components/store/useThemeStore";
 
 const Search = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,15 +39,19 @@ const Search = () => {
     selectedCategories: [],
     priceRange: [0, 10000],
   });
+  const { isDarkTheme } = useThemeStore();
 
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const navigation = useNavigation();
   const theme = useTheme();
 
-  const { searchProductData, productData, error, subcategories } =
-    useProductStore();
-  const data = productData;
+  const {
+    searchProductData,
+    productData = [],
+    error,
+    subcategories,
+  } = useProductStore();
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -181,6 +185,11 @@ const Search = () => {
       </View>
     );
   };
+
+  const placeholderImage = isDarkTheme
+    ? require("../../assets/images/darkImagePlaceholder.jpg")
+    : require("../../assets/images/imageSkeleton.jpg");
+
   // Render product item
   const ProductItem = React.memo(({ item }) => (
     <Link
@@ -201,9 +210,9 @@ const Search = () => {
       >
         <Image
           source={
-            item.product_image
-              ? { uri: item.product_image }
-              : require("../../assets/images/imageSkeleton.jpg")
+            item.product_images && item.product_images.length > 0
+              ? { uri: item.product_images[0] }
+              : placeholderImage
           }
           style={styles.productImage}
           resizeMode="cover"
@@ -223,7 +232,10 @@ const Search = () => {
               <Text
                 style={[
                   styles.productCategory,
-                  { color: theme.colors.textColor },
+                  {
+                    color: theme.colors.textColor,
+                    backgroundColor: theme.colors.subInactiveColor,
+                  },
                 ]}
               >
                 {item.brand_title}
@@ -232,7 +244,6 @@ const Search = () => {
           </View>
           <View style={styles.ratingContainer}>
             <Feather name="star" size={16} color="#FFD700" />
-
             <RatingStars rating={item.average_rating || 0} />
           </View>
         </View>
@@ -242,10 +253,17 @@ const Search = () => {
 
   const renderProductItem = useCallback(
     ({ item }) => <ProductItem item={item} />,
-    []
+    [theme]
   );
 
-  const renderSeparator = () => <View style={styles.separator} />;
+  const renderSeparator = () => (
+    <View
+      style={[
+        styles.separator,
+        { backgroundColor: theme.colors.inactiveColor },
+      ]}
+    />
+  );
 
   // Filter modal component
   const renderFilterModal = () => (
@@ -253,10 +271,15 @@ const Search = () => {
       isVisible={isFilterVisible}
       onBackdropPress={() => setIsFilterVisible(false)}
       style={styles.bottomModal}
+      statusBarTranslucent
     >
-      <View style={styles.modalContent}>
+      <View
+        style={[styles.modalContent, { backgroundColor: theme.colors.primary }]}
+      >
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Filters</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.textColor }]}>
+            Filters
+          </Text>
           <TouchableOpacity onPress={() => setIsFilterVisible(false)}>
             <Feather name="x" size={24} color={theme.colors.textColor} />
           </TouchableOpacity>
@@ -265,20 +288,29 @@ const Search = () => {
         <ScrollView style={{ maxHeight: 400 }}>
           {/* Rating Filter */}
           <View style={styles.filterSection}>
-            <Text style={styles.filterTitle}>Minimum Rating</Text>
+            <Text
+              style={[styles.filterTitle, { color: theme.colors.textColor }]}
+            >
+              Minimum Rating
+            </Text>
             <View style={styles.ratingContainer}>
               {[0, 1, 2, 3, 4, 5].map((rating) => (
                 <TouchableOpacity
                   key={rating}
                   style={[
                     styles.ratingPill,
+                    {
+                      backgroundColor: theme.colors.subInactiveColor,
+                    },
                     filters.minRating === rating && styles.selectedPill,
                   ]}
                   onPress={() =>
                     setFilters((prev) => ({ ...prev, minRating: rating }))
                   }
                 >
-                  <Text>{rating === 0 ? "Any" : `${rating}+ ★`}</Text>
+                  <Text style={{ color: theme.colors.textColor }}>
+                    {rating === 0 ? "Any" : `${rating}+ ★`}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -286,7 +318,11 @@ const Search = () => {
 
           {/* Brand Filter */}
           <View style={styles.filterSection}>
-            <Text style={styles.filterTitle}>Brands</Text>
+            <Text
+              style={[styles.filterTitle, { color: theme.colors.textColor }]}
+            >
+              Brands
+            </Text>
             <View style={styles.chipContainer}>
               {brands
                 .filter((brand) => brand.toLowerCase() !== "none")
@@ -295,43 +331,76 @@ const Search = () => {
                     key={brand}
                     style={[
                       styles.filterChip,
+                      {
+                        backgroundColor: theme.colors.subInactiveColor,
+                        borderColor: theme.colors.inactiveColor,
+                      },
                       filters.selectedBrands.includes(brand) &&
                         styles.selectedChip,
                     ]}
                     onPress={() => handleChipPress("selectedBrands", brand)}
                   >
-                    <Text style={styles.chipText}>{brand}</Text>
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: theme.colors.textColor },
+                      ]}
+                    >
+                      {brand}
+                    </Text>
                   </TouchableOpacity>
                 ))}
             </View>
           </View>
 
-          {/* Categories Filter */}
-          <View style={styles.filterSection}>
-            <Text style={styles.filterTitle}>Categories</Text>
-            <View style={styles.chipContainer}>
-              {categoryOptions.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={[
-                    styles.filterChip,
-                    filters.selectedCategories.includes(
-                      category.categorie_id
-                    ) && styles.selectedChip,
-                  ]}
-                  onPress={() =>
-                    handleChipPress("selectedCategories", category.categorie_id)
-                  }
-                >
-                  <Text style={styles.chipText}>{category.name}</Text>
-                </TouchableOpacity>
-              ))}
+          {categoryOptions?.length > 0 && (
+            <View style={styles.filterSection}>
+              <Text
+                style={[styles.filterTitle, { color: theme.colors.textColor }]}
+              >
+                Categories
+              </Text>
+
+              <View style={styles.chipContainer}>
+                {categoryOptions.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={[
+                      styles.filterChip,
+                      {
+                        backgroundColor: theme.colors.subInactiveColor,
+                        borderColor: theme.colors.inactiveColor,
+                      },
+                      filters.selectedCategories.includes(
+                        category.categorie_id || category.id // Adjust based on your data structure
+                      ) && styles.selectedChip,
+                    ]}
+                    onPress={() =>
+                      handleChipPress(
+                        "selectedCategories",
+                        category.categorie_id || category.id // Adjust based on your data structure
+                      )
+                    }
+                  >
+                    <Text
+                      style={[
+                        styles.chipText,
+                        { color: theme.colors.textColor },
+                      ]}
+                    >
+                      {category.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
-          </View>
+          )}
 
           {/* Price Filter */}
           <View style={styles.filterSection}>
-            <Text style={styles.filterTitle}>
+            <Text
+              style={[styles.filterTitle, { color: theme.colors.textColor }]}
+            >
               Price Range: ${filters.priceRange[0]} - ${filters.priceRange[1]}
             </Text>
             <MultiSlider
@@ -386,7 +455,11 @@ const Search = () => {
       <PaperProvider>
         <View style={styles.headerContainer}>
           <Image
-            source={require("../../assets/images/darkLogo.png")}
+            source={
+              !isDarkTheme
+                ? require("../../assets/images/darkLogo.png")
+                : require("../../assets/images/lightLogo.png")
+            }
             style={styles.logo}
           />
         </View>
@@ -395,9 +468,14 @@ const Search = () => {
             accessibilityLabel="Search for products"
             style={[
               styles.searchInput,
-              { backgroundColor: theme.colors.primary },
+              {
+                backgroundColor: theme.colors.primary,
+                borderColor: theme.colors.subInactiveColor,
+                color: theme.colors.textColor,
+              },
             ]}
             placeholder="Search products..."
+            placeholderTextColor={theme.colors.inactiveColor}
             value={searchQuery}
             onChangeText={setSearchQuery}
             autoCorrect={false}
@@ -483,11 +561,11 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    borderRadius: 10,
-    elevation: 5,
+    borderRadius: 20,
+    elevation: 10,
     borderWidth: 0.5,
-    paddingHorizontal: 10,
-    height: 35,
+    paddingHorizontal: 15,
+    height: 40,
   },
   listContainer: {
     paddingBottom: 20,
@@ -495,7 +573,6 @@ const styles = StyleSheet.create({
   itemContainer: {},
   separator: {
     height: 1,
-    backgroundColor: "#CCC",
     marginHorizontal: 10,
   },
   productImage: {
@@ -600,7 +677,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 20,
-    backgroundColor: "#f5f5f5",
   },
   selectedPill: {
     backgroundColor: "#fff3e0",
@@ -610,7 +686,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     gap: 10,
-    marginTop: 20,
   },
   actionButton: {
     flex: 1,

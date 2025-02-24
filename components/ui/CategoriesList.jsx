@@ -13,12 +13,30 @@ import { useTheme } from "react-native-paper";
 import { Link, useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
 
-const CategoriesSectionList = ({ data }) => {
+const transformData = (rawData) => {
+  return rawData.map((category) => ({
+    main_category_id: category.main_category.main_category_id,
+    name: category.main_category.name,
+    subCategories: category.sub_categories.data.map((sub) => ({
+      categories_id:
+        sub.categories_id ||
+        sub.id ||
+        `${category.main_category.main_category_id}-${Math.random()}`, // Fallback ID
+      title: sub.title || sub.name || "Unnamed Subcategory",
+      category_image: sub.category_image || null,
+    })),
+  }));
+};
+
+const CategoriesSectionList = ({ data: rawData }) => {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const numColumns = width > 550 ? 4 : 2;
   const router = useRouter();
   const { isDarkTheme } = useThemeStore();
+
+  // Transform data once
+  const data = useMemo(() => transformData(rawData), [rawData]);
 
   const handleShowMore = useCallback(
     (mainCategoryId) => {
@@ -76,49 +94,38 @@ const CategoriesSectionList = ({ data }) => {
 
   const renderCategory = useCallback(
     ({ item }) => {
-      const displayedSubCategories = item.subCategories.slice(0, 8);
-
       return (
         <View style={styles.categoryContainer}>
           <Text style={[styles.header, { color: theme.colors.textColor }]}>
             {item.name}
           </Text>
           <FlatList
-            data={displayedSubCategories}
+            data={item.subCategories}
             renderItem={renderSubcategoryItem}
             keyExtractor={(subItem) => subItem.categories_id.toString()}
             numColumns={numColumns}
             scrollEnabled={false}
           />
-          <Pressable
-            onPress={() => handleShowMore(item.main_category_id)}
-            style={[
-              styles.showMoreButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            accessibilityLabel={`Show more in ${item.name}`}
-          >
-            <Text
-              style={[styles.showMoreText, { color: theme.colors.textColor }]}
+          {item.subCategories.length > 6 && (
+            <Pressable
+              onPress={() => handleShowMore(item.main_category_id)}
+              style={[
+                styles.showMoreButton,
+                { backgroundColor: theme.colors.primary },
+              ]}
+              accessibilityLabel={`Show more in ${item.name}`}
             >
-              Show More
-            </Text>
-          </Pressable>
+              <Text
+                style={[styles.showMoreText, { color: theme.colors.textColor }]}
+              >
+                Show More
+              </Text>
+            </Pressable>
+          )}
         </View>
       );
     },
-    [renderSubcategoryItem, handleShowMore, theme]
-  );
-
-  const footerComponent = useMemo(
-    () => (
-      <View style={styles.footer}>
-        <Text style={[styles.listFooter, { color: theme.colors.textColor }]}>
-          Footer
-        </Text>
-      </View>
-    ),
-    [theme]
+    [renderSubcategoryItem, handleShowMore, theme, numColumns]
   );
 
   if (!data || data.length === 0) {

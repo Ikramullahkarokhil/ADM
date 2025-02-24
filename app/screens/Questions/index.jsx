@@ -190,7 +190,8 @@ const Questions = () => {
           options,
           destructiveButtonIndex,
           cancelButtonIndex,
-          tintColor: theme.colors.textColor,
+          tintColor: theme.colors.textColor, // Text color for options
+          containerStyle: { backgroundColor: theme.colors.primary },
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
@@ -201,7 +202,7 @@ const Questions = () => {
                 if (newText)
                   handleUpdateQuestion(question.products_qna_id, newText);
               },
-              true // Assuming AlertDialog supports text input
+              true
             );
           } else if (buttonIndex === 1) {
             handleDeleteQuestion(question.products_qna_id);
@@ -236,7 +237,12 @@ const Questions = () => {
   );
 
   const renderLoadingState = () => (
-    <View style={styles.loadingContainer}>
+    <View
+      style={[
+        styles.loadingContainer,
+        { backgroundColor: theme.colors.primary },
+      ]}
+    >
       <ActivityIndicator size="large" color={theme.colors.textColor} />
       <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
         Loading questions...
@@ -247,7 +253,9 @@ const Questions = () => {
   const ItemSeparator = () => <View style={styles.separator} />;
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <GestureHandlerRootView
+      style={[styles.container, { backgroundColor: theme.colors.primary }]}
+    >
       {isLoading && questionPage === 1 ? (
         renderLoadingState()
       ) : (
@@ -283,7 +291,11 @@ const Questions = () => {
           placeholderTextColor={theme.colors.inactiveColor}
           style={[
             styles.questionInput,
-            { borderColor: theme.colors.subInactiveColor },
+            {
+              borderColor: theme.colors.subInactiveColor,
+              backgroundColor: theme.colors.primary,
+              color: theme.colors.textColor,
+            },
           ]}
           multiline
           maxLength={200}
@@ -335,7 +347,10 @@ const QuestionItem = memo(({ item, theme }) => (
           {item.consumer_name || "Anonymous"}
         </Text>
         <Text
-          style={[styles.questionDate, { color: theme.colors.inactiveColor }]}
+          style={[
+            styles.questionDate,
+            { color: theme.colors.subInactiveColor },
+          ]}
         >
           {item.date}
         </Text>

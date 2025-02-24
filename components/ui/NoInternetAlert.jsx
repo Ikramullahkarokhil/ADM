@@ -10,7 +10,7 @@ const AlertDialog = ({
   onDismiss,
   onConfirm,
   confirmText = "OK",
-  cancelText = "Cancel",
+  cancelText = "",
   animationIn = "zoomIn",
   animationOut = "zoomOut",
 }) => {
@@ -19,11 +19,12 @@ const AlertDialog = ({
   return (
     <Modal
       isVisible={visible}
-      onBackdropPress={onDismiss} // Will not dismiss since onDismiss is empty in Layout
-      onBackButtonPress={onDismiss} // Will not dismiss since onDismiss is empty in Layout
+      onBackdropPress={onDismiss}
+      onBackButtonPress={onDismiss}
       animationIn={animationIn}
       animationOut={animationOut}
       backdropOpacity={0.1}
+      statusBarTranslucent
     >
       <View style={[styles.dialog, { backgroundColor: theme.colors.primary }]}>
         <Text style={[styles.title, { color: theme.colors.textColor }]}>

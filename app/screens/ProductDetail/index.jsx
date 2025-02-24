@@ -30,11 +30,8 @@ import { Button, IconButton, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import useProductStore from "../../../components/api/useProductStore";
-import {
-  GestureHandlerRootView,
-  Swipeable,
-} from "react-native-gesture-handler";
-import { useActionSheet } from "@expo/react-native-action-sheet"; // Import the action sheet hook
+import { useActionSheet } from "@expo/react-native-action-sheet";
+import useThemeStore from "../../../components/store/useThemeStore";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -43,7 +40,7 @@ const ProductDetail = () => {
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();
-  const { showActionSheetWithOptions } = useActionSheet(); // Initialize action sheet
+  const { showActionSheetWithOptions } = useActionSheet();
 
   // State variables
   const [isFavorite, setIsFavorite] = useState(false);
@@ -63,8 +60,7 @@ const ProductDetail = () => {
     user,
     addToFavorite,
     removeFavorite,
-    productsBySubcategory,
-    productData,
+    productData, // Use only productData
     favProducts,
     addToCart,
     cartItem,
@@ -72,36 +68,20 @@ const ProductDetail = () => {
     getProductQuestionList,
     deleteProductQuestion,
   } = useProductStore();
+  const { isDarkTheme } = useThemeStore();
 
-  // Derive the product
+  const productMap = useMemo(() => {
+    return productData.reduce((map, product) => {
+      map[product.products_id.toString()] = product;
+      return map;
+    }, {});
+  }, [productData]);
+
   const product = useMemo(() => {
-    try {
-      if (id) {
-        return (
-          productData.find((item) => item.products_id.toString() === id) || null
-        );
-      }
-      if (subcategoryId) {
-        return (
-          productsBySubcategory[subcategoryId].find(
-            (item) => item.products_id.toString() === categoryProductId
-          ) || null
-        );
-      }
-      return null;
-    } catch (err) {
-      console.error("Error finding product:", err);
-      return null;
-    }
-  }, [
-    id,
-    subcategoryId,
-    categoryProductId,
-    productData,
-    productsBySubcategory,
-  ]);
+    const searchId = id || categoryProductId;
+    return searchId ? productMap[searchId] || null : null;
+  }, [id, categoryProductId, productMap]);
 
-  // Check if product is in cart
   const isInCart = useMemo(
     () => cartItem.some((item) => item.products_id === product?.products_id),
     [cartItem, product]
@@ -122,8 +102,8 @@ const ProductDetail = () => {
     setRefreshing(true);
     try {
       const questionData = await getProductQuestionList(product.products_id);
-      setQuestions(questionData);
-      setTotalQuestions(questionData.total);
+      setQuestions(questionData.questions || []); // Adjust based on your API response structure
+      setTotalQuestions(questionData.total || 0);
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
@@ -144,9 +124,15 @@ const ProductDetail = () => {
   useEffect(() => {
     if (product) {
       const fetchQuestions = async () => {
-        const questionData = await getProductQuestionList(product.products_id);
-        setQuestions(questionData);
-        setTotalQuestions(questionData.total);
+        try {
+          const questionData = await getProductQuestionList(
+            product.products_id
+          );
+          setQuestions(questionData.questions || []); // Adjust based on your API response structure
+          setTotalQuestions(questionData.total || 0);
+        } catch (err) {
+          console.error("Error fetching questions:", err);
+        }
       };
       fetchQuestions();
     }
@@ -197,7 +183,7 @@ const ProductDetail = () => {
       });
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
     } catch (err) {
-      showAlert("Error", err.message);
+      showAlert("Error", err.message || "Failed to add to cart");
     } finally {
       setIsAddingToCart(false);
     }
@@ -250,7 +236,7 @@ const ProductDetail = () => {
       }
     } catch (err) {
       setIsFavorite(previousFavorite);
-      showAlert("Error", err.message);
+      showAlert("Error", err.message || "Failed to update favorite");
     } finally {
       setIsFavoriting(false);
     }
@@ -284,9 +270,10 @@ const ProductDetail = () => {
         });
         const updatedData = await getProductQuestionList(product.products_id);
         setQuestions(updatedData.questions || []);
+        setTotalQuestions(updatedData.total || 0);
         ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
       } catch (err) {
-        showAlert("Error", err.message);
+        showAlert("Error", err.message || "Failed to delete question");
       }
     },
     [
@@ -299,21 +286,18 @@ const ProductDetail = () => {
     ]
   );
 
-  // Update question handler (placeholder - implement your logic)
-  const handleUpdateQuestion = useCallback(
-    (questionId) => {
-      ToastAndroid.show(
-        "Update functionality not implemented",
-        ToastAndroid.SHORT
-      );
-    },
-    [router]
-  );
+  // Update question handler (placeholder)
+  const handleUpdateQuestion = useCallback((questionId) => {
+    ToastAndroid.show(
+      "Update functionality not implemented",
+      ToastAndroid.SHORT
+    );
+  }, []);
 
   // Show action sheet for a question
   const showQuestionActionSheet = useCallback(
     (questionId) => {
-      const options = ["Edit", "Delete"];
+      const options = ["Edit", "Delete", "Cancel"];
       const destructiveButtonIndex = 1; // "Delete" is destructive
       const cancelButtonIndex = 2;
 
@@ -322,20 +306,23 @@ const ProductDetail = () => {
           options,
           cancelButtonIndex,
           destructiveButtonIndex,
+          tintColor: theme.colors.button,
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
-            // Update
             handleUpdateQuestion(questionId);
           } else if (buttonIndex === 1) {
-            // Delete
             handleDeleteQuestion(questionId);
           }
-          // Cancel does nothing
         }
       );
     },
-    [showActionSheetWithOptions, handleUpdateQuestion, handleDeleteQuestion]
+    [
+      showActionSheetWithOptions,
+      handleUpdateQuestion,
+      handleDeleteQuestion,
+      theme.colors.button,
+    ]
   );
 
   // Render rating stars
@@ -357,7 +344,11 @@ const ProductDetail = () => {
   const images =
     product?.product_images?.length > 0
       ? product.product_images
-      : [require("../../../assets/images/imageSkeleton.jpg")];
+      : [
+          isDarkTheme
+            ? require("../../../assets/images/darkImagePlaceholder.jpg")
+            : require("../../../assets/images/imageSkeleton.jpg"),
+        ];
 
   // Error and Not Found views
   if (error) {
@@ -543,15 +534,15 @@ const ProductDetail = () => {
           </Link>
           <View style={styles.buttonRow}>
             <Button
-              textColor={theme.colors.primary}
-              buttonColor={theme.colors.button}
+              textColor={theme.colors.button}
+              // buttonColor={theme.colors.button}
               onPress={handleAddToCart}
               style={[styles.button, { borderColor: theme.colors.button }]}
               disabled={isInCart}
               loading={isAddingToCart}
               accessibilityLabel={isInCart ? "Product in cart" : "Add to cart"}
             >
-              {isInCart ? "Added to Cart" : "Add to Cart"}
+              "Add to Cart"
             </Button>
             <Button
               onPress={handleShare}
@@ -572,7 +563,6 @@ const ProductDetail = () => {
         </View>
 
         {/* Questions Section */}
-
         <View
           style={[
             styles.questionsSection,
@@ -649,7 +639,7 @@ const ProductDetail = () => {
   );
 };
 
-// Memoized QuestionItem
+// Memoized QuestionItem (unchanged)
 const QuestionItem = memo(({ item, theme }) => (
   <View
     style={[
@@ -920,13 +910,6 @@ const styles = StyleSheet.create({
   answerText: {
     fontSize: 14,
     paddingTop: 5,
-  },
-  deleteContainer: {
-    justifyContent: "center",
-    alignItems: "center",
-    width: 60,
-    backgroundColor: "#ff4d4d",
-    borderRadius: 12,
   },
   noQuestionsText: {
     fontSize: 16,

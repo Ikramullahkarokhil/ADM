@@ -1,4 +1,9 @@
-import React, { useEffect, useCallback, useState } from "react";
+import React, {
+  useEffect,
+  useCallback,
+  useState,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -9,29 +14,34 @@ import {
   Share,
   ToastAndroid,
 } from "react-native";
-import { Link, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  Link,
+  useLocalSearchParams,
+  useNavigation,
+  useRouter,
+} from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import { FontAwesome } from "@expo/vector-icons";
 import ProductSkeleton from "../../../components/skeleton/productSkeleton";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import AlertDialog from "../../../components/ui/AlertDialog";
+import useThemeStore from "../../../components/store/useThemeStore";
 
 const ProductList = () => {
-  const { subcategoryId, mainCategoryId, showmore, subCategorieName } =
-    useLocalSearchParams();
-  const {
-    subcategories,
-    productsBySubcategory,
-    fetchProductsBySubcategory,
-    fetchProductByCategories,
-    loading,
-    error,
-    addToCart,
-    user,
-    cartItem,
-  } = useProductStore();
+  const navigation = useNavigation();
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: subCategorieName,
+      headerStyle: { backgroundColor: theme.colors.primary },
+      headerTintColor: theme.colors.textColor,
+    });
+  }, [navigation]);
+  const { subcategoryId, subCategorieName } = useLocalSearchParams();
+  const { fetchProductsBySubcategory, addToCart, user, cartItem, error } =
+    useProductStore();
   const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true); // Local loading state
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertState, setAlertState] = useState({
     title: "",
@@ -39,63 +49,36 @@ const ProductList = () => {
     confirmText: "Ok",
     confirmAction: () => setAlertVisible(false),
   });
+  const { isDarkTheme } = useThemeStore();
 
   const theme = useTheme();
-  const navigation = useNavigation();
-  const { showActionSheetWithOptions } = useActionSheet();
 
-  navigation.setOptions({
-    title: subCategorieName,
-    headerStyle: { backgroundColor: theme.colors.primary },
-    headerTintColor: theme.colors.textColor,
-  });
+  const { showActionSheetWithOptions } = useActionSheet();
+  const router = useRouter();
 
   const loadProducts = useCallback(async () => {
     try {
-      await fetchProductsBySubcategory(subcategoryId);
+      setIsLoading(true);
+      setProducts(await fetchProductsBySubcategory(subcategoryId));
     } catch (err) {
       console.error("Failed to fetch products:", err);
+    } finally {
+      setIsLoading(false);
     }
-  }, [subcategoryId, fetchProductsBySubcategory]);
+  }, [subcategoryId]);
 
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
 
-  useEffect(() => {
-    const fetchProducts = async () => {
-      if (showmore) {
-        try {
-          const subCategoryIds =
-            subcategories[mainCategoryId]?.map(
-              (subCat) => subCat.categories_id
-            ) || [];
-          const response = await fetchProductByCategories(subCategoryIds);
-          setProducts(response);
-        } catch (err) {
-          console.error("Failed to fetch products for all subcategories:", err);
-        }
-      } else {
-        setProducts(productsBySubcategory[subcategoryId] || []);
-      }
-    };
-    fetchProducts();
-  }, [
-    showmore,
-    mainCategoryId,
-    subcategoryId,
-    subcategories,
-    productsBySubcategory,
-    fetchProductByCategories,
-  ]);
-
+  // Handler functions remain unchanged
   const handleAddToCart = useCallback(
     async (product) => {
       if (!user) {
         setAlertState({
           title: "Login Required",
           message: "Please log in to add products to your cart.",
-          confirmAction: () => navigation.navigate("Login"),
+          confirmAction: () => router.replace("Login"),
         });
         setAlertVisible(true);
         return;
@@ -106,7 +89,7 @@ const ProductList = () => {
           title: "Product already in cart",
           message: "This product is already in your cart.",
           confirmText: "Go to Cart",
-          confirmAction: () => navigation.navigate("screens/Cart"),
+          confirmAction: () => router.navigate("screens/Cart"),
         });
         setAlertVisible(true);
         return;
@@ -126,7 +109,7 @@ const ProductList = () => {
         setAlertVisible(true);
       }
     },
-    [user, cartItem, addToCart, navigation]
+    [user, cartItem, addToCart, router]
   );
 
   const shareProduct = useCallback(async (product) => {
@@ -168,9 +151,7 @@ const ProductList = () => {
 
   const renderRatingStars = useCallback(
     (item) => {
-      if (!item?.average_rating || item.average_rating === 0) {
-        return null;
-      }
+      if (!item?.average_rating || item.average_rating === 0) return null;
       return (
         <View style={styles.ratingContainer}>
           <FontAwesome
@@ -203,17 +184,16 @@ const ProductList = () => {
         >
           <TouchableOpacity
             activeOpacity={0.7}
-            onLongPress={() => {
-              console.log("Long press detected:", item.title); // Debug log
-              showProductOptions(item);
-            }}
+            onLongPress={() => showProductOptions(item)}
             delayLongPress={500}
           >
             <View style={styles.card}>
               <Image
                 source={
-                  item.product_image
-                    ? { uri: item.product_image }
+                  item.category_image
+                    ? { uri: item.category_image }
+                    : isDarkTheme
+                    ? require("../../../assets/images/darkImagePlaceholder.jpg")
                     : require("../../../assets/images/imageSkeleton.jpg")
                 }
                 style={styles.productImage}
@@ -267,8 +247,8 @@ const ProductList = () => {
   return (
     <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
       <FlatList
-        data={loading ? Array(6).fill(null) : products}
-        renderItem={loading ? () => <ProductSkeleton /> : renderItem}
+        data={isLoading ? Array(6).fill(null) : products}
+        renderItem={isLoading ? () => <ProductSkeleton /> : renderItem}
         keyExtractor={(item, index) =>
           item ? item.products_id.toString() : index.toString()
         }
@@ -282,10 +262,10 @@ const ProductList = () => {
         )}
         contentContainerStyle={[
           styles.listContent,
-          { backgroundColor: theme.colors.background },
+          { backgroundColor: theme.colors.primary },
         ]}
         ListEmptyComponent={
-          !loading && (
+          !isLoading && (
             <View style={styles.centerContainer}>
               <Text
                 style={[styles.messageText, { color: theme.colors.textColor }]}
@@ -314,6 +294,7 @@ const ProductList = () => {
   );
 };
 
+// Styles remain unchanged
 const styles = StyleSheet.create({
   centerContainer: {
     flex: 1,

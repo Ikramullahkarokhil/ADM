@@ -44,14 +44,16 @@ const ProfileHeader = ({
         <Avatar.Image
           source={{ uri: profileImage }}
           size={60}
-          style={{ backgroundColor: theme.colors.surface }}
+          style={{ backgroundColor: theme.colors.primary }}
         />
       </TouchableRipple>
       <View style={styles.headerTextContainer}>
-        <Text style={[styles.username, { color: theme.colors.text }]}>
+        <Text style={[styles.username, { color: theme.colors.textColor }]}>
           {username}
         </Text>
-        <Text style={[styles.membershipText, { color: theme.colors.text }]}>
+        <Text
+          style={[styles.membershipText, { color: theme.colors.inactiveColor }]}
+        >
           {membership}
         </Text>
       </View>
@@ -79,7 +81,12 @@ const Profile = () => {
     const options = ["System Default", "Light", "Dark", "Cancel"];
     const cancelButtonIndex = options.length - 1;
     showActionSheetWithOptions(
-      { options, cancelButtonIndex, title: "Select Theme" },
+      {
+        options,
+        cancelButtonIndex,
+        tintColor: theme.colors.textColor,
+        containerStyle: { backgroundColor: theme.colors.primary },
+      },
       async (selectedIndex) => {
         if (
           selectedIndex !== undefined &&
@@ -93,7 +100,7 @@ const Profile = () => {
         }
       }
     );
-  }, [showActionSheetWithOptions, setThemeMode]);
+  }, [showActionSheetWithOptions, setThemeMode, theme]);
 
   const handleNavigation = useCallback(
     (screen) => {
@@ -229,9 +236,7 @@ const Profile = () => {
     { label: "More Features", screen: "MoreFeatures" },
   ];
 
-  const accountActions = [
-    { label: "Logout", onPress: handleLogout, special: true },
-  ];
+  const accountActions = [{ label: "Logout", onPress: handleLogout }];
 
   const renderMenuGroup = (items) => (
     <View
@@ -252,7 +257,7 @@ const Profile = () => {
                   {
                     color: item.special
                       ? theme.colors.error
-                      : theme.colors.text,
+                      : theme.colors.textColor,
                   },
                 ]}
               >
@@ -272,7 +277,7 @@ const Profile = () => {
 
   return (
     <SafeAreaView
-      style={[styles.safeArea, { backgroundColor: theme.colors.background }]}
+      style={[styles.safeArea, { backgroundColor: theme.colors.primary }]}
     >
       <ScrollView contentContainerStyle={styles.container}>
         <ProfileHeader

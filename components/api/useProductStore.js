@@ -17,7 +17,7 @@ const initialState = {
   topSellers: [],
   mainCategories: [],
   subcategories: {},
-  productData: {},
+  productData: [],
   favProducts: [],
   cartItem: [],
   productsBySubcategory: {},
@@ -97,27 +97,42 @@ const useProductStore = create(
         return data?.data ?? [];
       },
 
-      // Fetch Products by Subcategory
-      fetchProductsBySubcategory: async (subcategoryId) => {
-        const data = await get().apiRequest("/get-search-products", {
-          params: { categories: [subcategoryId] },
-        });
-        set((state) => ({
-          productsBySubcategory: {
-            ...state.productsBySubcategory,
-            [subcategoryId]: data?.data || [],
-          },
-        }));
-        return data?.data || [];
+      fetchMainPageData: async (consumerId) => {
+        return (
+          await get().apiRequest(
+            `/get-main-page-data?consumer_id=${consumerId}`
+          )
+        ).data;
       },
 
-      // Search Products
+      // Fetch Products by Subcategory
+      fetchProductsBySubcategory: async (subcategoryId) => {
+        try {
+          set({ loading: true, error: null });
+          const data = await get().apiRequest("/get-search-products", {
+            params: { categories: [subcategoryId], limitData: 20 },
+          });
+          set({ productData: data?.data || [], loading: false });
+          return data?.data || [];
+        } catch (err) {
+          set({ error: err.message, loading: false });
+          throw err;
+        }
+      },
+
+      // Search products
       searchProductData: async (searchTerm) => {
-        const data = await get().apiRequest("/get-search-products", {
-          params: { search: searchTerm, limitData: 20 },
-        });
-        set({ productData: data?.data || [] });
-        return data?.data || [];
+        try {
+          set({ loading: true, error: null });
+          const data = await get().apiRequest("/get-search-products", {
+            params: { search: searchTerm, limitData: 20 },
+          });
+          set({ productData: data?.data || [], loading: false });
+          return data?.data || [];
+        } catch (err) {
+          set({ error: err.message, loading: false });
+          throw err;
+        }
       },
 
       fetchProductByCategories: async (subCategoryIds = []) => {
@@ -204,11 +219,11 @@ const useProductStore = create(
 
       fetchProfile: async (consumerId) => {
         try {
-          const data = await get().apiRequest(
-            `/consumer/profile-details/${consumerId}`
-          );
-          set({ profileData: data });
-          return data;
+          set({
+            profileData: await get().apiRequest(
+              `/consumer/profile-details/${consumerId}`
+            ),
+          });
         } catch (error) {
           const errorMessage = error.response?.data?.message || error.message;
           set({ loginError: errorMessage, loginLoading: false });

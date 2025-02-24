@@ -18,6 +18,7 @@ import useProductStore from "../components/api/useProductStore";
 import { Link, useRouter } from "expo-router";
 import { Button, useTheme } from "react-native-paper";
 import * as NavigationBar from "expo-navigation-bar";
+import useThemeStore from "../components/store/useThemeStore";
 
 // Validation schema
 const loginSchema = Yup.object().shape({
@@ -88,28 +89,15 @@ const Login = () => {
   const theme = useTheme();
   const [fadeAnim] = useState(new Animated.Value(0));
   const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const { isDarkTheme } = useThemeStore();
 
   useEffect(() => {
-    // Fade-in animation
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 800,
       useNativeDriver: true,
     }).start();
-
-    // Set navigation bar color
-    const setNavigationBarColor = async () => {
-      try {
-        await NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-        await NavigationBar.setButtonStyleAsync(
-          theme === theme.darkTheme ? "light" : "dark"
-        );
-      } catch (error) {
-        console.error("Error setting navigation bar color:", error);
-      }
-    };
-    setNavigationBarColor();
-  }, [fadeAnim, theme]);
+  }, [fadeAnim]);
 
   const handleLogin = useCallback(
     async (values) => {
@@ -135,7 +123,11 @@ const Login = () => {
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         <View style={styles.logoContainer}>
           <Image
-            source={require("../assets/images/darkLogo.png")}
+            source={
+              !isDarkTheme
+                ? require("../assets/images/darkLogo.png")
+                : require("../assets/images/lightLogo.png")
+            }
             style={styles.logo}
             resizeMode="contain"
             accessibilityLabel="App Logo"

@@ -1,4 +1,4 @@
-import { useColorScheme } from "react-native";
+import { BackHandler, useColorScheme } from "react-native";
 import React, { useEffect, useState, useCallback } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
@@ -21,7 +21,7 @@ const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const { fetchProfile, logout, user } = useProductStore();
+  const { fetchProfile, logout, user, listCart } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
@@ -52,6 +52,7 @@ const Layout = () => {
     if (user?.consumer_id) {
       try {
         await fetchProfile(user.consumer_id);
+        await listCart(user.consumer_id);
       } catch (error) {
         console.error("Error fetching user data:", error);
       }
@@ -117,7 +118,9 @@ const Layout = () => {
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView
+      style={{ flex: 1, backgroundColor: theme.colors.primary }}
+    >
       <ActionSheetProvider>
         <PaperProvider theme={theme}>
           <StatusBar style={isDarkTheme ? "light" : "dark"} />
@@ -127,7 +130,12 @@ const Layout = () => {
               onDecline={() => BackHandler.exitApp()}
             />
           ) : (
-            <Stack screenOptions={{ headerTitleAlign: "center" }}>
+            <Stack
+              screenOptions={{
+                headerTitleAlign: "center",
+                headerStyle: { backgroundColor: theme.colors.primary },
+              }}
+            >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
@@ -136,9 +144,8 @@ const Layout = () => {
             visible={showAlert}
             title="No Internet Connection"
             message="Please check your internet connection and try again."
-            onDismiss={() => {}}
             onConfirm={handleRefresh}
-            confirmText="Refresh"
+            confirmText="Try again"
           />
         </PaperProvider>
       </ActionSheetProvider>
