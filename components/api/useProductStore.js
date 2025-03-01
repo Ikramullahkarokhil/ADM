@@ -208,7 +208,7 @@ const useProductStore = create(
       deleteFromCart: async ({ productID, consumerID }) => {
         try {
           await api.delete(
-            `/cart/delete?product_id=${productID}&consumer_id=${consumerID}`
+            `/cart/delete?id=${productID}&consumer_id=${consumerID}`
           );
           await get().listCart(consumerID);
         } catch (error) {

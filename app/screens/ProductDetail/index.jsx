@@ -36,7 +36,7 @@ import useThemeStore from "../../../components/store/useThemeStore";
 const { width: screenWidth } = Dimensions.get("window");
 
 const ProductDetail = () => {
-  const { id, subcategoryId, categoryProductId } = useLocalSearchParams();
+  const { id, categoryProductId } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();

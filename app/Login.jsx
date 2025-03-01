@@ -35,7 +35,7 @@ const FormikInput = memo(
       (text) => {
         helpers.setValue(text);
       },
-      [helpers]
+      [helpers],
     );
 
     const handleBlur = useCallback(() => {
@@ -52,9 +52,9 @@ const FormikInput = memo(
             style={[
               styles.input,
               {
-                backgroundColor: theme.colors.surface,
-                color: theme.colors.text,
-                borderColor: theme.colors.borderColor,
+                backgroundColor: theme.colors.primary,
+                color: theme.colors.textColor,
+                borderColor: theme.colors.subInactiveColor,
               },
               meta.touched && meta.error && styles.errorInput,
             ]}
@@ -79,7 +79,7 @@ const FormikInput = memo(
         )}
       </View>
     );
-  }
+  },
 );
 
 // Main Login component
@@ -108,7 +108,7 @@ const Login = () => {
         console.error("Login Error:", error);
       }
     },
-    [loginUser, router]
+    [loginUser, router],
   );
 
   const toggleSecure = useCallback(() => {
@@ -147,7 +147,15 @@ const Login = () => {
           onSubmit={handleLogin}
         >
           {({ handleSubmit }) => (
-            <View style={styles.form}>
+            <View
+              style={[
+                styles.form,
+                {
+                  backgroundColor: theme.colors.background,
+                  borderColor: theme.colors.subInactiveColor,
+                },
+              ]}
+            >
               <FormikInput
                 fieldName="email"
                 placeholder="Email"
@@ -172,7 +180,7 @@ const Login = () => {
                   {loginError}
                 </Text>
               )}
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 onPress={handleSubmit}
                 disabled={loginLoading}
                 style={[
@@ -182,11 +190,21 @@ const Login = () => {
                 accessibilityLabel="Sign in button"
               >
                 {loginLoading ? (
-                  <ActivityIndicator color={theme.colors.activeColor} />
+                  <ActivityIndicator color={theme.colors.textColor} />
                 ) : (
                   <Text style={styles.buttonText}>Sign In</Text>
                 )}
-              </TouchableOpacity>
+              </TouchableOpacity> */}
+              <Button
+                textColor={theme.colors.primary}
+                buttonColor={theme.colors.button}
+                style={styles.button}
+                loading={loginLoading}
+                accessibilityLabel="Sign in button"
+                onPress={handleSubmit}
+              >
+                Sign In
+              </Button>
 
               <View style={styles.footer}>
                 <Link href="/screens/Signup" asChild>
@@ -204,7 +222,7 @@ const Login = () => {
                 <Link href="(tabs)" asChild>
                   <Button
                     mode="text"
-                    textColor={theme.colors.textColor}
+                    textColor={theme.colors.button}
                     style={styles.skipButton}
                   >
                     Skip
@@ -251,9 +269,7 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 20,
     padding: 24,
-    backgroundColor: "rgba(255, 255, 255, 0.05)",
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
   },
   inputContainer: {
     marginBottom: 20,
@@ -283,11 +299,8 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   button: {
-    height: 60,
-    borderRadius: 16,
-    marginTop: 24,
-    justifyContent: "center",
-    alignItems: "center",
+    borderRadius: 12,
+    paddingVertical: 10,
   },
   buttonText: {
     color: "#FFFFFF",

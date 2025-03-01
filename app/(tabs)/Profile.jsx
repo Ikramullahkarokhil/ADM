@@ -95,10 +95,10 @@ const Profile = () => {
           const themeOptions = ["system", "light", "dark"];
           const selectedTheme = themeOptions[selectedIndex];
           await setThemeMode(
-            selectedTheme === "system" ? "system" : selectedTheme
+            selectedTheme === "system" ? "system" : selectedTheme,
           );
         }
-      }
+      },
     );
   }, [showActionSheetWithOptions, setThemeMode, theme]);
 
@@ -106,7 +106,7 @@ const Profile = () => {
     (screen) => {
       router.push(screen);
     },
-    [router]
+    [router],
   );
 
   const handleLogout = useCallback(async () => {
@@ -141,7 +141,7 @@ const Profile = () => {
     if (!permissionResult.granted) {
       Alert.alert(
         "Permission Denied",
-        "Permission to access gallery is required!"
+        "Permission to access gallery is required!",
       );
       return;
     }
@@ -177,7 +177,7 @@ const Profile = () => {
           manipResult = await ImageManipulator.manipulateAsync(
             manipResult.uri,
             [],
-            { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
+            { compress: quality, format: ImageManipulator.SaveFormat.JPEG },
           );
           const newInfo = await FileSystem.getInfoAsync(manipResult.uri);
           size = newInfo.size;
@@ -188,7 +188,7 @@ const Profile = () => {
         if (size > MAX_SIZE) {
           Alert.alert(
             "Image Too Large",
-            "Could not compress the image below 100KB."
+            "Could not compress the image below 100KB.",
           );
           return;
         }
@@ -318,13 +318,12 @@ const styles = StyleSheet.create({
   username: { fontSize: 20, fontWeight: "bold" },
   membershipText: { fontSize: 14, marginTop: 4 },
   menuSection: {
-    marginBottom: 16,
     marginTop: 16,
     borderRadius: 12,
     overflow: "hidden",
     marginHorizontal: 16,
-    elevation: 5,
+    elevation: 10,
   },
-  menuItem: { paddingVertical: 16, paddingHorizontal: 16 },
+  menuItem: { padding: 16 },
   menuText: { fontSize: 16 },
 });

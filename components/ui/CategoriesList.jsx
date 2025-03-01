@@ -37,7 +37,6 @@ const CategoriesSectionList = ({ data: rawData }) => {
 
   // Transform data once
   const data = useMemo(() => transformData(rawData), [rawData]);
-
   const handleShowMore = useCallback(
     (mainCategoryId) => {
       router.push({

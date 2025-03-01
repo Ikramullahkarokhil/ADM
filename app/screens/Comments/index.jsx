@@ -89,7 +89,7 @@ const Comments = () => {
         setIsLoading(false);
       }
     },
-    [fetchComments, productId, showAlert]
+    [fetchComments, productId, showAlert],
   );
 
   const showAlert = (title, message, onConfirm) => {
@@ -103,7 +103,7 @@ const Comments = () => {
       showAlert(
         "Empty Comment",
         "Please write a comment before submitting.",
-        () => {}
+        () => {},
       );
       return;
     }
@@ -144,15 +144,15 @@ const Comments = () => {
           prev.map((comment) =>
             comment.product_comments_id === tempId
               ? { ...comment, ...newCommentFromServer }
-              : comment
-          )
+              : comment,
+          ),
         );
       })
       .catch((err) => {
         console.error("Error syncing comment to server:", err);
         // Remove the comment if server sync fails
         setComments((prev) =>
-          prev.filter((comment) => comment.product_comments_id !== tempId)
+          prev.filter((comment) => comment.product_comments_id !== tempId),
         );
         ToastAndroid.show("Failed to save comment", ToastAndroid.SHORT);
       })
@@ -180,8 +180,8 @@ const Comments = () => {
                   prev.map((c) =>
                     c.product_comments_id === comment.product_comments_id
                       ? updatedComment
-                      : c
-                  )
+                      : c,
+                  ),
                 );
                 // Perform API update in background
                 updateComment({
@@ -192,7 +192,7 @@ const Comments = () => {
                   console.error("Error updating comment:", err);
                   ToastAndroid.show(
                     "Failed to update comment",
-                    ToastAndroid.SHORT
+                    ToastAndroid.SHORT,
                   );
                 });
               }
@@ -200,16 +200,16 @@ const Comments = () => {
           },
         ],
         "plain-text",
-        comment.comment
+        comment.comment,
       );
     },
-    [updateComment, user]
+    [updateComment, user],
   );
 
   const handleDeleteComment = useCallback(
     (commentId) => {
       setComments((prev) =>
-        prev.filter((c) => c.product_comments_id !== commentId)
+        prev.filter((c) => c.product_comments_id !== commentId),
       );
       ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
 
@@ -222,7 +222,7 @@ const Comments = () => {
         ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
       });
     },
-    [deleteComment, user, comments]
+    [deleteComment, user, comments],
   );
 
   const showCommentOptions = useCallback(
@@ -245,10 +245,10 @@ const Comments = () => {
           } else if (buttonIndex === 1) {
             handleDeleteComment(comment.product_comments_id);
           }
-        }
+        },
       );
     },
-    [showActionSheetWithOptions, handleEditComment, handleDeleteComment]
+    [showActionSheetWithOptions, handleEditComment, handleDeleteComment],
   );
 
   const renderCommentItem = useCallback(
@@ -293,7 +293,7 @@ const Comments = () => {
         CommentComponent
       );
     },
-    [user, theme.colors.textColor, showCommentOptions]
+    [user, theme.colors.textColor, showCommentOptions],
   );
 
   const handleLoadMore = useCallback(() => {
@@ -306,7 +306,7 @@ const Comments = () => {
     <GestureHandlerRootView
       style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <FlashList
+      <FlatList
         data={comments}
         keyExtractor={(item) => item.product_comments_id.toString()}
         renderItem={renderCommentItem}
@@ -319,10 +319,15 @@ const Comments = () => {
             <ActivityIndicator
               size="small"
               color={theme.colors.textColor}
-              style={styles.listFooter}
+              style={styles.emptyCommentContainer}
             />
           ) : (
-            <View style={styles.emptyCommentContainer}>
+            <View
+              style={[
+                styles.emptyCommentContainer,
+                { justifyContent: "center", alignItems: "center" },
+              ]}
+            >
               <Text style={{ color: theme.colors.textColor, fontSize: 18 }}>
                 No comments
               </Text>
@@ -384,7 +389,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   flatListContent: {
-    // flexGrow: 1,
+    flexGrow: 1,
     paddingBottom: 80,
   },
   commentItem: {

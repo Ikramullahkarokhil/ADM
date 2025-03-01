@@ -80,7 +80,7 @@ const Layout = () => {
 
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = state.isConnected;
+      const connected = state.isInternetReachable;
       setIsConnected(connected);
       setShowAlert(!connected);
 

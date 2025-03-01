@@ -149,7 +149,7 @@ const Home = () => {
         onDismiss={() => setAlertVisible(false)}
         onConfirm={() => {
           setAlertVisible(false);
-          navigation.navigate("Login");
+          navigation.navigate("/Login");
         }}
         confirmText="Login"
         cancelText="Cancel"

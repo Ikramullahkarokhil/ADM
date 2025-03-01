@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -14,14 +9,16 @@ import {
   AppState,
 } from "react-native";
 import { Button, useTheme, Checkbox } from "react-native-paper";
-import { useNavigation } from "expo-router";
+import { Link, useNavigation, useRouter } from "expo-router";
 import useOrderStore from "../../../components/store/useOrderStore";
 import useProductStore from "../../../components/api/useProductStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import * as Notifications from "expo-notifications";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import useThemeStore from "../../../components/store/useThemeStore";
+import { useLayoutEffect } from "react";
 
+// Configure notification handler (unchanged)
 Notifications.setNotificationHandler({
   handleNotification: async () => {
     const isActive = AppState.currentState === "active";
@@ -33,32 +30,31 @@ Notifications.setNotificationHandler({
   },
 });
 
-const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-const NOTIFICATION_THRESHOLD = 60 * 60 * 1000; // 1 hour in milliseconds
+// Constants (unchanged)
+const CART_TIMEOUT = 24 * 60 * 60 * 1000;
+const SIX_HOUR_INTERVAL = 6 * 60 * 60 * 1000;
 const CART_STORAGE_KEY = "cart_timers";
 
 const Cart = () => {
-  const { listCart, user, deleteFromCart, cartItem } = useProductStore();
-  const addOrder = useOrderStore((state) => state.addOrder);
+  const { user, deleteFromCart, cartItem } = useProductStore();
   const navigation = useNavigation();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
+  const { isDarkTheme } = useThemeStore();
 
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [timers, setTimers] = useState({});
-  const [notificationShown, setNotificationShown] = useState({});
-  const [appState, setAppState] = useState(AppState.currentState);
-  const { isDarkTheme } = useThemeStore();
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Your Cart",
-      headerStyle: { backgroundColor: theme.colors.primary },
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
       headerTintColor: theme.colors.textColor,
     });
-  }, [navigation]);
+  }, [navigation, theme]);
 
-  // Request notification permissions
   useEffect(() => {
     const setupNotifications = async () => {
       const { status } = await Notifications.requestPermissionsAsync();
@@ -69,172 +65,132 @@ const Cart = () => {
     setupNotifications();
   }, []);
 
-  // Load timers from storage and clean up expired items on mount
   useEffect(() => {
-    const loadAndCleanTimers = async () => {
-      const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
-      const loadedTimers = stored ? JSON.parse(stored) : {};
-      const currentTime = Date.now();
-
-      // Clean up expired items
-      const validTimers = {};
-      for (const [id, timeAdded] of Object.entries(loadedTimers)) {
-        const timeElapsed = currentTime - timeAdded;
-        if (timeElapsed < CART_TIMEOUT) {
-          validTimers[id] = timeAdded;
-        } else {
-          // Remove expired items from cart
-          const item = cartItem.find((i) => i.products_id === id);
-          if (item) {
-            await handleRemoveFromCart(item, false); // Silent removal, no notification
-          }
-        }
+    const loadTimers = async () => {
+      try {
+        const stored = await AsyncStorage.getItem(CART_STORAGE_KEY);
+        const loadedTimers = stored ? JSON.parse(stored) : {};
+        setTimers(loadedTimers);
+      } catch (error) {
+        console.error("Failed to load timers:", error);
+        setTimers({});
       }
-      setTimers(validTimers);
-      await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(validTimers));
     };
-    loadAndCleanTimers();
+    loadTimers();
   }, []);
 
-  // Sync timers with cart items and persist
   useEffect(() => {
     const updateTimers = async () => {
       const newTimers = { ...timers };
-      const currentTime = Date.now();
-
-      cartItem.forEach((item) => {
-        if (!newTimers[item.products_id]) {
-          newTimers[item.products_id] = parseInt(item.date) * 1000;
+      let hasChanges = false;
+      for (const item of cartItem) {
+        const itemId = item.consumer_cart_items_id;
+        if (!newTimers[itemId] && item.date) {
+          // Convert the provided date string to a proper timestamp.
+          const dateString = item.date.includes("T")
+            ? item.date
+            : item.date.replace(" ", "T");
+          newTimers[itemId] = new Date(dateString).getTime();
+          hasChanges = true;
         }
-        // Remove if already expired
-        const timeElapsed = currentTime - newTimers[item.products_id];
-        if (timeElapsed >= CART_TIMEOUT) {
-          handleRemoveFromCart(item, false); // Silent removal
-          delete newTimers[item.products_id];
+      }
+      for (const id in newTimers) {
+        if (!cartItem.some((item) => item.consumer_cart_items_id === id)) {
+          delete newTimers[id];
+          hasChanges = true;
         }
-      });
-      setTimers(newTimers);
-      await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newTimers));
+      }
+      if (hasChanges) {
+        setTimers(newTimers);
+        await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newTimers));
+      }
     };
     updateTimers();
   }, [cartItem]);
 
-  // Handle app state changes
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      setAppState(nextAppState);
-      if (nextAppState === "background") {
-        scheduleAllNotifications();
-      } else if (nextAppState === "active") {
-        // Cancel all scheduled notifications when app becomes active
-        Notifications.cancelAllScheduledNotificationsAsync();
-      }
-    });
-    return () => subscription.remove();
-  }, [cartItem, timers, notificationShown, scheduleAllNotifications]);
-
-  // Add listener to handle notifications when app is in foreground
-  useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        if (appState === "active") {
-          // Prevent notification from being presented
-          Notifications.dismissNotificationAsync(
-            notification.request.identifier
-          );
-        }
-      }
-    );
-    return () => subscription.remove();
-  }, [appState]);
-
-  // Schedule notifications for all cart items
   const scheduleAllNotifications = useCallback(async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync(); // Clear old notifications
     const currentTime = Date.now();
-
-    for (const item of cartItem) {
-      const timeAdded = timers[item.products_id];
-      if (!timeAdded) continue;
-
+    const expiredItems = cartItem.filter((item) => {
+      const timeAdded = timers[item.consumer_cart_items_id];
+      if (!timeAdded) return false;
       const timeElapsed = currentTime - timeAdded;
-      const timeRemaining = CART_TIMEOUT - timeElapsed;
-
-      if (timeRemaining <= 0) {
-        // Item already expired, handle silently
-        await handleRemoveFromCart(item, false);
-        continue;
+      return timeElapsed >= CART_TIMEOUT;
+    });
+    for (const item of expiredItems) {
+      await handleRemoveFromCart(item, false);
+    }
+    const remainingItems = cartItem.filter(
+      (item) => !expiredItems.includes(item)
+    );
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    for (const item of remainingItems) {
+      const timeAdded = timers[item.consumer_cart_items_id];
+      if (!timeAdded) continue;
+      const expirationTime = timeAdded + CART_TIMEOUT;
+      const elapsedSinceAdded = currentTime - timeAdded;
+      const passedIntervals = Math.floor(elapsedSinceAdded / SIX_HOUR_INTERVAL);
+      let nextNotificationTime =
+        timeAdded + (passedIntervals + 1) * SIX_HOUR_INTERVAL;
+      while (nextNotificationTime < expirationTime) {
+        const triggerSeconds = (nextNotificationTime - currentTime) / 1000;
+        if (triggerSeconds > 0) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Cart Reminder",
+              body: `Item "${item.title}" is still in your cart and will expire soon.`,
+              sound: true,
+            },
+            trigger: { seconds: triggerSeconds },
+          });
+        }
+        nextNotificationTime += SIX_HOUR_INTERVAL;
       }
-
-      // Schedule 1-hour warning
-      if (
-        timeRemaining > NOTIFICATION_THRESHOLD &&
-        !notificationShown[item.products_id]
-      ) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Cart Item Expiring Soon",
-            body: `Item "${item.title}" will expire from cart in 1 hour`,
-            sound: true,
-          },
-          trigger: { seconds: (timeRemaining - NOTIFICATION_THRESHOLD) / 1000 },
-        });
-        setNotificationShown((prev) => ({
-          ...prev,
-          [item.products_id]: true,
-        }));
-      }
-
-      // Schedule expiration notification
-      if (timeRemaining > 0) {
+      const finalTrigger = (expirationTime - currentTime) / 1000;
+      if (finalTrigger > 0) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "Cart Item Expired",
-            body: `Item "${item.title}" removed due to timeout`,
+            body: `Item "${item.title}" has expired and will be removed from your cart.`,
             sound: true,
           },
-          trigger: { seconds: timeRemaining / 1000 },
+          trigger: { seconds: finalTrigger },
         });
       }
     }
-  }, [cartItem, timers, notificationShown]);
+  }, [cartItem, timers, handleRemoveFromCart]);
 
-  const toggleSelection = useCallback((productId) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId);
-      else next.add(productId);
-      return next;
+  useEffect(() => {
+    scheduleAllNotifications();
+  }, [scheduleAllNotifications]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextAppState) => {
+      if (nextAppState === "background") {
+        scheduleAllNotifications();
+      } else if (nextAppState === "active") {
+        Notifications.cancelAllScheduledNotificationsAsync();
+        scheduleAllNotifications();
+      }
     });
-  }, []);
-
-  const selectedItems = cartItem.filter((item) =>
-    selectedIds.has(item.products_id)
-  );
+    return () => subscription.remove();
+  }, [scheduleAllNotifications]);
 
   const handleRemoveFromCart = useCallback(
     async (item, notify = true) => {
       try {
         await deleteFromCart({
-          productID: item.products_id,
-          consumerID: user.consumer_id,
+          productID: item.consumer_cart_items_id,
+          consumerID: user?.consumer_id,
         });
-        setTimers((prev) => {
-          const newTimers = { ...prev };
-          delete newTimers[item.products_id];
-          return newTimers;
-        });
-        setNotificationShown((prev) => {
-          const newShown = { ...prev };
-          delete newShown[item.products_id];
-          return newShown;
-        });
-        await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(timers));
-        if (notify && appState !== "active") {
+        const newTimers = { ...timers };
+        delete newTimers[item.consumer_cart_items_id];
+        setTimers(newTimers);
+        await AsyncStorage.setItem(CART_STORAGE_KEY, JSON.stringify(newTimers));
+        if (notify) {
           await Notifications.scheduleNotificationAsync({
             content: {
               title: "Cart Update",
-              body: "Product removed from cart",
+              body: `Item "${item.title}" removed from cart.`,
               sound: true,
             },
             trigger: null,
@@ -244,26 +200,21 @@ const Cart = () => {
         console.error("Failed to remove item:", error);
       }
     },
-    [deleteFromCart, user.consumer_id, appState, timers]
+    [deleteFromCart, user?.consumer_id, timers]
   );
 
-  const handleOrder = useCallback(async () => {
-    try {
-      await Promise.all(selectedItems.map((item) => addOrder(item)));
-      await Promise.all(
-        selectedItems.map((item) =>
-          deleteFromCart({
-            productID: item.products_id,
-            consumerID: user.consumer_id,
-          })
-        )
-      );
-      await listCart(user.consumer_id);
-      setSelectedIds(new Set());
-    } catch (error) {
-      console.error("Order failed:", error);
-    }
-  }, [selectedItems, addOrder, deleteFromCart, listCart, user.consumer_id]);
+  const toggleSelection = useCallback((consumerCartItemsId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(consumerCartItemsId)) next.delete(consumerCartItemsId);
+      else next.add(consumerCartItemsId);
+      return next;
+    });
+  }, []);
+
+  const selectedItems = cartItem.filter((item) =>
+    selectedIds.has(item.consumer_cart_items_id)
+  );
 
   const formatTimeRemaining = (timeAdded) => {
     const timeElapsed = Date.now() - timeAdded;
@@ -277,87 +228,66 @@ const Cart = () => {
 
   const showActionSheet = (item) => {
     const options = ["Delete", "Cancel"];
-    const destructiveButtonIndex = 0;
-    const cancelButtonIndex = 1;
-
     showActionSheetWithOptions(
       {
         options,
-        cancelButtonIndex,
-        destructiveButtonIndex,
+        cancelButtonIndex: 1,
+        destructiveButtonIndex: 0,
         tintColor: theme.colors.textColor,
         containerStyle: { backgroundColor: theme.colors.primary },
       },
       (selectedIndex) => {
-        if (selectedIndex === 0) {
-          handleRemoveFromCart(item);
-        }
+        if (selectedIndex === 0) handleRemoveFromCart(item);
       }
     );
   };
 
-  const renderItem = useCallback(
-    ({ item }) => (
-      <View
-        style={[styles.itemWrapper, { backgroundColor: theme.colors.primary }]}
+  const renderItem = ({ item }) => (
+    <View
+      style={[styles.itemWrapper, { backgroundColor: theme.colors.primary }]}
+    >
+      <TouchableOpacity
+        style={[
+          styles.itemContainer,
+          { backgroundColor: theme.colors.primary },
+        ]}
+        onPress={() => toggleSelection(item.consumer_cart_items_id)}
+        onLongPress={() => showActionSheet(item)}
       >
-        <TouchableOpacity
-          style={[
-            styles.itemContainer,
-            { backgroundColor: theme.colors.primary },
-          ]}
-          activeOpacity={0.8}
-          onPress={() => toggleSelection(item.products_id)}
-          onLongPress={() => showActionSheet(item)}
-        >
-          <Image
-            source={
-              isDarkTheme
-                ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                : require("../../../assets/images/imageSkeleton.jpg")
-            }
-            resizeMode="contain"
-            style={[
-              styles.itemImage,
-              { backgroundColor: theme.colors.background },
-            ]}
-          />
-          <View style={styles.itemDetails}>
-            <Text
-              style={[styles.itemName, { color: theme.colors.textColor }]}
-              numberOfLines={2}
-            >
-              {item.title}
-            </Text>
-            <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
-              ${item.spu}
-            </Text>
-            <Text
-              style={[
-                styles.timerText,
-                { color: theme.colors.subInactiveColor },
-              ]}
-            >
-              Time remaining: {formatTimeRemaining(timers[item.products_id])}
-            </Text>
-          </View>
-          <Checkbox
-            status={selectedIds.has(item.products_id) ? "checked" : "unchecked"}
-            onPress={() => toggleSelection(item.products_id)}
-            color={theme.colors.button}
-            uncheckedColor={theme.colors.subInactiveColor}
-          />
-        </TouchableOpacity>
-      </View>
-    ),
-    [
-      toggleSelection,
-      selectedIds,
-      theme.colors.background,
-      theme.colors.primary,
-      theme.colors.button,
-      timers,
-    ]
+        <Image
+          source={
+            isDarkTheme
+              ? require("../../../assets/images/darkImagePlaceholder.jpg")
+              : require("../../../assets/images/imageSkeleton.jpg")
+          }
+          style={styles.itemImage}
+        />
+        <View style={styles.itemDetails}>
+          <Text style={[styles.itemName, { color: theme.colors.textColor }]}>
+            {item.title}
+          </Text>
+          <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
+            AF {item.spu}
+          </Text>
+          <Text
+            style={[styles.timerText, { color: theme.colors.inactiveColor }]}
+          >
+            Time remaining:{" "}
+            {formatTimeRemaining(timers[item.consumer_cart_items_id])}
+          </Text>
+        </View>
+        <Checkbox
+          status={
+            selectedIds.has(item.consumer_cart_items_id)
+              ? "checked"
+              : "unchecked"
+          }
+          onPress={() => toggleSelection(item.consumer_cart_items_id)}
+          color={theme.colors.button}
+          uncheckedColor={theme.colors.inactiveColor}
+        />
+      </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -366,77 +296,51 @@ const Cart = () => {
         <FlatList
           data={cartItem}
           renderItem={renderItem}
-          keyExtractor={(item) => item.products_id.toString()}
+          keyExtractor={(item) => item.consumer_cart_items_id}
           contentContainerStyle={styles.list}
         />
       ) : (
         <Text style={styles.emptyCartText}>Your cart is empty</Text>
       )}
       {selectedItems.length > 0 && (
-        <Button
-          style={styles.orderButton}
-          buttonColor={theme.colors.button}
-          textColor={theme.colors.textColor}
-          onPress={handleOrder}
+        <Link
+          href={{
+            pathname: "/screens/ProductVariantSelection",
+            params: { item: JSON.stringify(selectedItems) },
+          }}
+          asChild
         >
-          Continue
-        </Button>
+          <Button
+            style={styles.orderButton}
+            buttonColor={theme.colors.button}
+            textColor={theme.colors.primary}
+          >
+            Continue
+          </Button>
+        </Link>
       )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  list: {
-    flexGrow: 1,
-    paddingBottom: 80,
-  },
-  itemWrapper: {
-    marginHorizontal: 16,
-    marginVertical: 8,
-  },
+  container: { flex: 1, backgroundColor: "#fff" },
+  list: { paddingBottom: 80 },
+  itemWrapper: { marginHorizontal: 12, marginVertical: 5 },
   itemContainer: {
     flexDirection: "row",
-    borderRadius: 8,
-    alignItems: "center",
     padding: 8,
-    position: "relative",
+    borderRadius: 8,
+    backgroundColor: "#f9f9f9",
+    alignItems: "center",
     elevation: 10,
   },
-  itemImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 8,
-  },
-  itemDetails: {
-    flex: 1,
-    paddingHorizontal: 10,
-    justifyContent: "center",
-  },
-  itemName: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  itemPrice: {
-    fontSize: 16,
-    color: "#888",
-    marginVertical: 4,
-  },
-  timerText: {
-    fontSize: 14,
-    color: "#666",
-    marginVertical: 4,
-  },
-  emptyCartText: {
-    fontSize: 18,
-    color: "#888",
-    textAlign: "center",
-    marginTop: 32,
-  },
+  itemImage: { width: 100, height: 100, borderRadius: 8 },
+  itemDetails: { flex: 1, paddingHorizontal: 10 },
+  itemName: { fontSize: 18, fontWeight: "bold" },
+  itemPrice: { fontSize: 16, color: "#888", marginVertical: 4 },
+  timerText: { fontSize: 14, color: "#666" },
+  emptyCartText: { fontSize: 18, textAlign: "center", marginTop: 32 },
   orderButton: {
     position: "absolute",
     bottom: 20,

@@ -12,18 +12,18 @@ import * as Yup from "yup";
 import useProductStore from "../../../components/api/useProductStore";
 import { useState, useLayoutEffect } from "react";
 import { Link, useNavigation, useRouter } from "expo-router";
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { Picker } from "@react-native-picker/picker";
-import { ProgressBar, useTheme } from "react-native-paper";
+import { Button, ProgressBar, useTheme } from "react-native-paper";
 import CountryCodeDropdownPicker from "react-native-dropdown-country-picker";
 import { LinearGradient } from "expo-linear-gradient";
+import DatePicker from "react-native-date-picker";
+import { useActionSheet } from "@expo/react-native-action-sheet";
+import useThemeStore from "../../../components/store/useThemeStore";
+import { Pressable } from "react-native";
 
 // Validation schemas
 const step1Schema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
-  phone: Yup.string()
-    .required("Phone number is required")
-    .matches(/^\+\d{1,4}\d{6,}$/, "Invalid phone number"),
+  phoneNumber: Yup.string().required("Phone number is required").min(10),
   email: Yup.string().email("Invalid email").required("Email is required"),
 });
 
@@ -32,7 +32,7 @@ const step2Schema = Yup.object().shape({
     .required("Date of birth is required")
     .max(
       new Date(new Date().setFullYear(new Date().getFullYear() - 10)),
-      "You must be at least 10 years old"
+      "You must be at least 10 years old",
     ),
   gender: Yup.string().required("Gender is required"),
 });
@@ -64,11 +64,13 @@ const FormikInput = ({ fieldName, ...props }) => {
           {
             backgroundColor: theme.colors.primary,
             borderColor: theme.colors.subInactiveColor,
+            color: theme.colors.textColor,
           },
           meta.touched &&
             meta.error && { borderColor: theme.colors.deleteButton },
         ]}
         {...props}
+        placeholderTextColor={theme.colors.inactiveColor}
       />
       {meta.touched && meta.error && (
         <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
@@ -79,34 +81,57 @@ const FormikInput = ({ fieldName, ...props }) => {
   );
 };
 
-const PhoneInputWithCountryCode = ({ value, onChangeText, onBlur }) => {
+const PhoneInputWithCountryCode = ({ fieldName }) => {
+  const [field, meta, helpers] = useField(fieldName);
   const [selected, setSelected] = useState("+93");
-  const [phoneNumber, setPhoneNumber] = useState("");
   const theme = useTheme();
 
   const handlePhoneChange = (text) => {
-    setPhoneNumber(text);
-    onChangeText(`${selected}${text}`);
+    // Combine country code and phone number
+    const fullPhone = `${selected}${text}`;
+    helpers.setValue(fullPhone);
   };
+
+  // Ensure field.value is a string before calling replace
+  const phoneValue = field.value || ""; // Fallback to empty string if undefined
+  const displayPhone = phoneValue.replace(selected, "") || "";
 
   return (
     <View style={styles.phoneContainer}>
       <CountryCodeDropdownPicker
         selected={selected}
-        setSelected={setSelected}
+        setSelected={(code) => {
+          setSelected(code);
+          const currentPhone = phoneValue.replace(selected, "") || "";
+          helpers.setValue(`${code}${currentPhone}`);
+        }}
         setCountryDetails={() => {}}
         countryCodeTextStyles={{ color: theme.colors.textColor }}
-        phone={phoneNumber}
+        phone={displayPhone}
         setPhone={handlePhoneChange}
         phoneStyles={[
           styles.countryCodePhone,
-          { backgroundColor: theme.colors.primary },
+          {
+            backgroundColor: theme.colors.primary,
+            borderColor: theme.colors.subInactiveColor,
+            color: theme.colors.textColor,
+          },
+          meta.touched &&
+            meta.error && { borderColor: theme.colors.deleteButton },
         ]}
         countryCodeContainerStyles={[
           styles.countryCodeContainer,
-          { backgroundColor: theme.colors.primary },
+          {
+            backgroundColor: theme.colors.primary,
+            borderColor: theme.colors.subInactiveColor,
+          },
         ]}
       />
+      {meta.touched && meta.error && (
+        <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
+          {meta.error}
+        </Text>
+      )}
     </View>
   );
 };
@@ -114,31 +139,60 @@ const PhoneInputWithCountryCode = ({ value, onChangeText, onBlur }) => {
 const FormikPicker = ({ fieldName }) => {
   const [field, meta, helpers] = useField(fieldName);
   const theme = useTheme();
+  const { showActionSheetWithOptions } = useActionSheet();
+
+  const genderOptions = [
+    { label: "Male", value: 1 },
+    { label: "Female", value: 0 },
+  ];
+
+  const options = genderOptions.map((opt) => opt.label);
+  const cancelButtonIndex = genderOptions.length;
+
+  const selectedLabel =
+    genderOptions.find((opt) => opt.value === field.value)?.label ||
+    "Select Gender";
 
   return (
     <>
-      <View
+      <TouchableOpacity
+        onPress={() => {
+          showActionSheetWithOptions(
+            {
+              options,
+              cancelButtonIndex,
+              tintColor: theme.colors.textColor,
+              containerStyle: { backgroundColor: theme.colors.primary },
+            },
+            (buttonIndex) => {
+              if (buttonIndex < genderOptions.length) {
+                helpers.setValue(genderOptions[buttonIndex].value);
+                helpers.setTouched(true);
+              }
+            },
+          );
+        }}
         style={[
-          styles.pickerContainer,
+          styles.input,
           {
             backgroundColor: theme.colors.primary,
             borderColor: theme.colors.subInactiveColor,
+            justifyContent: "center",
           },
           meta.touched &&
             meta.error && { borderColor: theme.colors.deleteButton },
         ]}
       >
-        <Picker
-          selectedValue={field.value}
-          onValueChange={(value) => helpers.setValue(value)}
-          style={{ color: theme.colors.textColor }}
+        <Text
+          style={
+            field.value
+              ? { color: theme.colors.textColor }
+              : { color: theme.colors.inactiveColor }
+          }
         >
-          <Picker.Item label="Select Gender" value="" />
-          <Picker.Item label="Male" value="male" />
-          <Picker.Item label="Female" value="female" />
-          <Picker.Item label="Other" value="other" />
-        </Picker>
-      </View>
+          {selectedLabel}
+        </Text>
+      </TouchableOpacity>
       {meta.touched && meta.error && (
         <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
           {meta.error}
@@ -152,14 +206,15 @@ const FormikDatePicker = ({ fieldName }) => {
   const [field, meta, helpers] = useField(fieldName);
   const [show, setShow] = useState(false);
   const theme = useTheme();
+  const { isDarkTheme } = useThemeStore();
 
-  const onChange = (event, selectedDate) => {
-    setShow(false);
-    if (event.type === "set") {
-      helpers.setValue(selectedDate || field.value);
-      helpers.setTouched(true);
-    }
-  };
+  const minimumDate = new Date(
+    new Date().setFullYear(new Date().getFullYear() - 100),
+  );
+  // Maximum date for "at least 10 years old" rule
+  const maximumDate = new Date(
+    new Date().setFullYear(new Date().getFullYear() - 10),
+  );
 
   return (
     <>
@@ -186,14 +241,27 @@ const FormikDatePicker = ({ fieldName }) => {
           {field.value ? field.value.toDateString() : "Select Date of Birth"}
         </Text>
       </TouchableOpacity>
-      {show && (
-        <DateTimePicker
-          value={field.value || new Date()}
-          mode="date"
-          display="default"
-          onChange={onChange}
-        />
-      )}
+      <DatePicker
+        modal
+        open={show}
+        date={field.value || new Date()}
+        mode="date"
+        theme={isDarkTheme ? "dark" : "light"}
+        minimumDate={minimumDate}
+        title="Select Date of Birth"
+        maximumDate={maximumDate}
+        onConfirm={(date) => {
+          helpers.setValue(date);
+          helpers.setTouched(true);
+          setShow(false);
+        }}
+        onCancel={() => setShow(false)}
+        textColor={theme.colors.textColor} // Theme text color
+        androidVariant="nativeAndroid" // Native Android style
+        style={{
+          backgroundColor: theme.colors.primary, // Picker background
+        }}
+      />
       {meta.touched && meta.error && (
         <Text style={[styles.errorText, { color: theme.colors.deleteButton }]}>
           {meta.error}
@@ -211,8 +279,11 @@ const StepIndicator = ({ currentStep, totalSteps }) => {
     <View style={styles.stepContainer}>
       <ProgressBar
         progress={progress}
-        color={theme.colors.progressColor}
-        style={styles.progressBar}
+        color={theme.colors.button}
+        style={[
+          styles.progressBar,
+          { backgroundColor: theme.colors.subInactiveColor },
+        ]}
       />
       <View style={styles.stepTextContainer}>
         {[...Array(totalSteps)].map((_, index) => (
@@ -255,7 +326,7 @@ const Signup = () => {
         name: values.name,
         email: values.email,
         password: values.password,
-        phone: values.phone,
+        phone: values.phoneNumber,
         dob: values.dob ? values.dob.toISOString().split("T")[0] : "",
         gender: values.gender,
         code: values.code,
@@ -337,11 +408,7 @@ const Signup = () => {
                 >
                   Phone Number
                 </Text>
-                <PhoneInputWithCountryCode
-                  value={values.phone}
-                  onChangeText={(text) => setFieldValue("phone", text)}
-                  onBlur={() => setFieldTouched("phone", true)}
-                />
+                <PhoneInputWithCountryCode fieldName="phoneNumber" />
 
                 <Text
                   style={[styles.inputLabel, { color: theme.colors.textColor }]}
@@ -417,15 +484,16 @@ const Signup = () => {
                   style={[styles.button, styles.prevButton]}
                   onPress={() => setCurrentStep((prev) => prev - 1)}
                 >
-                  <LinearGradient
-                    colors={[
-                      theme.colors.buttonGradientStart,
-                      theme.colors.buttonGradientEnd,
+                  <Button
+                    mode="outlined"
+                    style={[
+                      styles.button,
+                      { borderColor: theme.colors.button },
                     ]}
-                    style={styles.gradientButton}
+                    textColor={theme.colors.button}
                   >
-                    <Text style={styles.buttonText}>Back</Text>
-                  </LinearGradient>
+                    Back
+                  </Button>
                 </TouchableOpacity>
               )}
 
@@ -434,15 +502,13 @@ const Signup = () => {
                   style={[styles.button, styles.nextButton]}
                   onPress={() => handleNext(values, setErrors)}
                 >
-                  <LinearGradient
-                    colors={[
-                      theme.colors.buttonGradientStart,
-                      theme.colors.buttonGradientEnd,
-                    ]}
-                    style={styles.gradientButton}
+                  <Button
+                    style={styles.button}
+                    buttonColor={theme.colors.button}
+                    textColor={theme.colors.primary}
                   >
-                    <Text style={styles.buttonText}>Next</Text>
-                  </LinearGradient>
+                    Next
+                  </Button>
                 </TouchableOpacity>
               ) : (
                 <TouchableOpacity
@@ -450,19 +516,14 @@ const Signup = () => {
                   onPress={handleSubmit}
                   disabled={loginLoading}
                 >
-                  <LinearGradient
-                    colors={[
-                      theme.colors.buttonGradientStart,
-                      theme.colors.buttonGradientEnd,
-                    ]}
-                    style={styles.gradientButton}
+                  <Button
+                    style={styles.button}
+                    buttonColor={theme.colors.button}
+                    textColor={theme.colors.primary}
+                    loading={loginLoading}
                   >
-                    {loginLoading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.buttonText}>Sign Up</Text>
-                    )}
-                  </LinearGradient>
+                    Sign Up
+                  </Button>
                 </TouchableOpacity>
               )}
             </View>
@@ -471,9 +532,14 @@ const Signup = () => {
       </Formik>
 
       <Link href={{ pathname: "/Login" }} asChild>
-        <Text style={[styles.link, { color: theme.colors.button }]}>
-          Already have an account? Sign In
-        </Text>
+        <Pressable style={{ flexDirection: "row" }}>
+          <Text style={[styles.link, { color: theme.colors.textColor }]}>
+            Already have an account?{" "}
+          </Text>
+          <Text style={[styles.link, { color: theme.colors.button }]}>
+            Sign In
+          </Text>
+        </Pressable>
       </Link>
     </ScrollView>
   );
@@ -536,7 +602,7 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     borderRadius: 12,
-    elevation: 2,
+    paddingVertical: 4,
   },
   gradientButton: {
     paddingVertical: 14,
@@ -544,17 +610,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 12,
   },
-  prevButton: {},
-  nextButton: {},
-  buttonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "500",
-  },
   link: {
     textAlign: "center",
     fontSize: 14,
-    textDecorationLine: "underline",
   },
   stepContainer: {
     marginBottom: 32,
@@ -562,7 +620,6 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#e0e0e0",
   },
   stepTextContainer: {
     flexDirection: "row",

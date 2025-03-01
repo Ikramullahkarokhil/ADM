@@ -18,7 +18,7 @@ const lightTheme = {
 const darkTheme = {
   colors: {
     primary: "#363636",
-    background: "#1F2527",
+    background: "rgba(255, 255, 255, 0.05)",
     activeColor: "#FFFFFF",
     inactiveColor: "#9CA3AF",
     activeIndicatorStyle: "#4B5154",
@@ -28,7 +28,7 @@ const darkTheme = {
     button: "#60A5FA",
     disabled: "#6B7280",
     deleteButton: "#F87171",
-    subInactiveColor: "#545454",
+    subInactiveColor: "rgba(255, 255, 255, 0.2)",
   },
 };
 

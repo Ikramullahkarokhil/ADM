@@ -61,9 +61,7 @@ const Orders = () => {
   );
 
   return (
-    <View
-      style={[styles.container, { backgroundColor: theme.colors.background }]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       {orders.length > 0 ? (
         <FlatList
           data={orders}

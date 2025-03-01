@@ -212,7 +212,7 @@ const ProductList = () => {
                 <Text
                   style={[styles.productPrice, { color: theme.colors.button }]}
                 >
-                  {item.spu}
+                  AF {item.spu}
                 </Text>
                 <View style={styles.brandContainer}>
                   <Text
