@@ -9,7 +9,7 @@ const lightTheme = {
     textColor: "#2D3748",
     ripple: "rgba(0, 0, 0, 0.15)",
     progressColor: "#B0B7C0",
-    button: "#4a90e2",
+    button: "#01bf62",
     disabled: "#9CA3AF",
     deleteButton: "#EF4444",
   },

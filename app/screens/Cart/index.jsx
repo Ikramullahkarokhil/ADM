@@ -30,7 +30,6 @@ Notifications.setNotificationHandler({
   },
 });
 
-// Constants (unchanged)
 const CART_TIMEOUT = 24 * 60 * 60 * 1000;
 const SIX_HOUR_INTERVAL = 6 * 60 * 60 * 1000;
 const CART_STORAGE_KEY = "cart_timers";

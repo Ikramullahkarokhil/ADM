@@ -86,8 +86,10 @@ const useProductStore = create(
       },
 
       // Fetch Subcategories
-      fetchSubcategories: async (id) => {
-        const data = await get().apiRequest(`/get-sub-categories/${id}`);
+      fetchSubcategories: async (id, limit) => {
+        const data = await get().apiRequest(
+          `/get-sub-categories/${id}?limit=${limit}`
+        );
         set((state) => ({
           subcategories: {
             ...state.subcategories,

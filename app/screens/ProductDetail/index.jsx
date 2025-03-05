@@ -26,7 +26,7 @@ import {
   useRouter,
 } from "expo-router";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { Button, IconButton, useTheme } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import useProductStore from "../../../components/api/useProductStore";
@@ -602,23 +602,22 @@ const ProductDetail = () => {
               No questions yet.
             </Text>
           )}
-          <Link
-            href={{
-              pathname: "/screens/Questions",
-              params: { productId: product.products_id },
-            }}
-            asChild
+
+          <Button
+            mode="outlined"
+            textColor={theme.colors.button}
+            style={[styles.askQuestion, { borderColor: theme.colors.button }]}
+            icon="comment-question-outline"
+            accessibilityLabel="Ask a question"
+            onPress={() =>
+              router.navigate({
+                pathname: "screens/Questions",
+                params: { productId: product.products_id },
+              })
+            }
           >
-            <Button
-              mode="outlined"
-              textColor={theme.colors.button}
-              style={[styles.askQuestion, { borderColor: theme.colors.button }]}
-              icon="comment-question-outline"
-              accessibilityLabel="Ask a question"
-            >
-              Ask a Question
-            </Button>
-          </Link>
+            Ask a Question
+          </Button>
         </View>
       </ScrollView>
 
@@ -836,12 +835,11 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   questionsSection: {
-    marginTop: 24,
     padding: 20,
     borderRadius: 20,
     elevation: 5,
     marginHorizontal: 16,
-    marginBottom: 20,
+    marginBottom: 50,
   },
   questionsTitle: {
     fontSize: 20,

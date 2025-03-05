@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useState,
   useLayoutEffect,
+  useRef,
 } from "react";
 import {
   View,
@@ -13,6 +14,8 @@ import {
   TouchableOpacity,
   Share,
   ToastAndroid,
+  Pressable,
+  RefreshControl,
 } from "react-native";
 import {
   Link,
@@ -22,26 +25,203 @@ import {
 } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
-import { FontAwesome } from "@expo/vector-icons";
-import ProductSkeleton from "../../../components/skeleton/productSkeleton";
+import { FontAwesome, Feather, MaterialIcons } from "@expo/vector-icons";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import useThemeStore from "../../../components/store/useThemeStore";
 
+// Product Item component
+const ProductItem = ({
+  item,
+  index,
+  theme,
+  isDarkTheme,
+  onLongPress,
+  onAddToCart,
+  onShare,
+  renderRatingStars,
+}) => {
+  return (
+    <View style={styles.itemContainer}>
+      <Link
+        href={{
+          pathname: "/screens/ProductDetail",
+          params: {
+            subcategoryId: item.categories_id,
+            categoryProductId: item.products_id,
+          },
+        }}
+        asChild
+      >
+        <Pressable
+          onLongPress={() => onLongPress(item)}
+          delayLongPress={500}
+          android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+        >
+          <View
+            style={[
+              styles.listItem,
+              {
+                backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
+                shadowColor: isDarkTheme ? "#000" : "#888",
+              },
+            ]}
+          >
+            <Image
+              source={
+                item.product_images && item.product_images.length > 0
+                  ? { uri: item.product_images[0] }
+                  : isDarkTheme
+                  ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                  : require("../../../assets/images/imageSkeleton.jpg")
+              }
+              style={styles.productImage}
+              resizeMode="cover"
+            />
+
+            <View style={styles.productInfo}>
+              <Text
+                style={[
+                  styles.productTitle,
+                  { color: isDarkTheme ? "#fff" : "#000" },
+                ]}
+                numberOfLines={2}
+              >
+                {item.title}
+              </Text>
+
+              <View style={styles.brandContainer}>
+                <Text
+                  style={[
+                    styles.brand,
+                    { color: isDarkTheme ? "#ccc" : "#666" },
+                  ]}
+                  numberOfLines={1}
+                >
+                  Brand: {item.brand_title}
+                </Text>
+              </View>
+
+              <View style={styles.bottomRow}>
+                <Text
+                  style={[styles.productPrice, { color: theme.colors.button }]}
+                >
+                  AF {item.spu}
+                </Text>
+                {renderRatingStars(item)}
+              </View>
+            </View>
+
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: isDarkTheme ? "#333" : "#f0f0f0" },
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onAddToCart(item);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name="shopping-cart"
+                  size={16}
+                  color={isDarkTheme ? "#fff" : "#333"}
+                />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: isDarkTheme ? "#333" : "#f0f0f0" },
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onShare(item);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather
+                  name="share-2"
+                  size={16}
+                  color={isDarkTheme ? "#fff" : "#333"}
+                />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
+      </Link>
+    </View>
+  );
+};
+
+// List Skeleton for loading state
+const ListSkeleton = ({ isDarkTheme }) => (
+  <View
+    style={[
+      styles.listItem,
+      {
+        backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
+        shadowColor: isDarkTheme ? "#000" : "#888",
+      },
+    ]}
+  >
+    <View
+      style={[
+        styles.productImage,
+        { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+      ]}
+    />
+
+    <View style={styles.productInfo}>
+      <View
+        style={[
+          styles.skeletonText,
+          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+        ]}
+      />
+      <View
+        style={[
+          styles.skeletonTextSmall,
+          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+        ]}
+      />
+      <View style={styles.bottomRow}>
+        <View
+          style={[
+            styles.skeletonPrice,
+            { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+          ]}
+        />
+      </View>
+    </View>
+
+    <View style={styles.actionButtons}>
+      <View
+        style={[
+          styles.iconButton,
+          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+        ]}
+      />
+      <View
+        style={[
+          styles.iconButton,
+          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+        ]}
+      />
+    </View>
+  </View>
+);
+
 const ProductList = () => {
   const navigation = useNavigation();
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: subCategorieName,
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
-    });
-  }, [navigation]);
   const { subcategoryId, subCategorieName } = useLocalSearchParams();
   const { fetchProductsBySubcategory, addToCart, user, cartItem, error } =
     useProductStore();
   const [products, setProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true); // Local loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertState, setAlertState] = useState({
     title: "",
@@ -50,11 +230,25 @@ const ProductList = () => {
     confirmAction: () => setAlertVisible(false),
   });
   const { isDarkTheme } = useThemeStore();
-
   const theme = useTheme();
-
   const { showActionSheetWithOptions } = useActionSheet();
   const router = useRouter();
+  const flatListRef = useRef(null);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: subCategorieName,
+      headerStyle: {
+        backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5",
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: isDarkTheme ? "#fff" : "#000",
+      headerTitleStyle: {
+        fontWeight: "700",
+      },
+    });
+  }, [navigation, subCategorieName, isDarkTheme]);
 
   const loadProducts = useCallback(async () => {
     try {
@@ -65,13 +259,23 @@ const ProductList = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [subcategoryId]);
+  }, [subcategoryId, fetchProductsBySubcategory]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      setProducts(await fetchProductsBySubcategory(subcategoryId));
+    } catch (err) {
+      console.error("Failed to refresh products:", err);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [subcategoryId, fetchProductsBySubcategory]);
 
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
 
-  // Handler functions remain unchanged
   const handleAddToCart = useCallback(
     async (product) => {
       if (!user) {
@@ -79,6 +283,7 @@ const ProductList = () => {
           title: "Login Required",
           message: "Please log in to add products to your cart.",
           confirmAction: () => router.replace("Login"),
+          confirmText: "Log In",
         });
         setAlertVisible(true);
         return;
@@ -105,6 +310,7 @@ const ProductList = () => {
         setAlertState({
           title: "Error",
           message: error.message || "Error adding product to cart",
+          confirmText: "Ok",
         });
         setAlertVisible(true);
       }
@@ -125,7 +331,7 @@ const ProductList = () => {
 
   const showProductOptions = useCallback(
     (product) => {
-      const options = ["Add to Cart", "Share"];
+      const options = ["Add to Cart", "Share", "Cancel"];
       const cancelButtonIndex = 2;
 
       showActionSheetWithOptions(
@@ -133,6 +339,12 @@ const ProductList = () => {
           options,
           cancelButtonIndex,
           tintColor: theme.colors.button,
+          containerStyle: {
+            backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
+          },
+          textStyle: {
+            color: isDarkTheme ? "#fff" : "#000",
+          },
         },
         (buttonIndex) => {
           switch (buttonIndex) {
@@ -146,7 +358,13 @@ const ProductList = () => {
         }
       );
     },
-    [handleAddToCart, shareProduct, theme.colors.button]
+    [
+      handleAddToCart,
+      shareProduct,
+      theme.colors.button,
+      isDarkTheme,
+      showActionSheetWithOptions,
+    ]
   );
 
   const renderRatingStars = useCallback(
@@ -155,123 +373,114 @@ const ProductList = () => {
       return (
         <View style={styles.ratingContainer}>
           <FontAwesome
-            name={item.average_rating >= 1 ? "star" : "star-o"}
-            size={14}
-            color={item.average_rating >= 1 ? "#FFD700" : "#ccc"}
+            name="star"
+            size={12}
+            color="#FFD700"
             style={styles.starIcon}
           />
-          <Text style={{ color: theme.colors.textColor, paddingLeft: 5 }}>
+          <Text
+            style={{
+              color: isDarkTheme ? "#fff" : "#000",
+              fontSize: 12,
+              fontWeight: "500",
+            }}
+          >
             {item.average_rating}
           </Text>
         </View>
       );
     },
-    [theme.colors.textColor]
+    [isDarkTheme]
   );
 
-  const renderItem = useCallback(
-    ({ item }) => (
-      <View style={styles.cardContainer}>
-        <Link
-          href={{
-            pathname: "/screens/ProductDetail",
-            params: {
-              subcategoryId: item.categories_id,
-              categoryProductId: item.products_id,
-            },
-          }}
-          asChild
-        >
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onLongPress={() => showProductOptions(item)}
-            delayLongPress={500}
-          >
-            <View style={styles.card}>
-              <Image
-                source={
-                  item.category_image
-                    ? { uri: item.category_image }
-                    : isDarkTheme
-                    ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                    : require("../../../assets/images/imageSkeleton.jpg")
-                }
-                style={styles.productImage}
-                resizeMode="cover"
-              />
-              <View style={styles.cardContent}>
-                <Text
-                  style={[
-                    styles.productTitle,
-                    { color: theme.colors.textColor },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {item.title}
-                </Text>
-                <Text
-                  style={[styles.productPrice, { color: theme.colors.button }]}
-                >
-                  AF {item.spu}
-                </Text>
-                <View style={styles.brandContainer}>
-                  <Text
-                    style={[styles.brand, { color: theme.colors.textColor }]}
-                  >
-                    Brand: {item.brand_title}
-                  </Text>
-                </View>
-                {renderRatingStars(item)}
-              </View>
-            </View>
-          </TouchableOpacity>
-        </Link>
-      </View>
-    ),
-    [theme, showProductOptions, renderRatingStars]
-  );
+  const scrollToTop = () => {
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  };
 
   if (error) {
     return (
       <View
         style={[
           styles.centerContainer,
-          { backgroundColor: theme.colors.primary },
+          { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
         ]}
       >
-        <Text style={styles.errorText}>Error: {error}</Text>
+        <MaterialIcons name="error-outline" size={48} color="#FF6B6B" />
+        <Text
+          style={[styles.errorText, { color: isDarkTheme ? "#fff" : "#000" }]}
+        >
+          {error}
+        </Text>
+        <TouchableOpacity
+          style={[styles.retryButton, { backgroundColor: theme.colors.button }]}
+          onPress={loadProducts}
+        >
+          <Text style={styles.retryButtonText}>Try Again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
   return (
-    <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
+    <View
+      style={[
+        styles.container,
+        { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
+      ]}
+    >
       <FlatList
-        data={isLoading ? Array(6).fill(null) : products}
-        renderItem={isLoading ? () => <ProductSkeleton /> : renderItem}
+        ref={flatListRef}
+        data={isLoading ? Array(8).fill(null) : products}
+        renderItem={
+          isLoading
+            ? () => <ListSkeleton isDarkTheme={isDarkTheme} />
+            : ({ item, index }) => (
+                <ProductItem
+                  item={item}
+                  index={index}
+                  theme={theme}
+                  isDarkTheme={isDarkTheme}
+                  onLongPress={showProductOptions}
+                  onAddToCart={handleAddToCart}
+                  onShare={shareProduct}
+                  renderRatingStars={renderRatingStars}
+                />
+              )
+        }
         keyExtractor={(item, index) =>
           item ? item.products_id.toString() : index.toString()
         }
-        ItemSeparatorComponent={() => (
-          <View
-            style={[
-              styles.separator,
-              { borderTopColor: theme.colors.inactiveColor },
-            ]}
-          />
-        )}
-        contentContainerStyle={[
-          styles.listContent,
-          { backgroundColor: theme.colors.primary },
-        ]}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           !isLoading && (
-            <View style={styles.centerContainer}>
+            <View
+              style={[
+                styles.centerContainer,
+                { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
+              ]}
+            >
+              <MaterialIcons
+                name="search-off"
+                size={48}
+                color={isDarkTheme ? "#666" : "#999"}
+              />
               <Text
-                style={[styles.messageText, { color: theme.colors.textColor }]}
+                style={[
+                  styles.messageText,
+                  { color: isDarkTheme ? "#fff" : "#000" },
+                ]}
               >
-                No products found.
+                No products found in this category.
               </Text>
+              <TouchableOpacity
+                style={[
+                  styles.retryButton,
+                  { backgroundColor: theme.colors.button },
+                ]}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.retryButtonText}>Go Back</Text>
+              </TouchableOpacity>
             </View>
           )
         }
@@ -279,7 +488,37 @@ const ProductList = () => {
         maxToRenderPerBatch={10}
         windowSize={5}
         removeClippedSubviews
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.colors.button]}
+            tintColor={isDarkTheme ? "#fff" : theme.colors.button}
+            progressBackgroundColor={isDarkTheme ? "#333" : "#f0f0f0"}
+          />
+        }
       />
+
+      {products.length > 15 && (
+        <TouchableOpacity
+          style={[
+            styles.scrollTopButton,
+            {
+              backgroundColor: isDarkTheme
+                ? "rgba(255, 255, 255, 0.1)"
+                : "rgba(0, 0, 0, 0.1)",
+            },
+          ]}
+          onPress={scrollToTop}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons
+            name="keyboard-arrow-up"
+            size={24}
+            color={isDarkTheme ? "#fff" : "#000"}
+          />
+        </TouchableOpacity>
+      )}
 
       <AlertDialog
         visible={alertVisible}
@@ -294,8 +533,10 @@ const ProductList = () => {
   );
 };
 
-// Styles remain unchanged
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -303,55 +544,136 @@ const styles = StyleSheet.create({
     padding: 40,
   },
   errorText: {
-    color: "red",
     fontSize: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    textAlign: "center",
   },
   messageText: {
     fontSize: 16,
     textAlign: "center",
+    marginTop: 16,
+    marginBottom: 24,
   },
-  cardContainer: {
-    marginVertical: 5,
-    borderRadius: 10,
+  retryButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
   },
-  card: {
+  retryButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  listContent: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 20,
+  },
+  itemContainer: {
+    // marginBottom: 8,
+  },
+  listItem: {
     flexDirection: "row",
+    borderRadius: 12,
     overflow: "hidden",
-    margin: 10,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+    height: 100,
+    alignItems: "center",
+    marginBottom: 10,
   },
   productImage: {
-    width: 100,
+    width: 90,
     height: 100,
-    borderRadius: 10,
+    overflow: "hidden",
   },
-  cardContent: {
+  productInfo: {
     flex: 1,
-    paddingLeft: 15,
+    marginLeft: 12,
+    justifyContent: "space-between",
+    height: "100%",
+    paddingVertical: 15,
   },
   productTitle: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 8,
-  },
-  productPrice: {
-    fontSize: 18,
-    fontWeight: "bold",
+    marginBottom: 4,
+    lineHeight: 18,
   },
   brandContainer: {
-    paddingTop: 5,
+    marginVertical: 2,
   },
   brand: {
-    fontSize: 14,
+    fontSize: 12,
   },
-  separator: {
-    borderTopWidth: 0.5,
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  productPrice: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginRight: 10,
   },
   starIcon: {
-    marginRight: 1,
+    marginRight: 2,
+  },
+  actionButtons: {
+    flexDirection: "column",
+    justifyContent: "space-between",
+    height: "70%",
+    marginRight: 8,
+  },
+  iconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scrollTopButton: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  // Skeleton styles
+  skeletonText: {
+    height: 14,
+    width: "80%",
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonTextSmall: {
+    height: 12,
+    width: "50%",
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  skeletonPrice: {
+    height: 14,
+    width: 60,
+    borderRadius: 4,
   },
 });
 
