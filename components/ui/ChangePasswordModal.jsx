@@ -12,8 +12,10 @@ import {
   Keyboard,
 } from "react-native";
 import useProductStore from "../../components/api/useProductStore";
+import { useTheme } from "react-native-paper";
 
 const ChangePasswordModal = ({ isVisible, onClose }) => {
+  const theme = useTheme();
   const [passwords, setPasswords] = useState({
     newPassword: "",
     confirmPassword: "",
@@ -68,16 +70,32 @@ const ChangePasswordModal = ({ isVisible, onClose }) => {
     >
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.title}>Change Password</Text>
-            <Text style={styles.subtitle}>
+          <View
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
+            <Text style={[styles.title, { color: theme.colors.textColor }]}>
+              Change Password
+            </Text>
+            <Text
+              style={[styles.subtitle, { color: theme.colors.inactiveColor }]}
+            >
               Last Password Change: {formattedDate}
             </Text>
 
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.primary,
+                  borderColor: theme.colors.subInactiveColor,
+                  color: theme.colors.textColor,
+                },
+              ]}
               placeholder="New Password"
-              placeholderTextColor="#999"
+              placeholderTextColor={theme.colors.inactiveColor}
               secureTextEntry
               value={passwords.newPassword}
               onChangeText={(text) =>
@@ -87,9 +105,16 @@ const ChangePasswordModal = ({ isVisible, onClose }) => {
               accessibilityHint="Enter your new password"
             />
             <TextInput
-              style={styles.input}
+              style={[
+                styles.input,
+                {
+                  backgroundColor: theme.colors.primary,
+                  borderColor: theme.colors.subInactiveColor,
+                  color: theme.colors.textColor,
+                },
+              ]}
               placeholder="Confirm New Password"
-              placeholderTextColor="#999"
+              placeholderTextColor={theme.colors.inactiveColor}
               secureTextEntry
               value={passwords.confirmPassword}
               onChangeText={(text) =>
@@ -100,21 +125,27 @@ const ChangePasswordModal = ({ isVisible, onClose }) => {
             />
 
             <TouchableOpacity
-              style={styles.button}
+              style={[styles.button, { backgroundColor: theme.colors.button }]}
               onPress={handleChangePassword}
               disabled={isLoading}
               accessibilityLabel="Change Password Button"
               accessibilityHint="Press to change your password"
             >
               {isLoading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="white" />
               ) : (
                 <Text style={styles.buttonText}>Change Password</Text>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.cancelButton}
+              style={[
+                styles.cancelButton,
+                {
+                  backgroundColor: theme.colors.primary,
+                  borderColor: theme.colors.button,
+                },
+              ]}
               onPress={onClose}
               accessibilityLabel="Cancel Button"
               accessibilityHint="Press to cancel and close the modal"
@@ -136,7 +167,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   modalContent: {
-    backgroundColor: "#fff",
     padding: 15,
     borderRadius: 15,
     width: "90%",
@@ -152,7 +182,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginBottom: 20,
-    color: "#666",
+
     textAlign: "center",
   },
   input: {
@@ -162,23 +192,19 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 15,
     fontSize: 16,
-    color: "#333",
-    backgroundColor: "#f9f9f9",
   },
   button: {
-    backgroundColor: "#007bff",
     borderRadius: 8,
     padding: 15,
     alignItems: "center",
     marginBottom: 10,
   },
   buttonText: {
-    color: "#fff",
+    color: "white",
     fontSize: 16,
     fontWeight: "bold",
   },
   cancelButton: {
-    backgroundColor: "#f8f9fa",
     borderRadius: 8,
     padding: 15,
     alignItems: "center",
@@ -186,7 +212,7 @@ const styles = StyleSheet.create({
     borderColor: "#ddd",
   },
   cancelButtonText: {
-    color: "#333",
+    color: "white",
     fontSize: 16,
     fontWeight: "bold",
   },

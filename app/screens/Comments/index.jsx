@@ -1,3 +1,5 @@
+"use client";
+
 import React, {
   useEffect,
   useLayoutEffect,
@@ -9,12 +11,10 @@ import {
   StyleSheet,
   Text,
   View,
-  FlatList,
   ActivityIndicator,
   TextInput,
   Image,
   ToastAndroid,
-  TouchableWithoutFeedback,
   KeyboardAvoidingView,
   Platform,
   Keyboard,
@@ -22,12 +22,59 @@ import {
   Alert,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { IconButton, useTheme } from "react-native-paper";
+import { useTheme } from "react-native-paper";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../../components/api/useProductStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import { FlashList } from "@shopify/flash-list";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
+// Custom date formatter function (unchanged)
+const formatDateString = (dateString) => {
+  try {
+    const date = new Date(dateString);
+    const now = new Date();
+
+    if (isNaN(date.getTime())) {
+      return dateString;
+    }
+
+    const diffMs = now.getTime() - date.getTime();
+    const diffSecs = Math.floor(diffMs / 1000);
+    const diffMins = Math.floor(diffSecs / 60);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffSecs < 60) return "just now";
+    if (diffMins < 60)
+      return `${diffMins} ${diffMins === 1 ? "minute" : "minutes"} ago`;
+    if (diffHours < 24)
+      return `${diffHours} ${diffHours === 1 ? "hour" : "hours"} ago`;
+    if (diffDays < 7)
+      return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+    return `${
+      months[date.getMonth()]
+    } ${date.getDate()}, ${date.getFullYear()}`;
+  } catch (e) {
+    return dateString;
+  }
+};
 
 const Comments = () => {
   const { productId } = useLocalSearchParams();
@@ -47,25 +94,19 @@ const Comments = () => {
     message: "",
     onConfirm: () => {},
   });
+  const [editingComment, setEditingComment] = useState(null);
 
   const { user, fetchComments, addComment, deleteComment, updateComment } =
     useProductStore();
 
   const isLoadingRef = useRef(false);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Comments",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
-    });
-  }, [navigation, theme.colors.primary, theme.colors.textColor]);
-
-  useEffect(() => {
-    loadComments(1);
-  }, [loadComments]);
+  const showAlert = useCallback((title, message, onConfirm) => {
+    setAlertConfig({ title, message, onConfirm });
+    setAlertVisible(true);
+  }, []);
 
   const loadComments = useCallback(
     async (page = 1) => {
@@ -89,13 +130,27 @@ const Comments = () => {
         setIsLoading(false);
       }
     },
-    [fetchComments, productId, showAlert],
+    [fetchComments, productId, showAlert]
   );
 
-  const showAlert = (title, message, onConfirm) => {
-    setAlertConfig({ title, message, onConfirm });
-    setAlertVisible(true);
-  };
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Comments",
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+        elevation: 0,
+        shadowOpacity: 0,
+      },
+      headerTintColor: theme.colors.textColor,
+      headerTitleStyle: {
+        fontWeight: "600",
+      },
+    });
+  }, [navigation, theme.colors]);
+
+  useEffect(() => {
+    loadComments(1);
+  }, [loadComments]);
 
   const handleAddComment = useCallback(() => {
     const trimmedComment = newComment.trim();
@@ -103,7 +158,7 @@ const Comments = () => {
       showAlert(
         "Empty Comment",
         "Please write a comment before submitting.",
-        () => {},
+        () => {}
       );
       return;
     }
@@ -114,7 +169,6 @@ const Comments = () => {
 
     setIsAddingComment(true);
 
-    // Create temporary comment with a unique temporary ID
     const tempId = `temp_${Date.now()}`;
     const newLocalComment = {
       product_comments_id: tempId,
@@ -126,33 +180,34 @@ const Comments = () => {
       consumer_photo: user.photo || null,
     };
 
-    // Add comment locally first
-    setComments((prev) => [...prev, newLocalComment]);
+    setComments((prev) => [newLocalComment, ...prev]);
     setNewComment("");
     Keyboard.dismiss();
+
+    if (listRef.current) {
+      listRef.current.scrollToOffset({ offset: 0, animated: false });
+    }
+
     ToastAndroid.show("Comment added", ToastAndroid.SHORT);
 
-    // Then sync with server in background
     addComment({
       product_id: productId,
       comment: trimmedComment,
       consumer_id: user.consumer_id,
     })
       .then((newCommentFromServer) => {
-        // Update the temporary comment with server data
         setComments((prev) =>
           prev.map((comment) =>
             comment.product_comments_id === tempId
               ? { ...comment, ...newCommentFromServer }
-              : comment,
-          ),
+              : comment
+          )
         );
       })
       .catch((err) => {
         console.error("Error syncing comment to server:", err);
-        // Remove the comment if server sync fails
         setComments((prev) =>
-          prev.filter((comment) => comment.product_comments_id !== tempId),
+          prev.filter((comment) => comment.product_comments_id !== tempId)
         );
         ToastAndroid.show("Failed to save comment", ToastAndroid.SHORT);
       })
@@ -163,66 +218,107 @@ const Comments = () => {
 
   const handleEditComment = useCallback(
     (comment) => {
-      Alert.prompt(
-        "Edit Comment",
-        "Modify your comment below:",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-          },
-          {
-            text: "Save",
-            onPress: (newText) => {
-              if (newText && newText.trim()) {
-                const updatedComment = { ...comment, comment: newText.trim() };
-                setComments((prev) =>
-                  prev.map((c) =>
-                    c.product_comments_id === comment.product_comments_id
-                      ? updatedComment
-                      : c,
-                  ),
-                );
-                // Perform API update in background
-                updateComment({
-                  commentId: comment.product_comments_id,
-                  comment: newText.trim(),
-                  consumerID: user.consumer_id,
-                }).catch((err) => {
-                  console.error("Error updating comment:", err);
-                  ToastAndroid.show(
-                    "Failed to update comment",
-                    ToastAndroid.SHORT,
+      if (Platform.OS === "ios") {
+        Alert.prompt(
+          "Edit Comment",
+          "Modify your comment below:",
+          [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Save",
+              onPress: (newText) => {
+                if (newText && newText.trim()) {
+                  const updatedComment = {
+                    ...comment,
+                    comment: newText.trim(),
+                  };
+                  setComments((prev) =>
+                    prev.map((c) =>
+                      c.product_comments_id === comment.product_comments_id
+                        ? updatedComment
+                        : c
+                    )
                   );
-                });
-              }
+                  updateComment({
+                    commentId: comment.product_comments_id,
+                    comment: newText.trim(),
+                    consumerID: user.consumer_id,
+                  }).catch((err) => {
+                    console.error("Error updating comment:", err);
+                    ToastAndroid.show(
+                      "Failed to update comment",
+                      ToastAndroid.SHORT
+                    );
+                  });
+                }
+              },
             },
-          },
-        ],
-        "plain-text",
-        comment.comment,
-      );
+          ],
+          "plain-text",
+          comment.comment
+        );
+      } else {
+        setNewComment(comment.comment);
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+        setEditingComment(comment);
+      }
     },
-    [updateComment, user],
+    [updateComment, user]
   );
+
+  const handleUpdateComment = useCallback(() => {
+    if (!editingComment) return handleAddComment();
+
+    const trimmedComment = newComment.trim();
+    if (!trimmedComment) return;
+
+    const updatedComment = { ...editingComment, comment: trimmedComment };
+    setComments((prev) =>
+      prev.map((c) =>
+        c.product_comments_id === editingComment.product_comments_id
+          ? updatedComment
+          : c
+      )
+    );
+
+    updateComment({
+      commentId: editingComment.product_comments_id,
+      comment: trimmedComment,
+      consumerID: user.consumer_id,
+    }).catch((err) => {
+      console.error("Error updating comment:", err);
+      ToastAndroid.show("Failed to update comment", ToastAndroid.SHORT);
+    });
+
+    setNewComment("");
+    setEditingComment(null);
+    Keyboard.dismiss();
+  }, [editingComment, newComment, updateComment, user, handleAddComment]);
 
   const handleDeleteComment = useCallback(
     (commentId) => {
-      setComments((prev) =>
-        prev.filter((c) => c.product_comments_id !== commentId),
-      );
-      ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+      showAlert(
+        "Delete Comment",
+        "Are you sure you want to delete this comment?",
+        () => {
+          setComments((prev) =>
+            prev.filter((c) => c.product_comments_id !== commentId)
+          );
+          ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
 
-      // Then sync with server in background
-      deleteComment({
-        commentId: commentId,
-        consumerID: user.consumer_id,
-      }).catch((err) => {
-        console.error("Error deleting comment from server:", err);
-        ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
-      });
+          deleteComment({
+            commentId: commentId,
+            consumerID: user.consumer_id,
+          }).catch((err) => {
+            console.error("Error deleting comment from server:", err);
+            ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
+          });
+        }
+      );
     },
-    [deleteComment, user, comments],
+    [deleteComment, user, showAlert]
   );
 
   const showCommentOptions = useCallback(
@@ -237,63 +333,85 @@ const Comments = () => {
           cancelButtonIndex,
           destructiveButtonIndex,
           tintColor: theme.colors.textColor,
-          containerStyle: { backgroundColor: theme.colors.primary },
+          containerStyle: {
+            backgroundColor: theme.colors.primary,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+          },
+          textStyle: { fontSize: 16 },
         },
         (buttonIndex) => {
-          if (buttonIndex === 0) {
-            handleEditComment(comment);
-          } else if (buttonIndex === 1) {
+          if (buttonIndex === 0) handleEditComment(comment);
+          else if (buttonIndex === 1)
             handleDeleteComment(comment.product_comments_id);
-          }
-        },
+        }
       );
     },
-    [showActionSheetWithOptions, handleEditComment, handleDeleteComment],
+    [
+      showActionSheetWithOptions,
+      handleEditComment,
+      handleDeleteComment,
+      theme.colors,
+    ]
   );
 
   const renderCommentItem = useCallback(
     ({ item }) => {
       const isUserComment = user && item.consumer_id === user.consumer_id;
-      const CommentComponent = (
-        <View style={styles.commentItem}>
-          <View style={styles.commentHeader}>
-            <Image
-              source={
-                item.consumer_photo
-                  ? { uri: item.consumer_photo }
-                  : require("../../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.commentUserPhoto}
-              accessibilityLabel="User Photo"
-            />
-            <View style={styles.commentTitleContainer}>
-              <Text
-                style={[
-                  styles.commentAuthor,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                {item.consumer_name || "Anonymous"}
-              </Text>
-              <Text style={styles.commentDate}>{item.date}</Text>
-            </View>
-          </View>
-          <Text
-            style={[styles.commentContent, { color: theme.colors.textColor }]}
+
+      return (
+        <View style={styles.commentItemContainer}>
+          <TouchableOpacity
+            onPress={() => isUserComment && showCommentOptions(item)}
+            activeOpacity={isUserComment ? 0.7 : 1}
+            style={styles.commentItem}
           >
-            {item.comment}
-          </Text>
+            <View style={styles.commentHeader}>
+              <Image
+                source={
+                  item.consumer_photo
+                    ? { uri: item.consumer_photo }
+                    : require("../../../assets/images/imageSkeleton.jpg")
+                }
+                style={styles.commentUserPhoto}
+                accessibilityLabel="User Photo"
+              />
+              <View style={styles.commentTitleContainer}>
+                <Text
+                  style={[
+                    styles.commentAuthor,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  {item.consumer_name || "Anonymous"}
+                </Text>
+                <Text style={styles.commentDate}>
+                  {formatDateString(item.date)}
+                </Text>
+              </View>
+              {isUserComment && (
+                <TouchableOpacity
+                  onPress={() => showCommentOptions(item)}
+                  style={styles.optionsButton}
+                >
+                  <MaterialCommunityIcons
+                    name="dots-vertical"
+                    size={20}
+                    color={theme.colors.textColor + "80"}
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+            <Text
+              style={[styles.commentContent, { color: theme.colors.textColor }]}
+            >
+              {item.comment}
+            </Text>
+          </TouchableOpacity>
         </View>
       );
-      return isUserComment ? (
-        <TouchableOpacity onPress={() => showCommentOptions(item)}>
-          {CommentComponent}
-        </TouchableOpacity>
-      ) : (
-        CommentComponent
-      );
     },
-    [user, theme.colors.textColor, showCommentOptions],
+    [user, theme.colors, showCommentOptions]
   );
 
   const handleLoadMore = useCallback(() => {
@@ -302,69 +420,139 @@ const Comments = () => {
     }
   }, [isLoading, hasMoreComments, commentPage, loadComments]);
 
+  const EmptyListComponent = useCallback(
+    () => (
+      <View style={styles.emptyCommentContainer}>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={theme.colors.textColor} />
+        ) : (
+          <>
+            <MaterialCommunityIcons
+              name="comment-text-outline"
+              size={48}
+              color={theme.colors.textColor + "50"}
+            />
+            <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
+              No comments yet
+            </Text>
+            <Text
+              style={[
+                styles.emptySubtext,
+                { color: theme.colors.textColor + "80" },
+              ]}
+            >
+              Be the first to share your thoughts
+            </Text>
+          </>
+        )}
+      </View>
+    ),
+    [isLoading, theme.colors]
+  );
+
+  const ListFooterComponent = useCallback(
+    () =>
+      hasMoreComments && comments.length > 0 ? (
+        <View style={styles.listFooter}>
+          <ActivityIndicator size="small" color={theme.colors.textColor} />
+        </View>
+      ) : null,
+    [hasMoreComments, comments.length, theme.colors.textColor]
+  );
+
   return (
     <GestureHandlerRootView
       style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <FlatList
-        data={comments}
-        keyExtractor={(item) => item.product_comments_id.toString()}
-        renderItem={renderCommentItem}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.flatListContent}
-        estimatedItemSize={96}
-        ListEmptyComponent={
-          isLoading && hasMoreComments ? (
-            <ActivityIndicator
-              size="small"
-              color={theme.colors.textColor}
-              style={styles.emptyCommentContainer}
-            />
-          ) : (
-            <View
-              style={[
-                styles.emptyCommentContainer,
-                { justifyContent: "center", alignItems: "center" },
-              ]}
-            >
-              <Text style={{ color: theme.colors.textColor, fontSize: 18 }}>
-                No comments
-              </Text>
-            </View>
-          )
-        }
-      />
-      <KeyboardAvoidingView>
+      <View style={{ flex: 1 }}>
+        <FlashList
+          ref={listRef}
+          data={comments}
+          keyExtractor={(item) => item.product_comments_id.toString()}
+          renderItem={renderCommentItem}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          estimatedItemSize={120}
+          ListEmptyComponent={EmptyListComponent}
+          ListFooterComponent={ListFooterComponent}
+          showsVerticalScrollIndicator={false}
+        />
+      </View>
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
         <View
           style={[
             styles.addCommentContainer,
-            { backgroundColor: theme.colors.primary },
+            {
+              backgroundColor: theme.colors.primary,
+              borderTopColor: theme.colors.inactiveColor + "30",
+            },
           ]}
         >
-          <TextInput
-            value={newComment}
-            onChangeText={setNewComment}
-            placeholder="Write a comment..."
-            placeholderTextColor={theme.colors.inactiveColor}
+          <View style={styles.inputWrapper}>
+            <TextInput
+              ref={inputRef}
+              value={newComment}
+              onChangeText={setNewComment}
+              placeholder={
+                editingComment ? "Edit your comment..." : "Write a comment..."
+              }
+              placeholderTextColor={theme.colors.inactiveColor}
+              style={[
+                styles.commentInput,
+                {
+                  backgroundColor: theme.colors.primary + "80",
+                  borderColor: theme.colors.inactiveColor + "30",
+                  color: theme.colors.textColor,
+                },
+              ]}
+              multiline
+              maxLength={500}
+              accessibilityLabel="Comment Input"
+            />
+          </View>
+          <TouchableOpacity
+            onPress={editingComment ? handleUpdateComment : handleAddComment}
+            disabled={isAddingComment || !newComment.trim()}
             style={[
-              styles.commentInput,
+              styles.sendButton,
               {
-                backgroundColor: theme.colors.primary,
-                borderColor: theme.colors.inactiveColor,
-                color: theme.colors.textColor,
+                backgroundColor: newComment.trim()
+                  ? theme.colors.button
+                  : theme.colors.button + "50",
+                opacity: isAddingComment ? 0.7 : 1,
               },
             ]}
-            multiline
-            accessibilityLabel="Comment Input"
-          />
-          <IconButton
-            icon="send"
-            onPress={handleAddComment}
-            iconColor={theme.colors.button}
-            disabled={isAddingComment}
             accessibilityLabel="Send Comment"
-          />
+          >
+            {isAddingComment ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <MaterialCommunityIcons
+                name={editingComment ? "check" : "send"}
+                size={20}
+                color="#fff"
+              />
+            )}
+          </TouchableOpacity>
+          {editingComment && (
+            <TouchableOpacity
+              onPress={() => {
+                setEditingComment(null);
+                setNewComment("");
+              }}
+              style={styles.cancelButton}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={20}
+                color={theme.colors.textColor}
+              />
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -385,70 +573,87 @@ const Comments = () => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1 },
+  commentItemContainer: {
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "transparent",
   },
-  flatListContent: {
-    flexGrow: 1,
-    paddingBottom: 80,
-  },
-  commentItem: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  commentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  commentTitleContainer: {
-    paddingLeft: 10,
-  },
-  commentAuthor: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
+  commentItem: { padding: 16 },
+  commentHeader: { flexDirection: "row", alignItems: "center" },
+  commentTitleContainer: { flex: 1, paddingLeft: 12 },
+  commentAuthor: { fontSize: 15, fontWeight: "600" },
   commentContent: {
     fontSize: 15,
-    paddingTop: 5,
-    marginLeft: 45,
+    lineHeight: 22,
+    paddingTop: 8,
+    marginLeft: 48,
   },
-  commentDate: {
-    fontSize: 12,
-    color: "#666",
-  },
-  commentUserPhoto: {
-    width: 35,
-    height: 35,
-    borderRadius: 20,
-  },
+  commentDate: { fontSize: 12, color: "#888", marginTop: 2 },
+  commentUserPhoto: { width: 36, height: 36, borderRadius: 18 },
   addCommentContainer: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 10,
-    paddingBottom: 40,
+    padding: 12,
     position: "absolute",
+    paddingBottom: 40,
     bottom: 0,
-    elevation: 10,
+  },
+  inputWrapper: { flex: 1, flexDirection: "row", alignItems: "center" },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+    alignItems: "center",
+    justifyContent: "center",
   },
   commentInput: {
     flex: 1,
     borderWidth: 1,
-    borderRadius: 25,
-    paddingHorizontal: 15,
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: "#fff",
     fontSize: 15,
     maxHeight: 100,
+    minHeight: 40,
   },
-  listFooter: {
-    marginBottom: 20,
+  sendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
   },
+  cancelButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 4,
+  },
+  listFooter: { paddingVertical: 20, alignItems: "center" },
   emptyCommentContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 32,
+    paddingVertical: 60,
   },
+  emptyText: { fontSize: 18, fontWeight: "600", marginTop: 16 },
+  emptySubtext: { fontSize: 14, textAlign: "center", marginTop: 8 },
+  emptyButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 24,
+  },
+  emptyButtonText: { color: "#fff", fontWeight: "500" },
+  optionsButton: { padding: 4 },
 });
 
 export default React.memo(Comments);

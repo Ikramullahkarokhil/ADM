@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "cover",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#01bf62"
     },
     "ios": {
       "supportsTablet": true,
@@ -28,16 +28,7 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "gradleProperties": {
-              "org.gradle.jvmargs": "-Xmx2g"
-            }
-          }
-        }
-      ],
+
       [
         "expo-notifications",
         {

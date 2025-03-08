@@ -25,7 +25,7 @@ const darkTheme = {
     textColor: "#D1D5DB",
     ripple: "rgba(255, 255, 255, 0.15)",
     progressColor: "#6B7280",
-    button: "#60A5FA",
+    button: "#01bf62",
     disabled: "#6B7280",
     deleteButton: "#F87171",
     subInactiveColor: "rgba(255, 255, 255, 0.2)",

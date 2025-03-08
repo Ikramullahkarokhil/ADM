@@ -239,16 +239,11 @@ const ProductList = () => {
     navigation.setOptions({
       title: subCategorieName,
       headerStyle: {
-        backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5",
-        elevation: 0,
-        shadowOpacity: 0,
+        backgroundColor: theme.colors.primary,
       },
-      headerTintColor: isDarkTheme ? "#fff" : "#000",
-      headerTitleStyle: {
-        fontWeight: "700",
-      },
+      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, subCategorieName, isDarkTheme]);
+  }, [navigation, subCategorieName, theme]);
 
   const loadProducts = useCallback(async () => {
     try {

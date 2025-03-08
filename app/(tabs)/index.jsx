@@ -117,7 +117,7 @@ const Home = () => {
               iconColor={theme.colors.textColor}
             />
             {cartItem.length > 0 && (
-              <Badge style={styles.badge}>{cartItem.length}</Badge>
+              <Badge style={[styles.badge, {backgroundColor: theme.colors.button}]}>{cartItem.length}</Badge>
             )}
           </Pressable>
         </View>
@@ -175,7 +175,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 5,
     left: 25,
-    backgroundColor: "red",
     color: "white",
   },
   productsListContent: { marginTop: 5 },

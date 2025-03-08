@@ -70,7 +70,7 @@ const Questions = () => {
         setQuestions((prev) => {
           const existingIds = new Set(prev.map((q) => q.products_qna_id));
           const filteredNewQuestions = data.filter(
-            (q) => !existingIds.has(q.products_qna_id),
+            (q) => !existingIds.has(q.products_qna_id)
           );
           return page === 1 ? data : [...prev, ...filteredNewQuestions];
         });
@@ -83,7 +83,7 @@ const Questions = () => {
         setIsLoading(false);
       }
     },
-    [productId, showAlert],
+    [productId, showAlert]
   );
 
   useEffect(() => {
@@ -138,7 +138,7 @@ const Questions = () => {
   const handleDeleteQuestion = useCallback(
     async (questionId) => {
       setQuestions((prev) =>
-        prev.filter((q) => q.products_qna_id !== questionId),
+        prev.filter((q) => q.products_qna_id !== questionId)
       );
       ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
       // Background server update
@@ -150,15 +150,15 @@ const Questions = () => {
         ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
       });
     },
-    [user, deleteProductQuestion],
+    [user, deleteProductQuestion]
   );
 
   const handleUpdateQuestion = useCallback(
     async (questionId, newText) => {
       setQuestions((prev) =>
         prev.map((q) =>
-          q.products_qna_id === questionId ? { ...q, question: newText } : q,
-        ),
+          q.products_qna_id === questionId ? { ...q, question: newText } : q
+        )
       );
       ToastAndroid.show("Question updated", ToastAndroid.SHORT);
 
@@ -172,7 +172,7 @@ const Questions = () => {
         ToastAndroid.show("Failed to sync update", ToastAndroid.SHORT);
       });
     },
-    [user, updateProductQuestion],
+    [user, updateProductQuestion]
   );
 
   const showQuestionOptions = useCallback(
@@ -202,15 +202,15 @@ const Questions = () => {
                 if (newText)
                   handleUpdateQuestion(question.products_qna_id, newText);
               },
-              true,
+              true
             );
           } else if (buttonIndex === 1) {
             handleDeleteQuestion(question.products_qna_id);
           }
-        },
+        }
       );
     },
-    [user, handleDeleteQuestion, handleUpdateQuestion, showAlert, theme],
+    [user, handleDeleteQuestion, handleUpdateQuestion, showAlert, theme]
   );
 
   const renderQuestionItem = useCallback(
@@ -219,7 +219,7 @@ const Questions = () => {
         <QuestionItem item={item} theme={theme} />
       </TouchableOpacity>
     ),
-    [showQuestionOptions, theme],
+    [showQuestionOptions, theme]
   );
 
   const handleLoadMore = useCallback(() => {

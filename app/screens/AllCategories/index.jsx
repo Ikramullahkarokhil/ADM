@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect, useLayoutEffect } from "react";
 import {
   StyleSheet,
@@ -9,7 +7,6 @@ import {
   FlatList,
   useWindowDimensions,
   Pressable,
-  ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "react-native-paper";
@@ -21,14 +18,17 @@ import {
 } from "expo-router";
 import useThemeStore from "../../../components/store/useThemeStore";
 import useProductStore from "../../../components/api/useProductStore";
+import AllCategoriesSkeleton from "../../../components/skeleton/AllCategoriesSkeleton";
 
 // Data transformation function
 const transformSubCategories = (subCategories) => {
-  return subCategories.map((sub) => ({
-    categories_id: sub.categories_id || sub.id || `${Math.random()}`,
-    title: sub.title || sub.name || "Unnamed Subcategory",
-    category_image: sub.category_image || null,
-  }));
+  return subCategories
+    .filter((sub) => sub !== null && sub !== undefined) // Filter out null or undefined items
+    .map((sub) => ({
+      categories_id: sub.categories_id || sub.id || `${Math.random()}`,
+      title: sub.title || sub.name || "Unnamed Subcategory",
+      category_image: sub.category_image || null,
+    }));
 };
 
 // SubcategoryItem component
@@ -111,9 +111,8 @@ const AllCategories = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: MainCategorieName,
-      headerTitleStyle: {
-        fontWeight: "700",
-      },
+      headerStyle: { backgroundColor: theme.colors.primary },
+      headerTintColor: theme.colors.textColor,
     });
   }, [navigation, MainCategorieName]);
 
@@ -124,8 +123,12 @@ const AllCategories = () => {
       try {
         const limit = 50;
         const data = await fetchSubcategories(mainCategoryId, limit);
-        const transformedData = transformSubCategories(data);
-        setSubCategories(transformedData);
+        if (data) {
+          const transformedData = transformSubCategories(data);
+          setSubCategories(transformedData);
+        } else {
+          setError("No data received from the API");
+        }
       } catch (err) {
         console.error("Error loading subcategories:", err);
         setError("Failed to load subcategories");
@@ -138,29 +141,6 @@ const AllCategories = () => {
       loadSubCategories();
     }
   }, [mainCategoryId, fetchSubcategories]);
-
-  // Loading state
-  if (loading) {
-    return (
-      <View
-        style={[
-          styles.loaderContainer,
-          { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text
-          style={{
-            marginTop: 10,
-            color: isDarkTheme ? "#fff" : "#000",
-            fontWeight: "500",
-          }}
-        >
-          Loading subcategories...
-        </Text>
-      </View>
-    );
-  }
 
   // Error state
   if (error) {
@@ -204,7 +184,7 @@ const AllCategories = () => {
   }
 
   // Empty state
-  if (!subCategories || subCategories.length === 0) {
+  if (!loading && (!subCategories || subCategories.length === 0)) {
     return (
       <View
         style={[
@@ -231,23 +211,26 @@ const AllCategories = () => {
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <FlatList
-        data={subCategories}
-        renderItem={({ item, index }) => (
-          <SubcategoryItem
-            item={item}
-            index={index}
-            isDarkTheme={isDarkTheme}
-            theme={theme}
-          />
-        )}
-        keyExtractor={(item) => item.categories_id.toString()}
+        data={loading ? Array(8).fill({}) : subCategories}
+        renderItem={({ item, index }) =>
+          loading ? (
+            <AllCategoriesSkeleton />
+          ) : (
+            <SubcategoryItem
+              item={item}
+              index={index}
+              isDarkTheme={isDarkTheme}
+              theme={theme}
+            />
+          )
+        }
+        keyExtractor={(item, index) =>
+          item.categories_id
+            ? item.categories_id.toString()
+            : `skeleton-${index}`
+        } // Handle skeleton keys
         numColumns={numColumns}
         contentContainerStyle={styles.listContainer}
         initialNumToRender={10}

@@ -1,5 +1,5 @@
 import { BackHandler, useColorScheme } from "react-native";
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -10,23 +10,54 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import { ActivityIndicator, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
+import * as BackgroundFetch from "expo-background-fetch";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
 import TermsModal from "./screens/ConsentScreen/index";
 import AlertDialog from "../components/ui/NoInternetAlert";
+import { registerBackgroundNotifications } from "../notification-services";
+
+// Define background task for notifications
+const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const { fetchProfile, logout, user, listCart } = useProductStore();
+  const { fetchProfile, logout, user, listCart, getBillingAddress } =
+    useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
   const router = useRouter();
+
+  // Initialize background tasks and notifications
+  useEffect(() => {
+    const initBackgroundTasks = async () => {
+      try {
+        // Register background notifications
+        await registerBackgroundNotifications();
+      } catch (error) {
+        console.error("Error initializing background tasks:", error);
+      }
+    };
+
+    initBackgroundTasks();
+
+    return () => {
+      // Clean up background tasks if needed
+      try {
+        BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
+          (err) => console.log("Failed to unregister background task", err)
+        );
+      } catch (error) {
+        console.error("Error cleaning up background tasks:", error);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
@@ -53,11 +84,12 @@ const Layout = () => {
       try {
         await fetchProfile(user.consumer_id);
         await listCart(user.consumer_id);
+        await getBillingAddress(user.consumer_id);
       } catch (error) {
         console.error("Error fetching user data:", error);
       }
     }
-  }, [user?.consumer_id, fetchProfile]);
+  }, [user?.consumer_id, fetchProfile, listCart, getBillingAddress]);
 
   useEffect(() => {
     const checkAuthentication = async () => {

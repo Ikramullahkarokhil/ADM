@@ -3,10 +3,10 @@ import { View } from "react-native";
 import { Skeleton } from "@rneui/base";
 import { useTheme } from "react-native-paper";
 
-const CategoriesSkeleton = () => {
+const AllCategoriesSkeleton = () => {
   const theme = useTheme();
   return (
-    <View style={{ padding: 8, paddingTop: 13, flex: 1 }}>
+    <View style={{ padding: 8, paddingTop: 8, flex: 1 }}>
       <Skeleton
         width={"100%"}
         animation="none"
@@ -32,4 +32,4 @@ const CategoriesSkeleton = () => {
   );
 };
 
-export default CategoriesSkeleton;
+export default AllCategoriesSkeleton;
