@@ -1,5 +1,3 @@
-"use client";
-
 import { useState, useEffect, useLayoutEffect, useCallback } from "react";
 import {
   SafeAreaView,
@@ -10,7 +8,6 @@ import {
   Alert,
   ActivityIndicator,
   Animated,
-  Dimensions,
   useColorScheme,
 } from "react-native";
 import {
@@ -29,8 +26,6 @@ import useThemeStore from "../../components/store/useThemeStore";
 import useProductStore from "../../components/api/useProductStore";
 import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-
-const { width } = Dimensions.get("window");
 
 const ProfileHeader = ({
   profileImage,
@@ -220,7 +215,6 @@ const Profile = () => {
         tintColor: theme.colors.button,
         containerStyle: { backgroundColor: theme.colors.primary },
         titleTextStyle: { color: theme.colors.textColor },
-        messageTextStyle: { color: theme.colors.inactiveColor },
         optionsTextStyle: { color: theme.colors.textColor },
       },
       async (selectedIndex) => {

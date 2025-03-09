@@ -385,7 +385,7 @@ const useProductStore = create(
         return data;
       },
 
-      getBillingAddress: async (consumerID) => {
+      fetchBillingAddresses: async (consumerID) => {
         const data = await api.get(
           `/consumer/billing-address?consumer_id=${consumerID}`
         );
@@ -399,13 +399,13 @@ const useProductStore = create(
           billingData
         );
         const consumerID = billingData.consumer_id;
-        await get().getBillingAddress(consumerID);
+        await get().fetchBillingAddresses(consumerID);
         return data.data;
       },
 
       setBillingAddressStatus: async ({ consumerId, billingId }) => {
         const data = await api.post(
-          `/consumer/set-billing-address?consumer_Id=${consumerId}&billing_address_id=${billingId}`
+          `/consumer/set-billing-address?consumer_id=${consumerId}&billing_address_id=${billingId}`
         );
         return data.data;
       },
@@ -416,6 +416,7 @@ const useProductStore = create(
           billingData
         );
         const consumerID = billingData.consumer_id;
+        await get().fetchBillingAddresses(consumerID);
         return data.data;
       },
 
@@ -423,7 +424,7 @@ const useProductStore = create(
         const data = await api.delete(
           `/consumer/delete-billing-address?consumer_id=${consumerID}&billing_address_id=${billingAddressID}`
         );
-        await get().getBillingAddress(consumerID);
+        await get().fetchBillingAddresses(consumerID);
         return data.data;
       },
 
