@@ -398,8 +398,15 @@ const useProductStore = create(
           `/consumer/add-billing-address`,
           billingData
         );
-
         const consumerID = billingData.consumer_id;
+        await get().getBillingAddress(consumerID);
+        return data.data;
+      },
+
+      setBillingAddressStatus: async ({ consumerId, billingId }) => {
+        const data = await api.post(
+          `/consumer/set-billing-address?consumer_Id=${consumerId}&billing_address_id=${billingId}`
+        );
         return data.data;
       },
 

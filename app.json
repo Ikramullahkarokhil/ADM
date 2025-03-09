@@ -28,15 +28,32 @@
     },
     "plugins": [
       "expo-router",
-
       [
         "expo-notifications",
         {
           "icon": "./assets/icon.png",
           "color": "#ffffff"
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "ndk": {
+              "abiFilters": ["armeabi-v7a", "arm64-v8a"]
+            }
+          }
+        }
       ]
     ],
-    "scheme": "ADM"
+    "scheme": "adm",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "d3058b04-69a8-48fc-9c24-73b45272dbe0"
+      }
+    }
   }
 }

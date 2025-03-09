@@ -150,7 +150,14 @@ const ChangePasswordModal = ({ isVisible, onClose }) => {
               accessibilityLabel="Cancel Button"
               accessibilityHint="Press to cancel and close the modal"
             >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
+              <Text
+                style={[
+                  styles.cancelButtonText,
+                  { color: theme.colors.button },
+                ]}
+              >
+                Cancel
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

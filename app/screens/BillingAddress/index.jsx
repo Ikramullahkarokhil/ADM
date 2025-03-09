@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, useRef, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,6 +10,9 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  TouchableOpacity,
+  Animated,
+  Platform,
 } from "react-native";
 import { Button, useTheme, Divider, IconButton } from "react-native-paper";
 import useProductStore from "../../../components/api/useProductStore";
@@ -25,11 +28,16 @@ const BillingAddress = () => {
     deleteBillingAddress,
     addBillingAddress,
     user,
+    setBillingAddressStatus,
   } = useProductStore();
   const [mode, setMode] = useState("view"); // 'view', 'add', 'edit'
   const [selectedAddress, setSelectedAddress] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [expandedAddressId, setExpandedAddressId] = useState(null);
   const navigation = useNavigation();
+
+  // Animation values
+  const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -40,6 +48,15 @@ const BillingAddress = () => {
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, theme]);
+
+  // Update fade animation when expanded address changes
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: expandedAddressId ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [expandedAddressId, fadeAnim]);
 
   const validationSchema = Yup.object().shape({
     name: Yup.string().required("Full name is required"),
@@ -117,6 +134,41 @@ const BillingAddress = () => {
     );
   };
 
+  const handleSetDefault = async (address, event) => {
+    if (event) {
+      event.stopPropagation(); // Prevent card expansion when clicking set default
+    }
+
+    if (address.is_default) {
+      return; // Already default, no need to do anything
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await setBillingAddressStatus({
+        consumerId: user.consumer_id,
+        billingId: address.consumer_billing_address_id,
+      });
+      console.log(response);
+
+      // Show success message
+      Alert.alert(
+        "Default Address",
+        "This address has been set as your default billing address."
+      );
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "Failed to set default address. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const toggleCardExpansion = (addressId) => {
+    // Toggle expansion state
+    setExpandedAddressId(expandedAddressId === addressId ? null : addressId);
+  };
+
   const renderFormField = (
     field,
     label,
@@ -157,125 +209,214 @@ const BillingAddress = () => {
     </View>
   );
 
+  const renderAddressCard = (address) => {
+    const isExpanded =
+      expandedAddressId === address.consumer_billing_address_id;
+
+    return (
+      <View
+        key={address.consumer_billing_address_id}
+        style={[
+          styles.addressCard,
+          {
+            backgroundColor: theme.colors.primary,
+            borderColor: address.is_default
+              ? theme.colors.button
+              : theme.colors.subInactiveColor,
+            borderWidth: address.is_default ? 2 : 1,
+            shadowColor: address.is_default ? theme.colors.button : "#000",
+            shadowOpacity: address.is_default ? 0.3 : 0.1,
+          },
+          isExpanded && styles.expandedCard,
+        ]}
+      >
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() =>
+            toggleCardExpansion(address.consumer_billing_address_id)
+          }
+          style={styles.cardTouchable}
+        >
+          <View style={styles.addressHeader}>
+            <View style={styles.nameContainer}>
+              <Text
+                style={[styles.addressName, { color: theme.colors.textColor }]}
+                numberOfLines={isExpanded ? undefined : 1}
+              >
+                {address.name}
+              </Text>
+              {address.is_default && (
+                <View
+                  style={[
+                    styles.defaultBadge,
+                    { backgroundColor: theme.colors.button },
+                  ]}
+                >
+                  <Text style={styles.defaultBadgeText}>Default</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.actionButtons}>
+              <IconButton
+                icon="pencil"
+                size={20}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setSelectedAddress(address);
+                  setMode("edit");
+                }}
+                iconColor={theme.colors.button}
+              />
+              <IconButton
+                icon="delete"
+                size={20}
+                iconColor={theme.colors.deleteButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDelete(address);
+                }}
+              />
+            </View>
+          </View>
+
+          <Divider style={styles.divider} />
+
+          {/* Basic info always visible */}
+          <View style={styles.addressBasicInfo}>
+            <View style={styles.addressRow}>
+              <MaterialIcons
+                name="location-on"
+                size={16}
+                color={theme.colors.button}
+              />
+              <Text
+                style={[styles.addressText, { color: theme.colors.textColor }]}
+                numberOfLines={isExpanded ? undefined : 1}
+              >
+                {address.address}, {address.district_name}
+              </Text>
+            </View>
+          </View>
+
+          {/* Expanded details */}
+          {isExpanded && (
+            <Animated.View
+              style={[styles.expandedDetails, { opacity: fadeAnim }]}
+            >
+              <View style={styles.addressDetails}>
+                <View style={styles.addressRow}>
+                  <MaterialIcons
+                    name="email"
+                    size={16}
+                    color={theme.colors.button}
+                  />
+                  <Text
+                    style={[
+                      styles.addressText,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {address.email}
+                  </Text>
+                </View>
+
+                <View style={styles.addressRow}>
+                  <MaterialIcons
+                    name="phone"
+                    size={16}
+                    color={theme.colors.button}
+                  />
+                  <Text
+                    style={[
+                      styles.addressText,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {address.phone}
+                  </Text>
+                </View>
+
+                <View style={styles.addressRow}>
+                  <MaterialIcons
+                    name="location-on"
+                    size={16}
+                    color={theme.colors.button}
+                  />
+                  <Text
+                    style={[
+                      styles.addressText,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {address.address}, {address.district_name},{" "}
+                    {address.province_name}, {address.postal_code},{" "}
+                    {address.country_name}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.expandedActions}>
+                {!address.is_default && (
+                  <Button
+                    mode="contained"
+                    onPress={(e) => handleSetDefault(address, e)}
+                    buttonColor={theme.colors.button}
+                    textColor="white"
+                    style={styles.setDefaultButton}
+                    icon="check-circle"
+                  >
+                    Set as Default
+                  </Button>
+                )}
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Set as default button for non-expanded cards */}
+          {!isExpanded && !address.is_default && (
+            <Button
+              mode="text"
+              onPress={(e) => handleSetDefault(address, e)}
+              textColor={theme.colors.button}
+              style={styles.setDefaultButton}
+            >
+              Set as Default
+            </Button>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          {mode === "view" && (
-            <Button
-              mode="contained"
-              onPress={() => setMode("add")}
-              icon="plus"
-              buttonColor={theme.colors.button}
-              textColor="white"
-              style={styles.addButton}
-            >
-              Add New
-            </Button>
-          )}
-        </View>
-
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Processing...</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={theme.colors.button} />
+              <Text
+                style={[styles.loadingText, { color: theme.colors.textColor }]}
+              >
+                Processing...
+              </Text>
+            </View>
           </View>
-        ) : mode === "view" ? (
+        )}
+
+        {mode === "view" ? (
           <>
             {consumerBillingAddress?.length > 0 ? (
-              consumerBillingAddress.map((address) => (
-                <View
-                  key={address.consumer_billing_address_id}
-                  style={[
-                    styles.addressCard,
-                    { backgroundColor: theme.colors.primary },
-                  ]}
-                >
-                  <View style={styles.addressHeader}>
-                    <Text
-                      style={[
-                        styles.addressName,
-                        { color: theme.colors.textColor },
-                      ]}
-                    >
-                      {address.name}
-                    </Text>
-                    <View style={styles.actionButtons}>
-                      <IconButton
-                        icon="pencil"
-                        size={20}
-                        onPress={() => {
-                          setSelectedAddress(address);
-                          setMode("edit");
-                        }}
-                        iconColor={theme.colors.button}
-                      />
-                      <IconButton
-                        icon="delete"
-                        size={20}
-                        iconColor={theme.colors.deleteButton}
-                        onPress={() => handleDelete(address)}
-                      />
-                    </View>
-                  </View>
-
-                  <Divider style={styles.divider} />
-
-                  <View style={styles.addressDetails}>
-                    <View style={styles.addressRow}>
-                      <MaterialIcons
-                        name="email"
-                        size={16}
-                        color={theme.colors.button}
-                      />
-                      <Text
-                        style={[
-                          styles.addressText,
-                          { color: theme.colors.textColor },
-                        ]}
-                      >
-                        {address.email}
-                      </Text>
-                    </View>
-
-                    <View style={styles.addressRow}>
-                      <MaterialIcons
-                        name="phone"
-                        size={16}
-                        color={theme.colors.button}
-                      />
-                      <Text
-                        style={[
-                          styles.addressText,
-                          { color: theme.colors.textColor },
-                        ]}
-                      >
-                        {address.phone}
-                      </Text>
-                    </View>
-
-                    <View style={styles.addressRow}>
-                      <MaterialIcons
-                        name="location-on"
-                        size={16}
-                        color={theme.colors.button}
-                      />
-                      <Text
-                        style={[
-                          styles.addressText,
-                          { color: theme.colors.textColor },
-                        ]}
-                      >
-                        {address.address}, {address.district_name},{" "}
-                        {address.province_name}, {address.postal_code},{" "}
-                        {address.country_name}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              ))
+              <View style={styles.addressList}>
+                {consumerBillingAddress.map((address) =>
+                  renderAddressCard(address)
+                )}
+              </View>
             ) : (
               <View style={styles.emptyState}>
                 <MaterialIcons
@@ -294,11 +435,21 @@ const BillingAddress = () => {
                 <Text
                   style={[
                     styles.emptyStateSubtext,
-                    { color: theme.colors.textColor },
+                    { color: theme.colors.subInactiveColor },
                   ]}
                 >
                   Add a new billing address to get started
                 </Text>
+                <Button
+                  mode="contained"
+                  onPress={() => setMode("add")}
+                  icon="plus"
+                  buttonColor={theme.colors.button}
+                  textColor="white"
+                  style={[styles.addButton, { marginTop: 20 }]}
+                >
+                  Add New Address
+                </Button>
               </View>
             )}
           </>
@@ -450,6 +601,17 @@ const BillingAddress = () => {
           </View>
         )}
       </ScrollView>
+
+      {mode === "view" && consumerBillingAddress?.length > 0 && (
+        <View style={styles.fabContainer}>
+          <TouchableOpacity
+            style={[styles.fab, { backgroundColor: theme.colors.button }]}
+            onPress={() => setMode("add")}
+          >
+            <MaterialIcons name="add" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -462,15 +624,35 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     padding: 16,
+    paddingBottom: 80, // Space for FAB
   },
-  header: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
+  addressList: {
+    gap: 16,
+  },
+  cardTouchable: {
+    width: "100%",
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
+  },
+  fabContainer: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    zIndex: 999,
+  },
+  fab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   addButton: {
     borderRadius: 8,
@@ -479,27 +661,55 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 10,
+    elevation: 3,
+  },
+  expandedCard: {
+    transform: [{ scale: 1.02 }],
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
   },
   addressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+  nameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
   addressName: {
     fontSize: 18,
     fontWeight: "600",
+  },
+  defaultBadge: {
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  defaultBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
   },
   actionButtons: {
     flexDirection: "row",
   },
   divider: {
     marginVertical: 12,
+  },
+  addressBasicInfo: {
+    marginBottom: 8,
+  },
+  expandedDetails: {
+    marginTop: 8,
   },
   addressDetails: {
     gap: 8,
@@ -513,10 +723,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
+  expandedActions: {
+    marginTop: 16,
+    alignItems: "flex-end",
+  },
   emptyState: {
     alignItems: "center",
     justifyContent: "center",
     padding: 40,
+    flex: 1,
+    minHeight: 400,
   },
   emptyStateText: {
     fontSize: 18,
@@ -527,12 +743,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
     marginTop: 8,
+    textAlign: "center",
   },
   formContainer: {
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   formTitle: {
     fontSize: 18,
@@ -571,15 +793,35 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
   },
-  loadingContainer: {
-    flex: 1,
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    zIndex: 1000,
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadingContainer: {
+    backgroundColor: "white",
     padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
+  },
+  setDefaultButton: {
+    marginTop: 8,
+    alignSelf: "flex-end",
   },
 });
 

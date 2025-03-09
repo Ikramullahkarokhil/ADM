@@ -1,4 +1,4 @@
-import { BackHandler, useColorScheme } from "react-native";
+import { BackHandler, useColorScheme, View } from "react-native";
 import { useEffect, useState, useCallback } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
@@ -7,8 +7,7 @@ import * as NavigationBar from "expo-navigation-bar";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import * as SplashScreen from "expo-splash-screen";
-import { ActivityIndicator, View } from "react-native";
+import * as ExpoSplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
 import * as BackgroundFetch from "expo-background-fetch";
 
@@ -18,8 +17,8 @@ import useProductStore from "../components/api/useProductStore";
 import TermsModal from "./screens/ConsentScreen/index";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import { registerBackgroundNotifications } from "../notification-services";
+import SplashScreen from "../components/ui/SplashScreen";
 
-// Define background task for notifications
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 const Layout = () => {
@@ -30,15 +29,14 @@ const Layout = () => {
     useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
+  const [showCustomSplash, setShowCustomSplash] = useState(true); // Controls custom splash screen visibility
   const [isConnected, setIsConnected] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
   const router = useRouter();
 
-  // Initialize background tasks and notifications
   useEffect(() => {
     const initBackgroundTasks = async () => {
       try {
-        // Register background notifications
         await registerBackgroundNotifications();
       } catch (error) {
         console.error("Error initializing background tasks:", error);
@@ -48,7 +46,6 @@ const Layout = () => {
     initBackgroundTasks();
 
     return () => {
-      // Clean up background tasks if needed
       try {
         BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
           (err) => console.log("Failed to unregister background task", err)
@@ -60,7 +57,8 @@ const Layout = () => {
   }, []);
 
   useEffect(() => {
-    SplashScreen.preventAutoHideAsync();
+    ExpoSplashScreen.preventAutoHideAsync();
+
     const checkTerms = async () => {
       try {
         const value = await AsyncStorage.getItem("hasAcceptedTerms");
@@ -68,7 +66,11 @@ const Layout = () => {
       } catch (error) {
         console.error("Error checking terms acceptance:", error);
       } finally {
-        setIsLoading(false);
+        setTimeout(() => {
+          setShowCustomSplash(false);
+          setIsLoading(false);
+          ExpoSplashScreen.hideAsync();
+        }, 500); // Delay for 2 seconds
       }
     };
     checkTerms();
@@ -81,10 +83,13 @@ const Layout = () => {
 
   const fetchUserData = useCallback(async () => {
     if (user?.consumer_id) {
+      const { consumer_id } = user;
       try {
-        await fetchProfile(user.consumer_id);
-        await listCart(user.consumer_id);
-        await getBillingAddress(user.consumer_id);
+        await Promise.all([
+          fetchProfile(consumer_id),
+          listCart(consumer_id),
+          getBillingAddress(consumer_id),
+        ]);
       } catch (error) {
         console.error("Error fetching user data:", error);
       }
@@ -102,7 +107,6 @@ const Layout = () => {
       if (!isLoggedIn && user) await logout();
 
       if (!isLoading) {
-        SplashScreen.hideAsync();
         router.replace(isLoggedIn ? "/(tabs)" : "/Login");
       }
     };
@@ -141,12 +145,9 @@ const Layout = () => {
     });
   }, []);
 
-  if (hasAcceptedTerms === null || isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
+  // Show custom splash screen for 2 seconds before rendering the app
+  if (showCustomSplash) {
+    return <SplashScreen />;
   }
 
   return (
@@ -183,14 +184,6 @@ const Layout = () => {
       </ActionSheetProvider>
     </GestureHandlerRootView>
   );
-};
-
-const styles = {
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
 };
 
 export default Layout;
