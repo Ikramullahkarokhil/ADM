@@ -1,4 +1,9 @@
-import { useState, useEffect, useLayoutEffect, useCallback } from "react";
+import React, {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -7,8 +12,9 @@ import {
   Text,
   Alert,
   ActivityIndicator,
-  Animated,
   useColorScheme,
+  ToastAndroid,
+  Image,
 } from "react-native";
 import {
   Divider,
@@ -16,94 +22,47 @@ import {
   Avatar,
   Surface,
   useTheme,
+  Button,
 } from "react-native-paper";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useNavigation, useRouter } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system";
-import * as ImageManipulator from "expo-image-manipulator";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import useThemeStore from "../../components/store/useThemeStore";
 import useProductStore from "../../components/api/useProductStore";
 import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import AlertDialog from "../../components/ui/AlertDialog";
 
-const ProfileHeader = ({
-  profileImage,
-  username,
-  membership,
-  theme,
-  onProfileImagePick,
-  isLoading,
-}) => {
-  const fadeAnim = useState(new Animated.Value(0))[0];
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 800,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
+const ProfileHeader = ({ profileImage, username, membership, theme }) => {
+  const [isImageLoading, setIsImageLoading] = useState(true);
 
   return (
     <Surface
       style={[styles.headerSurface, { backgroundColor: theme.colors.primary }]}
     >
-      <Animated.View
-        style={[
-          styles.headerContainer,
-          {
-            opacity: fadeAnim,
-            transform: [
-              {
-                translateY: fadeAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [20, 0],
-                }),
-              },
-            ],
-          },
-        ]}
-      >
+      <View style={styles.headerContainer}>
         <View style={styles.avatarContainer}>
-          <TouchableRipple
-            onPress={onProfileImagePick}
-            accessibilityLabel="Change profile picture"
-            accessibilityRole="button"
-            style={styles.avatarRipple}
-            borderless
-            rippleColor={theme.colors.ripple}
-          >
-            <>
-              <Avatar.Image
-                source={{ uri: profileImage }}
-                size={80}
-                style={{ backgroundColor: theme.colors.background }}
-              />
-              <View
-                style={[
-                  styles.editIconContainer,
-                  { backgroundColor: theme.colors.button },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="pencil"
-                  size={14}
-                  color="#FFFFFF"
-                />
-              </View>
-              {isLoading && (
-                <View
-                  style={[
-                    styles.loadingOverlay,
-                    { backgroundColor: theme.colors.primary },
-                  ]}
-                >
-                  <ActivityIndicator color={theme.colors.button} size="small" />
-                </View>
-              )}
-            </>
-          </TouchableRipple>
+          {isImageLoading && (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.button}
+              style={styles.imageLoader}
+            />
+          )}
+          <Avatar.Image
+            source={{
+              uri:
+                profileImage ||
+                "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg",
+            }}
+            size={80}
+            style={{ backgroundColor: theme.colors.background }}
+            onLoadStart={() => setIsImageLoading(true)}
+            onLoadEnd={() => setIsImageLoading(false)}
+            onError={() => {
+              setIsImageLoading(false);
+              console.log("Error loading profile image");
+            }}
+          />
         </View>
         <View style={styles.headerTextContainer}>
           <Text style={[styles.username, { color: theme.colors.textColor }]}>
@@ -126,7 +85,7 @@ const ProfileHeader = ({
             </Text>
           </View>
         </View>
-      </Animated.View>
+      </View>
     </Surface>
   );
 };
@@ -190,20 +149,42 @@ const Profile = () => {
   const { themeMode, setThemeMode } = useThemeStore();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
-  const { uploadConsumerImage, profileData, logout, fetchProfileData } =
-    useProductStore();
-  const [imageUri, setImageUri] = useState(null);
+  const { profileData, logout, deleteConsumerAccount } = useProductStore();
   const navigation = useNavigation();
   const router = useRouter();
   const [isChangePasswordModalVisible, setChangePasswordModalVisible] =
     useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState(false);
   const colorScheme = useColorScheme();
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
+
+  // Actual deletion logic
+  const handleDeleteAccount = async () => {
+    try {
+      setIsLoading(true);
+      await deleteConsumerAccount(profileData.consumer_id);
+      ToastAndroid.show(
+        `Account ${profileData.name} has deleted successfully`,
+        ToastAndroid.SHORT
+      );
+      await logout();
+      router.replace("/Login");
+    } catch (error) {
+      Alert.alert("Error", "Failed to delete account. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Show the confirmation dialog when delete is requested
+  const showDeleteDialog = () => {
+    setIsDeleteDialogVisible(true);
+  };
 
   const handleThemeSelect = useCallback(() => {
     const options = ["System Default", "Light", "Dark", "Cancel"];
@@ -212,7 +193,7 @@ const Profile = () => {
       {
         options,
         cancelButtonIndex,
-        tintColor: theme.colors.button,
+        tintColor: theme.colors.textColor,
         containerStyle: { backgroundColor: theme.colors.primary },
         titleTextStyle: { color: theme.colors.textColor },
         optionsTextStyle: { color: theme.colors.textColor },
@@ -237,33 +218,16 @@ const Profile = () => {
     [router]
   );
 
-  const handleLogout = useCallback(() => {
-    Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Logout",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              setIsLoading(true);
-              await logout();
-              router.replace("/Login");
-            } catch (error) {
-              Alert.alert("Error", "Failed to logout. Please try again.");
-            } finally {
-              setIsLoading(false);
-            }
-          },
-        },
-      ],
-      { cancelable: true }
-    );
+  const handleLogout = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      await logout();
+      router.replace("/Login");
+    } catch (error) {
+      Alert.alert("Error", "Failed to logout. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   }, [logout, router]);
 
   const getMembershipDuration = useCallback((regDateString) => {
@@ -283,140 +247,12 @@ const Profile = () => {
     return `Member for ${diffYears} ${diffYears === 1 ? "year" : "years"}`;
   }, []);
 
-  const handleProfileImagePick = useCallback(async () => {
-    const options = ["Take Photo", "Choose from Library", "Cancel"];
-    const cancelButtonIndex = 2;
-
-    showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex,
-        tintColor: theme.colors.button,
-        containerStyle: { backgroundColor: theme.colors.primary },
-      },
-      async (selectedIndex) => {
-        if (selectedIndex === cancelButtonIndex) return;
-
-        let permissionResult;
-        let result;
-
-        try {
-          if (selectedIndex === 0) {
-            permissionResult =
-              await ImagePicker.requestCameraPermissionsAsync();
-            if (!permissionResult.granted) {
-              Alert.alert(
-                "Permission Denied",
-                "Permission to access camera is required!"
-              );
-              return;
-            }
-            result = await ImagePicker.launchCameraAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 1,
-            });
-          } else {
-            permissionResult =
-              await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (!permissionResult.granted) {
-              Alert.alert(
-                "Permission Denied",
-                "Permission to access gallery is required!"
-              );
-              return;
-            }
-            result = await ImagePicker.launchImageLibraryAsync({
-              mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
-              quality: 1,
-            });
-          }
-
-          if (!result.canceled) {
-            setImageUri(result.assets[0].uri);
-          }
-        } catch (error) {
-          Alert.alert("Error", "Failed to pick image");
-        }
-      }
-    );
-  }, [showActionSheetWithOptions, theme]);
-
-  const handleUpload = useCallback(async () => {
-    if (!imageUri) return;
-
-    const MAX_SIZE = 100 * 1024;
-    let manipResult = { uri: imageUri };
-
-    try {
-      setIsLoading(true);
-      const info = await FileSystem.getInfoAsync(imageUri);
-      let size = info.size;
-
-      if (size > MAX_SIZE) {
-        let quality = 0.7;
-        let iterations = 0;
-        const maxIterations = 5;
-
-        while (size > MAX_SIZE && iterations < maxIterations) {
-          manipResult = await ImageManipulator.manipulateAsync(
-            manipResult.uri,
-            [],
-            {
-              compress: quality,
-              format: ImageManipulator.SaveFormat.JPEG,
-            }
-          );
-          const newInfo = await FileSystem.getInfoAsync(manipResult.uri);
-          size = newInfo.size;
-          quality *= 0.7;
-          iterations++;
-        }
-
-        if (size > MAX_SIZE) {
-          Alert.alert(
-            "Image Too Large",
-            "Could not compress the image below 100KB."
-          );
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      const apiUrl =
-        "https://demo.ucsofficialstore.com/api/consumer/upload-image";
-      const response = await FileSystem.uploadAsync(apiUrl, manipResult.uri, {
-        httpMethod: "POST",
-        headers: { Accept: "application/json" },
-        uploadType: FileSystem.FileSystemUploadType.MULTIPART,
-        fieldName: "image",
-        parameters: { consumer_id: profileData?.consumer_id },
-      });
-
-      const result = JSON.parse(response.body);
-      if (response.status === 200) {
-        Alert.alert("Success", "Profile image updated successfully!");
-        setImageUri(null);
-        await fetchProfileData(); // Refresh profile data
-      } else {
-        Alert.alert("Upload Failed", result.message || "Upload failed");
-      }
-    } catch (error) {
-      Alert.alert("Error", error.message || "Failed to upload image");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [imageUri, profileData?.consumer_id, fetchProfileData]);
-
-  useEffect(() => {
-    if (imageUri) handleUpload();
-  }, [imageUri, handleUpload]);
-
   const accountSettings = [
-    { icon: "account-edit", label: "Update Profile", screen: "UpdateProfile" },
+    {
+      icon: "account-edit",
+      label: "Update Profile",
+      screen: "/screens/UpdateProfile",
+    },
     {
       icon: "lock-reset",
       label: "Change Password",
@@ -442,11 +278,18 @@ const Profile = () => {
       })`,
       onPress: handleThemeSelect,
     },
-    { icon: "apps", label: "More Features", screen: "MoreFeatures" },
+    { icon: "apps", label: "More Features", screen: "screens/MoreFeatures" },
   ];
 
+  // Modify the delete account action to show the delete confirmation dialog
   const accountActions = [
     { icon: "logout", label: "Logout", onPress: handleLogout, special: true },
+    {
+      icon: "delete-circle",
+      label: "Delete Account",
+      onPress: showDeleteDialog,
+      special: true,
+    },
   ];
 
   const renderMenuGroup = (items, title) => (
@@ -493,14 +336,13 @@ const Profile = () => {
       >
         <ProfileHeader
           profileImage={
-            profileData?.consumer_image ||
-            "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg"
+            profileData?.consumer_image && profileData.consumer_image !== "null"
+              ? profileData.consumer_image
+              : "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg"
           }
           username={profileData?.name || "Guest User"}
           membership={getMembershipDuration(profileData?.reg_date)}
           theme={theme}
-          onProfileImagePick={handleProfileImagePick}
-          isLoading={isLoading}
         />
 
         {renderMenuGroup(accountSettings, "Account Settings")}
@@ -512,6 +354,20 @@ const Profile = () => {
           onClose={() => setChangePasswordModalVisible(false)}
         />
       </ScrollView>
+
+      {/* AlertDialog for account deletion confirmation */}
+      <AlertDialog
+        visible={isDeleteDialogVisible}
+        title="Delete Account"
+        message="Are you sure you want to delete your account? This action cannot be undone."
+        onDismiss={() => setIsDeleteDialogVisible(false)}
+        onConfirm={() => {
+          setIsDeleteDialogVisible(false);
+          handleDeleteAccount();
+        }}
+        confirmText="Delete"
+        cancelText="Cancel"
+      />
     </SafeAreaView>
   );
 };
@@ -540,30 +396,11 @@ const styles = StyleSheet.create({
   avatarContainer: {
     position: "relative",
   },
-  avatarRipple: {
-    borderRadius: 40,
-  },
-  editIconContainer: {
+  imageLoader: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 2,
-  },
-  loadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 40,
-    justifyContent: "center",
-    alignItems: "center",
-    opacity: 0.7,
+    top: 30,
+    left: 30,
+    zIndex: 1,
   },
   headerTextContainer: {
     marginLeft: 16,
@@ -587,7 +424,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: "600",
-    marginTop: 24,
+    marginTop: 15,
     marginBottom: 8,
     marginLeft: 8,
   },

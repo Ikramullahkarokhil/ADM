@@ -3,6 +3,7 @@ import { View, Text, FlatList, Image, StyleSheet } from "react-native";
 import { Button, useTheme } from "react-native-paper";
 import { useNavigation } from "expo-router";
 import useOrderStore from "../../components/store/useOrderStore";
+import { MaterialIcons } from "@expo/vector-icons"; // Import the icon library
 
 const Orders = () => {
   const orders = useOrderStore((state) => state.orders);
@@ -70,7 +71,10 @@ const Orders = () => {
           contentContainerStyle={styles.list}
         />
       ) : (
-        <Text style={styles.emptyText}>You have no orders</Text>
+        <View style={styles.emptyContainer}>
+          <MaterialIcons name="remove-shopping-cart" size={64} color="#888" />
+          <Text style={styles.emptyText}>You have no orders</Text>
+        </View>
       )}
     </View>
   );
@@ -111,11 +115,16 @@ const styles = StyleSheet.create({
     color: "#888",
     marginVertical: 8,
   },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   emptyText: {
     fontSize: 18,
     color: "#888",
     textAlign: "center",
-    marginTop: 32,
+    marginTop: 16,
   },
   buttonContainer: {
     flexDirection: "row",

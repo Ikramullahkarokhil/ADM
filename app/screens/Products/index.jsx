@@ -56,14 +56,13 @@ const ProductItem = ({
         <Pressable
           onLongPress={() => onLongPress(item)}
           delayLongPress={500}
-          android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+          android_ripple={{ color: theme.colors.ripple }}
         >
           <View
             style={[
               styles.listItem,
               {
-                backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
-                shadowColor: isDarkTheme ? "#000" : "#888",
+                backgroundColor: theme.colors.primary,
               },
             ]}
           >
@@ -81,10 +80,7 @@ const ProductItem = ({
 
             <View style={styles.productInfo}>
               <Text
-                style={[
-                  styles.productTitle,
-                  { color: isDarkTheme ? "#fff" : "#000" },
-                ]}
+                style={[styles.productTitle, { color: theme.colors.textColor }]}
                 numberOfLines={2}
               >
                 {item.title}
@@ -92,10 +88,7 @@ const ProductItem = ({
 
               <View style={styles.brandContainer}>
                 <Text
-                  style={[
-                    styles.brand,
-                    { color: isDarkTheme ? "#ccc" : "#666" },
-                  ]}
+                  style={[styles.brand, { color: theme.colors.textColor }]}
                   numberOfLines={1}
                 >
                   Brand: {item.brand_title}
@@ -116,7 +109,7 @@ const ProductItem = ({
               <TouchableOpacity
                 style={[
                   styles.iconButton,
-                  { backgroundColor: isDarkTheme ? "#333" : "#f0f0f0" },
+                  { backgroundColor: theme.colors.button },
                 ]}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -124,17 +117,13 @@ const ProductItem = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Feather
-                  name="shopping-cart"
-                  size={16}
-                  color={isDarkTheme ? "#fff" : "#333"}
-                />
+                <Feather name="shopping-cart" size={16} color="white" />
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[
                   styles.iconButton,
-                  { backgroundColor: isDarkTheme ? "#333" : "#f0f0f0" },
+                  { backgroundColor: theme.colors.button },
                 ]}
                 onPress={(e) => {
                   e.stopPropagation();
@@ -142,11 +131,7 @@ const ProductItem = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Feather
-                  name="share-2"
-                  size={16}
-                  color={isDarkTheme ? "#fff" : "#333"}
-                />
+                <Feather name="share-2" size={16} color="white" />
               </TouchableOpacity>
             </View>
           </View>
@@ -157,20 +142,19 @@ const ProductItem = ({
 };
 
 // List Skeleton for loading state
-const ListSkeleton = ({ isDarkTheme }) => (
+const ListSkeleton = ({ isDarkTheme, theme }) => (
   <View
     style={[
       styles.listItem,
       {
-        backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
-        shadowColor: isDarkTheme ? "#000" : "#888",
+        backgroundColor: theme.colors.primary,
       },
     ]}
   >
     <View
       style={[
         styles.productImage,
-        { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+        { backgroundColor: theme.colors.background },
       ]}
     />
 
@@ -178,20 +162,20 @@ const ListSkeleton = ({ isDarkTheme }) => (
       <View
         style={[
           styles.skeletonText,
-          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+          { backgroundColor: theme.colors.background },
         ]}
       />
       <View
         style={[
           styles.skeletonTextSmall,
-          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+          { backgroundColor: theme.colors.background },
         ]}
       />
       <View style={styles.bottomRow}>
         <View
           style={[
             styles.skeletonPrice,
-            { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+            { backgroundColor: theme.colors.background },
           ]}
         />
       </View>
@@ -201,13 +185,13 @@ const ListSkeleton = ({ isDarkTheme }) => (
       <View
         style={[
           styles.iconButton,
-          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+          { backgroundColor: theme.colors.background },
         ]}
       />
       <View
         style={[
           styles.iconButton,
-          { backgroundColor: isDarkTheme ? "#333" : "#e0e0e0" },
+          { backgroundColor: theme.colors.background },
         ]}
       />
     </View>
@@ -296,11 +280,11 @@ const ProductList = () => {
       }
 
       try {
+        ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
         await addToCart({
           productID: product.products_id,
           consumerID: user.consumer_id,
         });
-        ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
       } catch (error) {
         setAlertState({
           title: "Error",
@@ -335,10 +319,10 @@ const ProductList = () => {
           cancelButtonIndex,
           tintColor: theme.colors.button,
           containerStyle: {
-            backgroundColor: isDarkTheme ? "#1e1e1e" : "#ffffff",
+            backgroundColor: theme.colors.primary,
           },
           textStyle: {
-            color: isDarkTheme ? "#fff" : "#000",
+            color: theme.colors.textColor,
           },
         },
         (buttonIndex) => {
@@ -353,13 +337,7 @@ const ProductList = () => {
         }
       );
     },
-    [
-      handleAddToCart,
-      shareProduct,
-      theme.colors.button,
-      isDarkTheme,
-      showActionSheetWithOptions,
-    ]
+    [handleAddToCart, shareProduct, theme, showActionSheetWithOptions]
   );
 
   const renderRatingStars = useCallback(
@@ -375,7 +353,7 @@ const ProductList = () => {
           />
           <Text
             style={{
-              color: isDarkTheme ? "#fff" : "#000",
+              color: theme.colors.textColor,
               fontSize: 12,
               fontWeight: "500",
             }}
@@ -385,7 +363,7 @@ const ProductList = () => {
         </View>
       );
     },
-    [isDarkTheme]
+    [theme]
   );
 
   const scrollToTop = () => {
@@ -397,13 +375,11 @@ const ProductList = () => {
       <View
         style={[
           styles.centerContainer,
-          { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
+          { backgroundColor: theme.colors.primary },
         ]}
       >
         <MaterialIcons name="error-outline" size={48} color="#FF6B6B" />
-        <Text
-          style={[styles.errorText, { color: isDarkTheme ? "#fff" : "#000" }]}
-        >
+        <Text style={[styles.errorText, { color: theme.colors.textColor }]}>
           {error}
         </Text>
         <TouchableOpacity
@@ -417,18 +393,13 @@ const ProductList = () => {
   }
 
   return (
-    <View
-      style={[
-        styles.container,
-        { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <FlatList
         ref={flatListRef}
         data={isLoading ? Array(8).fill(null) : products}
         renderItem={
           isLoading
-            ? () => <ListSkeleton isDarkTheme={isDarkTheme} />
+            ? () => <ListSkeleton theme={theme} />
             : ({ item, index }) => (
                 <ProductItem
                   item={item}
@@ -446,39 +417,6 @@ const ProductList = () => {
           item ? item.products_id.toString() : index.toString()
         }
         contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          !isLoading && (
-            <View
-              style={[
-                styles.centerContainer,
-                { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
-              ]}
-            >
-              <MaterialIcons
-                name="search-off"
-                size={48}
-                color={isDarkTheme ? "#666" : "#999"}
-              />
-              <Text
-                style={[
-                  styles.messageText,
-                  { color: isDarkTheme ? "#fff" : "#000" },
-                ]}
-              >
-                No products found in this category.
-              </Text>
-              <TouchableOpacity
-                style={[
-                  styles.retryButton,
-                  { backgroundColor: theme.colors.button },
-                ]}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.retryButtonText}>Go Back</Text>
-              </TouchableOpacity>
-            </View>
-          )
-        }
         initialNumToRender={10}
         maxToRenderPerBatch={10}
         windowSize={5}
@@ -488,8 +426,8 @@ const ProductList = () => {
             refreshing={refreshing}
             onRefresh={onRefresh}
             colors={[theme.colors.button]}
-            tintColor={isDarkTheme ? "#fff" : theme.colors.button}
-            progressBackgroundColor={isDarkTheme ? "#333" : "#f0f0f0"}
+            tintColor={theme.colors.button}
+            progressBackgroundColor={theme.colors.primary}
           />
         }
       />
@@ -499,19 +437,13 @@ const ProductList = () => {
           style={[
             styles.scrollTopButton,
             {
-              backgroundColor: isDarkTheme
-                ? "rgba(255, 255, 255, 0.1)"
-                : "rgba(0, 0, 0, 0.1)",
+              backgroundColor: theme.colors.button,
             },
           ]}
           onPress={scrollToTop}
           activeOpacity={0.8}
         >
-          <MaterialIcons
-            name="keyboard-arrow-up"
-            size={24}
-            color={isDarkTheme ? "#fff" : "#000"}
-          />
+          <MaterialIcons name="keyboard-arrow-up" size={24} color="white" />
         </TouchableOpacity>
       )}
 
@@ -574,7 +506,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 5,
     height: 100,
     alignItems: "center",
     marginBottom: 10,

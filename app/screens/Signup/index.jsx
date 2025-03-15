@@ -32,7 +32,7 @@ const step2Schema = Yup.object().shape({
     .required("Date of birth is required")
     .max(
       new Date(new Date().setFullYear(new Date().getFullYear() - 10)),
-      "You must be at least 10 years old",
+      "You must be at least 10 years old"
     ),
   gender: Yup.string().required("Gender is required"),
 });
@@ -169,7 +169,7 @@ const FormikPicker = ({ fieldName }) => {
                 helpers.setValue(genderOptions[buttonIndex].value);
                 helpers.setTouched(true);
               }
-            },
+            }
           );
         }}
         style={[
@@ -209,11 +209,11 @@ const FormikDatePicker = ({ fieldName }) => {
   const { isDarkTheme } = useThemeStore();
 
   const minimumDate = new Date(
-    new Date().setFullYear(new Date().getFullYear() - 100),
+    new Date().setFullYear(new Date().getFullYear() - 100)
   );
   // Maximum date for "at least 10 years old" rule
   const maximumDate = new Date(
-    new Date().setFullYear(new Date().getFullYear() - 10),
+    new Date().setFullYear(new Date().getFullYear() - 10)
   );
 
   return (
@@ -634,4 +634,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Signup;
+export default { Signup, PhoneInputWithCountryCode };

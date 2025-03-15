@@ -16,7 +16,7 @@ import {
   StatusBar,
   ToastAndroid,
   RefreshControl,
-  Modal,
+  Pressable,
 } from "react-native";
 import { Button, useTheme, Divider } from "react-native-paper";
 import useProductStore from "../../../components/api/useProductStore";
@@ -26,8 +26,8 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useNavigation } from "expo-router";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
-// import MapLocationPicker from "../../../components/ui/MapLocationPicker";
+import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Location from "expo-location";
 
 const BillingAddress = () => {
   const theme = useTheme();
@@ -48,8 +48,8 @@ const BillingAddress = () => {
   const [localAddresses, setLocalAddresses] = useState(
     consumerBillingAddress || []
   );
-  const [mapModalVisible, setMapModalVisible] = useState(false);
   const [pinLocation, setPinLocation] = useState(null);
+  const [locationError, setLocationError] = useState(null);
   const navigation = useNavigation();
   const { showActionSheetWithOptions } = useActionSheet();
   const scrollViewRef = useRef(null);
@@ -92,6 +92,62 @@ const BillingAddress = () => {
     pin_location: Yup.object().nullable(),
   });
 
+  // Function to safely parse pin_location if it's a string and ensure it has the correct structure
+  const parsePinLocation = (location) => {
+    if (!location) return null;
+
+    let parsedLocation;
+
+    if (typeof location === "string") {
+      try {
+        parsedLocation = JSON.parse(location);
+      } catch (e) {
+        console.log("Error parsing pin_location:", e);
+        return null;
+      }
+    } else {
+      parsedLocation = location;
+    }
+
+    // Ensure the parsed location has the expected structure
+    if (
+      parsedLocation &&
+      typeof parsedLocation === "object" &&
+      typeof parsedLocation.latitude === "number" &&
+      typeof parsedLocation.longitude === "number"
+    ) {
+      return parsedLocation;
+    }
+
+    // If we have coordinates but in a different structure, try to normalize it
+    if (parsedLocation) {
+      // Check for common alternative structures
+      if (parsedLocation.lat && parsedLocation.lng) {
+        return {
+          latitude: parsedLocation.lat,
+          longitude: parsedLocation.lng,
+        };
+      }
+
+      if (parsedLocation.coords) {
+        return {
+          latitude: parsedLocation.coords.latitude,
+          longitude: parsedLocation.coords.longitude,
+        };
+      }
+
+      // If it's an array like [longitude, latitude] (GeoJSON format)
+      if (Array.isArray(parsedLocation) && parsedLocation.length === 2) {
+        return {
+          latitude: parsedLocation[1],
+          longitude: parsedLocation[0],
+        };
+      }
+    }
+
+    return null;
+  };
+
   // Show toast message (Android) or fallback to Alert (iOS)
   const showToast = (message) => {
     if (Platform.OS === "android") {
@@ -105,23 +161,48 @@ const BillingAddress = () => {
     setIsLoading(true);
 
     try {
+      // Create a copy of values to avoid modifying the original
+      const formattedValues = { ...values };
+
+      // Ensure pin_location has the correct structure before stringifying
+      if (formattedValues.pin_location) {
+        // Normalize to expected structure if needed
+        const normalizedLocation = {
+          latitude: formattedValues.pin_location.latitude,
+          longitude: formattedValues.pin_location.longitude,
+        };
+
+        // Only include if both values are valid numbers
+        if (
+          typeof normalizedLocation.latitude === "number" &&
+          !isNaN(normalizedLocation.latitude) &&
+          typeof normalizedLocation.longitude === "number" &&
+          !isNaN(normalizedLocation.longitude)
+        ) {
+          // Ensure it's properly stringified as JSON
+          formattedValues.pin_location = JSON.stringify(normalizedLocation);
+        } else {
+          formattedValues.pin_location = null;
+        }
+      }
+
       if (mode === "edit" && selectedAddress) {
         // For editing an existing address
         const billingData = {
           consumer_id: user.consumer_id,
           billing_address_id: selectedAddress.consumer_billing_address_id,
-          name: values.name,
-          email: values.email,
-          phone: values.phone,
-          address: values.address,
-          pin_location: values.pin_location || null,
+          name: formattedValues.name,
+          email: formattedValues.email,
+          phone: formattedValues.phone,
+          address: formattedValues.address,
+          pin_location: formattedValues.pin_location || null,
         };
 
         await editBillingAddress(billingData);
       } else {
         // For adding a new address
         const billingData = {
-          ...values,
+          ...formattedValues,
           consumer_id: user.consumer_id,
         };
 
@@ -345,6 +426,9 @@ const BillingAddress = () => {
   const renderAddressCard = (address) => {
     const isDefault = address.status == 1;
 
+    // Parse pin_location if it's a string
+    const pinLocation = parsePinLocation(address.pin_location);
+
     return (
       <View
         key={address.consumer_billing_address_id}
@@ -433,25 +517,6 @@ const BillingAddress = () => {
                 {address.address}
               </Text>
             </View>
-
-            {address.pin_location && (
-              <View style={styles.addressRow}>
-                <MaterialIcons
-                  name="map"
-                  size={16}
-                  color={theme.colors.button}
-                />
-                <Text
-                  style={[
-                    styles.addressText,
-                    { color: theme.colors.textColor },
-                  ]}
-                  numberOfLines={1}
-                >
-                  Pin location available
-                </Text>
-              </View>
-            )}
           </View>
         </TouchableOpacity>
         {isDefault && (
@@ -503,25 +568,55 @@ const BillingAddress = () => {
     </View>
   );
 
-  const handleOpenMap = (currentLocation) => {
-    setPinLocation(currentLocation);
-    setMapModalVisible(true);
-  };
+  // Function to get current location
+  const getCurrentLocation = async (setFieldValue) => {
+    setIsLoading(true);
+    setLocationError(null);
 
-  const handleLocationSelect = (location) => {
-    setPinLocation(location);
-    setMapModalVisible(false);
+    try {
+      // Request permission to access location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        setLocationError("Permission to access location was denied");
+        showToast("Location permission denied");
+        setIsLoading(false);
+        return;
+      }
+
+      // Get current position
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+
+      // Ensure we have the expected structure
+      const newLocation = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+
+      // Set the pin location
+      setPinLocation(newLocation);
+
+      // Update formik value
+      if (setFieldValue) {
+        setFieldValue("pin_location", newLocation);
+      }
+
+      showToast("Current location obtained successfully");
+    } catch (error) {
+      console.log("Error getting location:", error);
+      setLocationError("Failed to get current location");
+      showToast("Failed to get current location");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <SafeAreaView
       style={[styles.container, { backgroundColor: theme.colors.primary }]}
     >
-      <StatusBar
-        barStyle={theme.dark ? "light-content" : "dark-content"}
-        backgroundColor={theme.colors.primary}
-      />
-
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={{ flex: 1 }}
@@ -590,7 +685,9 @@ const BillingAddress = () => {
                   phone: selectedAddress?.phone || "",
                   address: selectedAddress?.address || "",
                   pin_location:
-                    selectedAddress?.pin_location || pinLocation || null,
+                    parsePinLocation(selectedAddress?.pin_location) ||
+                    pinLocation ||
+                    null,
                 }}
                 validationSchema={validationSchema}
                 onSubmit={handleSave}
@@ -662,41 +759,67 @@ const BillingAddress = () => {
                         "location-on"
                       )}
 
-                      <View style={styles.mapButtonContainer}>
+                      <View style={styles.locationContainer}>
                         <Text
                           style={[
                             styles.label,
                             { color: theme.colors.textColor },
                           ]}
                         >
-                          PIN LOCATION
+                          LOCATION
                         </Text>
-                        <TouchableOpacity
-                          style={[
-                            styles.mapButton,
-                            {
-                              backgroundColor: theme.colors.primary,
-                              borderColor: theme.colors.button,
-                            },
-                          ]}
-                          onPress={() => handleOpenMap(values.pin_location)}
-                        >
-                          <MaterialIcons
-                            name="map"
-                            size={20}
-                            color={theme.colors.button}
-                          />
-                          <Text
+                        <View style={styles.locationSubContainer}>
+                          <Pressable
                             style={[
-                              styles.mapButtonText,
-                              { color: theme.colors.textColor },
+                              styles.locationButton,
+                              {
+                                backgroundColor: theme.colors.primary,
+                                borderColor: theme.colors.subInactiveColor,
+                                borderWidth: 1,
+                              },
                             ]}
                           >
-                            {values.pin_location
-                              ? "Change Location on Map"
-                              : "Select Location on Map"}
-                          </Text>
-                        </TouchableOpacity>
+                            <MaterialIcons
+                              name="my-location"
+                              size={20}
+                              color={theme.colors.button}
+                            />
+                            {values.pin_location && (
+                              <Text
+                                style={[
+                                  styles.locationButtonText,
+                                  { color: theme.colors.textColor },
+                                ]}
+                              >
+                                Got your location
+                              </Text>
+                            )}
+                            {!values.pin_location && (
+                              <Text
+                                style={[
+                                  styles.locationButtonText,
+                                  { color: theme.colors.textColor },
+                                ]}
+                              >
+                                Get your location
+                              </Text>
+                            )}
+                          </Pressable>
+
+                          <TouchableOpacity
+                            style={[
+                              styles.getLocationButton,
+                              { backgroundColor: theme.colors.button },
+                            ]}
+                            onPress={() => getCurrentLocation(setFieldValue)}
+                          >
+                            <MaterialIcons
+                              name="my-location"
+                              size={20}
+                              color="white"
+                            />
+                          </TouchableOpacity>
+                        </View>
                         {values.pin_location && (
                           <Text
                             style={[
@@ -704,10 +827,18 @@ const BillingAddress = () => {
                               { color: theme.colors.subInactiveColor },
                             ]}
                           >
-                            Location selected at{" "}
-                            {values.pin_location.latitude.toFixed(6)},{" "}
-                            {values.pin_location.longitude.toFixed(6)}
+                            Location set at{" "}
+                            {typeof values.pin_location.latitude === "number"
+                              ? values.pin_location.latitude.toFixed(6)
+                              : "unknown"}
+                            ,{" "}
+                            {typeof values.pin_location.longitude === "number"
+                              ? values.pin_location.longitude.toFixed(6)
+                              : "unknown"}
                           </Text>
+                        )}
+                        {locationError && (
+                          <Text style={styles.errorText}>{locationError}</Text>
                         )}
                       </View>
 
@@ -785,28 +916,6 @@ const BillingAddress = () => {
           </View>
         </View>
       )}
-      {/* Map Modal */}
-      <Modal
-        visible={mapModalVisible}
-        animationType="slide"
-        onRequestClose={() => setMapModalVisible(false)}
-      >
-        {/* <MapLocationPicker
-          initialLocation={pinLocation}
-          onLocationSelect={(location) => {
-            handleLocationSelect(location);
-            // Update the Formik values
-            if (mode === "add" || mode === "edit") {
-              const formikBag = scrollViewRef.current?.formikBag;
-              if (formikBag) {
-                formikBag.setFieldValue("pin_location", location);
-              }
-            }
-          }}
-          onCancel={() => setMapModalVisible(false)}
-          theme={theme}
-        /> */}
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -885,7 +994,9 @@ const styles = StyleSheet.create({
   moreButton: {
     padding: 4,
   },
-
+  divider: {
+    marginVertical: 8,
+  },
   addressDetails: {
     gap: 12,
     marginTop: 4,
@@ -956,12 +1067,13 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   inputIcon: {
-    paddingHorizontal: 12,
+    paddingLeft: 12,
   },
   input: {
     flex: 1,
-    padding: 14,
+    paddingVertical: 14,
     fontSize: 16,
+    paddingHorizontal: 12,
   },
   errorText: {
     color: "red",
@@ -1013,18 +1125,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
-  mapButtonContainer: {
+  locationContainer: {
     marginBottom: 20,
+    flex: 1,
   },
-  mapButton: {
+  locationButton: {
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
-    borderRadius: 12,
     borderWidth: 2,
-    marginTop: 8,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
+    flex: 1,
   },
-  mapButtonText: {
+  locationButtonText: {
     marginLeft: 12,
     fontSize: 16,
     fontWeight: "500",
@@ -1032,6 +1146,17 @@ const styles = StyleSheet.create({
   locationText: {
     fontSize: 12,
     marginTop: 8,
+  },
+  locationSubContainer: {
+    flexDirection: "row",
+    flex: 1,
+  },
+  getLocationButton: {
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopRightRadius: 12,
+    borderBottomRightRadius: 12,
   },
 });
 

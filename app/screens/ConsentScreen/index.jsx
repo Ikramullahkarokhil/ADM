@@ -6,46 +6,71 @@ import {
   TouchableOpacity,
 } from "react-native";
 import React from "react";
+import { useTheme } from "react-native-paper";
 
 const TermsModal = ({ onAccept, onDecline }) => {
+  const theme = useTheme();
   return (
-    <View style={styles.container}>
-      <View style={styles.modal}>
-        <Text style={styles.title}>Welcome to Our App!</Text>
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <View style={[styles.modal, { backgroundColor: theme.colors.primary }]}>
+        <Text style={[styles.title, { color: theme.colors.textColor }]}>
+          Welcome to Our App!
+        </Text>
 
         <ScrollView style={styles.content}>
-          <Text style={styles.paragraph}>
+          <Text style={[styles.paragraph, { color: theme.colors.textColor }]}>
             Before continuing, please read and agree to our Terms of Service and
             Privacy Policy.
           </Text>
 
-          <Text style={styles.paragraph}>
+          <Text style={[styles.paragraph, { color: theme.colors.textColor }]}>
             By using this app, you agree to our collection and use of your
             information as described in these documents. Our Terms outline your
             rights and responsibilities when using our services, and our Privacy
             Policy explains how we protect and handle your personal data.
           </Text>
 
-          <Text style={styles.paragraph}>
+          <Text style={[styles.paragraph, { color: theme.colors.textColor }]}>
             Please take a moment to review these important documents:
           </Text>
 
           <TouchableOpacity>
-            <Text style={styles.link}>View Terms of Service</Text>
+            <Text style={[styles.link, { color: theme.colors.button }]}>
+              View Terms of Service
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity>
-            <Text style={styles.link}>View Privacy Policy</Text>
+            <Text style={[styles.link, { color: theme.colors.button }]}>
+              View Privacy Policy
+            </Text>
           </TouchableOpacity>
         </ScrollView>
 
         <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.declineButton} onPress={onDecline}>
-            <Text style={styles.declineText}>Decline</Text>
+          <TouchableOpacity
+            style={[
+              styles.declineButton,
+              {
+                borderColor: theme.colors.button,
+                backgroundColor: theme.colors.primary,
+              },
+            ]}
+            onPress={onDecline}
+          >
+            <Text style={[styles.declineText, { color: theme.colors.button }]}>
+              Decline
+            </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.acceptButton} onPress={onAccept}>
-            <Text style={styles.acceptText}>Accept</Text>
+          <TouchableOpacity
+            style={[
+              styles.acceptButton,
+              { backgroundColor: theme.colors.button },
+            ]}
+            onPress={onAccept}
+          >
+            <Text style={[styles.acceptText, { color: "white" }]}>Accept</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -58,10 +83,9 @@ export default TermsModal;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    paddingHorizontal: 12,
   },
   modal: {
     backgroundColor: "white",
@@ -69,6 +93,7 @@ const styles = StyleSheet.create({
     padding: 25,
     width: "100%",
     maxHeight: "80%",
+    elevation: 20,
   },
   title: {
     fontSize: 22,

@@ -117,7 +117,11 @@ const Home = () => {
               iconColor={theme.colors.textColor}
             />
             {cartItem.length > 0 && (
-              <Badge style={[styles.badge, {backgroundColor: theme.colors.button}]}>{cartItem.length}</Badge>
+              <Badge
+                style={[styles.badge, { backgroundColor: theme.colors.button }]}
+              >
+                {cartItem.length}
+              </Badge>
             )}
           </Pressable>
         </View>
@@ -149,7 +153,7 @@ const Home = () => {
         onDismiss={() => setAlertVisible(false)}
         onConfirm={() => {
           setAlertVisible(false);
-          navigation.navigate("/Login");
+          navigation.navigate("Login");
         }}
         confirmText="Login"
         cancelText="Cancel"

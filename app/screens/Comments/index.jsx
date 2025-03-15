@@ -1,11 +1,10 @@
-"use client";
-
 import React, {
   useEffect,
   useLayoutEffect,
   useState,
   useCallback,
   useRef,
+  useMemo,
 } from "react";
 import {
   StyleSheet,
@@ -30,7 +29,7 @@ import AlertDialog from "../../../components/ui/AlertDialog";
 import { FlashList } from "@shopify/flash-list";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 
-// Custom date formatter function (unchanged)
+// Custom date formatter function
 const formatDateString = (dateString) => {
   try {
     const date = new Date(dateString);
@@ -76,8 +75,11 @@ const formatDateString = (dateString) => {
   }
 };
 
+// Utility for exponential backoff retry
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const Comments = () => {
-  const { productId } = useLocalSearchParams();
+  const { productId, numOfComments } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
@@ -88,6 +90,7 @@ const Comments = () => {
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [hasMoreComments, setHasMoreComments] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isAlertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
     title: "",
@@ -95,42 +98,152 @@ const Comments = () => {
     onConfirm: () => {},
   });
   const [editingComment, setEditingComment] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const [retryAfter, setRetryAfter] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false);
 
-  const { user, fetchComments, addComment, deleteComment, updateComment } =
+  const { user, fetchComments, addComment, deleteComment, editComment } =
     useProductStore();
 
-  const isLoadingRef = useRef(false);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const commentsCache = useRef({});
+  const retryTimeoutRef = useRef(null);
+  const isMounted = useRef(true);
+
+  // Clear timeout on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const showAlert = useCallback((title, message, onConfirm) => {
     setAlertConfig({ title, message, onConfirm });
     setAlertVisible(true);
   }, []);
 
-  const loadComments = useCallback(
-    async (page = 1) => {
-      if (isLoadingRef.current) return;
-      isLoadingRef.current = true;
-      setIsLoading(true);
+  // Fetch comments with retry logic
+  const fetchCommentsWithRetry = useCallback(
+    async (page, maxRetries = 3) => {
       try {
-        const data = await fetchComments({ productID: productId, page });
-        if (page === 1) {
-          setComments(data || []);
-        } else {
-          setComments((prev) => [...prev, ...data]);
+        // Check cache first
+        const cacheKey = `${productId}_${page}`;
+        if (commentsCache.current[cacheKey]) {
+          return commentsCache.current[cacheKey];
         }
-        setCommentPage(page);
-        setHasMoreComments(data?.length > 0);
+
+        const data = await fetchComments({
+          productID: productId,
+          page,
+          limitData: 15,
+        });
+        // Cache the result
+        commentsCache.current[cacheKey] = data;
+        setRetryCount(0);
+        return data;
       } catch (err) {
         console.error("Error fetching comments:", err);
-        showAlert("Error", "Failed to load comments.", () => {});
-      } finally {
-        isLoadingRef.current = false;
-        setIsLoading(false);
+
+        // Handle rate limiting specifically
+        if (err.message && err.message.includes("Too Many Attempts")) {
+          // Extract retry-after header if available
+          const retryAfterSecs =
+            err.retryAfter || Math.pow(2, retryCount) * 1000;
+          setRetryAfter(retryAfterSecs);
+
+          if (retryCount < maxRetries) {
+            setIsRetrying(true);
+            setRetryCount((prev) => prev + 1);
+
+            // Wait with exponential backoff
+            await wait(retryAfterSecs);
+
+            if (isMounted.current) {
+              setIsRetrying(false);
+              // Retry the request
+              return fetchCommentsWithRetry(page, maxRetries);
+            }
+          } else {
+            throw new Error(
+              "Maximum retry attempts reached. Please try again later."
+            );
+          }
+        }
+        throw err;
       }
     },
-    [fetchComments, productId, showAlert]
+    [fetchComments, productId, retryCount]
+  );
+
+  const loadComments = useCallback(
+    async (page = 1, isLoadingMoreComments = false) => {
+      if (isLoading || isLoadingMore || isRetrying) return;
+
+      if (page === 1) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+
+      try {
+        const data = await fetchCommentsWithRetry(page);
+
+        if (isMounted.current) {
+          if (page === 1) {
+            setComments(data || []);
+          } else {
+            setComments((prev) => [...prev, ...(data || [])]);
+          }
+          setCommentPage(page);
+          // Check if we've loaded all comments based on numOfComments
+          const totalCommentsLoaded =
+            page === 1
+              ? data?.length || 0
+              : comments.length + (data?.length || 0);
+
+          setHasMoreComments(
+            totalCommentsLoaded < parseInt(numOfComments || "0", 10)
+          );
+        }
+      } catch (err) {
+        if (isMounted.current) {
+          if (err.message.includes("Maximum retry attempts")) {
+            showAlert(
+              "Rate Limit Exceeded",
+              "You've reached the rate limit. Please try again later.",
+              () => {}
+            );
+          } else {
+            showAlert(
+              "Error",
+              "Failed to load comments. Please try again.",
+              () => {}
+            );
+            console.log(err);
+          }
+        }
+      } finally {
+        if (isMounted.current) {
+          if (page === 1) {
+            setIsLoading(false);
+          } else {
+            setIsLoadingMore(false);
+          }
+        }
+      }
+    },
+    [
+      fetchCommentsWithRetry,
+      showAlert,
+      isLoading,
+      isLoadingMore,
+      isRetrying,
+      numOfComments,
+    ]
   );
 
   useLayoutEffect(() => {
@@ -138,19 +251,26 @@ const Comments = () => {
       title: "Comments",
       headerStyle: {
         backgroundColor: theme.colors.primary,
-        elevation: 0,
-        shadowOpacity: 0,
       },
       headerTintColor: theme.colors.textColor,
-      headerTitleStyle: {
-        fontWeight: "600",
-      },
     });
   }, [navigation, theme.colors]);
 
+  // Only load comments on initial mount
   useEffect(() => {
-    loadComments(1);
-  }, [loadComments]);
+    // Only fetch comments on initial load
+    if (comments.length === 0) {
+      loadComments(1);
+    }
+  }, []);
+
+  // Add a separate effect to handle comment updates
+  useEffect(() => {
+    // Invalidate cache when comments are modified
+    return () => {
+      commentsCache.current = {};
+    };
+  }, []);
 
   const handleAddComment = useCallback(() => {
     const trimmedComment = newComment.trim();
@@ -167,11 +287,12 @@ const Comments = () => {
       return;
     }
 
-    setIsAddingComment(true);
+    // Create a local ID for the new comment
+    const localId = `local_${Date.now()}`;
 
-    const tempId = `temp_${Date.now()}`;
+    // Create the local comment object
     const newLocalComment = {
-      product_comments_id: tempId,
+      product_comments_id: localId,
       product_id: productId,
       comment: trimmedComment,
       consumer_id: user.consumer_id,
@@ -180,40 +301,24 @@ const Comments = () => {
       consumer_photo: user.photo || null,
     };
 
-    setComments((prev) => [newLocalComment, ...prev]);
+    // Update UI immediately
+    setComments((prev) => [...prev, newLocalComment]);
     setNewComment("");
     Keyboard.dismiss();
 
-    if (listRef.current) {
-      listRef.current.scrollToOffset({ offset: 0, animated: false });
-    }
-
     ToastAndroid.show("Comment added", ToastAndroid.SHORT);
 
+    // Fire and forget - send to server in background
     addComment({
       product_id: productId,
       comment: trimmedComment,
       consumer_id: user.consumer_id,
-    })
-      .then((newCommentFromServer) => {
-        setComments((prev) =>
-          prev.map((comment) =>
-            comment.product_comments_id === tempId
-              ? { ...comment, ...newCommentFromServer }
-              : comment
-          )
-        );
-      })
-      .catch((err) => {
-        console.error("Error syncing comment to server:", err);
-        setComments((prev) =>
-          prev.filter((comment) => comment.product_comments_id !== tempId)
-        );
-        ToastAndroid.show("Failed to save comment", ToastAndroid.SHORT);
-      })
-      .finally(() => {
-        setIsAddingComment(false);
-      });
+    }).catch((err) => {
+      console.error(
+        "Error adding comment to server (will sync on refresh):",
+        err
+      );
+    });
   }, [newComment, user, addComment, productId, showAlert]);
 
   const handleEditComment = useCallback(
@@ -228,10 +333,16 @@ const Comments = () => {
               text: "Save",
               onPress: (newText) => {
                 if (newText && newText.trim()) {
+                  // Store original comment for potential rollback
+                  const originalComment = { ...comment };
+
+                  // Update UI immediately
                   const updatedComment = {
                     ...comment,
                     comment: newText.trim(),
+                    isEditing: true,
                   };
+
                   setComments((prev) =>
                     prev.map((c) =>
                       c.product_comments_id === comment.product_comments_id
@@ -239,17 +350,41 @@ const Comments = () => {
                         : c
                     )
                   );
-                  updateComment({
-                    commentId: comment.product_comments_id,
+
+                  // Use editComment from useProductStore
+                  editComment({
+                    comment_id: comment.product_comments_id,
+                    consumer_id: user.consumer_id,
                     comment: newText.trim(),
-                    consumerID: user.consumer_id,
-                  }).catch((err) => {
-                    console.error("Error updating comment:", err);
-                    ToastAndroid.show(
-                      "Failed to update comment",
-                      ToastAndroid.SHORT
-                    );
-                  });
+                  })
+                    .then(() => {
+                      // Update succeeded, remove the editing flag
+                      setComments((prev) =>
+                        prev.map((c) =>
+                          c.product_comments_id === comment.product_comments_id
+                            ? { ...updatedComment, isEditing: false }
+                            : c
+                        )
+                      );
+
+                      // Invalidate cache after editing
+                      commentsCache.current = {};
+                    })
+                    .catch((err) => {
+                      console.error("Error updating comment:", err);
+                      // Revert to original comment on failure
+                      setComments((prev) =>
+                        prev.map((c) =>
+                          c.product_comments_id === comment.product_comments_id
+                            ? originalComment
+                            : c
+                        )
+                      );
+                      ToastAndroid.show(
+                        "Failed to update comment",
+                        ToastAndroid.SHORT
+                      );
+                    });
                 }
               },
             },
@@ -265,7 +400,7 @@ const Comments = () => {
         setEditingComment(comment);
       }
     },
-    [updateComment, user]
+    [editComment, user]
   );
 
   const handleUpdateComment = useCallback(() => {
@@ -274,28 +409,55 @@ const Comments = () => {
     const trimmedComment = newComment.trim();
     if (!trimmedComment) return;
 
+    // Store original comment for potential rollback
+    const originalComment = { ...editingComment };
     const updatedComment = { ...editingComment, comment: trimmedComment };
+
+    // Update UI immediately
     setComments((prev) =>
       prev.map((c) =>
         c.product_comments_id === editingComment.product_comments_id
-          ? updatedComment
+          ? { ...updatedComment, isEditing: true }
           : c
       )
     );
 
-    updateComment({
-      commentId: editingComment.product_comments_id,
-      comment: trimmedComment,
-      consumerID: user.consumer_id,
-    }).catch((err) => {
-      console.error("Error updating comment:", err);
-      ToastAndroid.show("Failed to update comment", ToastAndroid.SHORT);
-    });
-
     setNewComment("");
     setEditingComment(null);
     Keyboard.dismiss();
-  }, [editingComment, newComment, updateComment, user, handleAddComment]);
+
+    // Use editComment from useProductStore
+    editComment({
+      comment_id: editingComment.product_comments_id,
+      consumer_id: user.consumer_id,
+      comment: trimmedComment,
+    })
+      .then(() => {
+        // Update succeeded, remove the editing flag
+        setComments((prev) =>
+          prev.map((c) =>
+            c.product_comments_id === updatedComment.product_comments_id
+              ? { ...c, isEditing: false }
+              : c
+          )
+        );
+
+        // Invalidate cache after updating
+        commentsCache.current = {};
+      })
+      .catch((err) => {
+        console.error("Error updating comment:", err);
+        // Revert to original comment on failure
+        setComments((prev) =>
+          prev.map((c) =>
+            c.product_comments_id === originalComment.product_comments_id
+              ? originalComment
+              : c
+          )
+        );
+        ToastAndroid.show("Failed to update comment", ToastAndroid.SHORT);
+      });
+  }, [editingComment, newComment, editComment, user, handleAddComment]);
 
   const handleDeleteComment = useCallback(
     (commentId) => {
@@ -303,22 +465,39 @@ const Comments = () => {
         "Delete Comment",
         "Are you sure you want to delete this comment?",
         () => {
+          // Store the comment being deleted in case we need to restore it
+          const commentToDelete = comments.find(
+            (c) => c.product_comments_id === commentId
+          );
+
+          // Update UI immediately
           setComments((prev) =>
             prev.filter((c) => c.product_comments_id !== commentId)
           );
+
           ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
 
+          // Make API call in background
           deleteComment({
             commentId: commentId,
             consumerID: user.consumer_id,
-          }).catch((err) => {
-            console.error("Error deleting comment from server:", err);
-            ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
-          });
+          })
+            .then(() => {
+              // Invalidate cache after deleting
+              commentsCache.current = {};
+            })
+            .catch((err) => {
+              console.error("Error deleting comment from server:", err);
+              // Restore the comment if deletion fails
+              if (commentToDelete) {
+                setComments((prev) => [...prev, commentToDelete]);
+              }
+              ToastAndroid.show("Failed to delete comment", ToastAndroid.SHORT);
+            });
         }
       );
     },
-    [deleteComment, user, showAlert]
+    [deleteComment, user, showAlert, comments]
   );
 
   const showCommentOptions = useCallback(
@@ -355,16 +534,24 @@ const Comments = () => {
     ]
   );
 
+  // Memoize the comment item renderer for better performance
   const renderCommentItem = useCallback(
     ({ item }) => {
       const isUserComment = user && item.consumer_id === user.consumer_id;
+      const isTemporary = item.isTemp || item.isEditing;
 
       return (
         <View style={styles.commentItemContainer}>
           <TouchableOpacity
             onPress={() => isUserComment && showCommentOptions(item)}
             activeOpacity={isUserComment ? 0.7 : 1}
-            style={styles.commentItem}
+            style={[
+              styles.commentItem,
+              {
+                backgroundColor: theme.colors.primary + "20",
+                opacity: isTemporary ? 0.8 : 1,
+              },
+            ]}
           >
             <View style={styles.commentHeader}>
               <Image
@@ -382,17 +569,20 @@ const Comments = () => {
                     styles.commentAuthor,
                     { color: theme.colors.textColor },
                   ]}
+                  numberOfLines={1}
                 >
                   {item.consumer_name || "Anonymous"}
+                  {isTemporary && " (Syncing...)"}
                 </Text>
-                <Text style={styles.commentDate}>
+                <Text style={styles.commentDate} numberOfLines={1}>
                   {formatDateString(item.date)}
                 </Text>
               </View>
-              {isUserComment && (
+              {isUserComment && !isTemporary && (
                 <TouchableOpacity
                   onPress={() => showCommentOptions(item)}
                   style={styles.optionsButton}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <MaterialCommunityIcons
                     name="dots-vertical"
@@ -400,6 +590,13 @@ const Comments = () => {
                     color={theme.colors.textColor + "80"}
                   />
                 </TouchableOpacity>
+              )}
+              {isTemporary && (
+                <ActivityIndicator
+                  size="small"
+                  color={theme.colors.textColor + "80"}
+                  style={styles.optionsButton}
+                />
               )}
             </View>
             <Text
@@ -414,22 +611,54 @@ const Comments = () => {
     [user, theme.colors, showCommentOptions]
   );
 
+  // Debounced load more handler
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMoreComments) {
-      loadComments(commentPage + 1);
+    if (!isLoadingMore && !isLoading && !isRetrying && hasMoreComments) {
+      loadComments(commentPage + 1, true);
     }
-  }, [isLoading, hasMoreComments, commentPage, loadComments]);
+  }, [
+    isLoadingMore,
+    isLoading,
+    isRetrying,
+    hasMoreComments,
+    commentPage,
+    loadComments,
+  ]);
+  // Retry timer display
+  const retryTimerDisplay = useMemo(() => {
+    if (!isRetrying || retryAfter <= 0) return null;
+    return `Retrying in ${Math.ceil(retryAfter / 1000)}s`;
+  }, [isRetrying, retryAfter]);
 
   const EmptyListComponent = useCallback(
     () => (
       <View style={styles.emptyCommentContainer}>
         {isLoading ? (
           <ActivityIndicator size="large" color={theme.colors.textColor} />
+        ) : isRetrying ? (
+          <>
+            <MaterialCommunityIcons
+              name="timer-sand"
+              size={48}
+              color={theme.colors.textColor + "70"}
+            />
+            <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
+              Rate limit exceeded
+            </Text>
+            <Text
+              style={[
+                styles.emptySubtext,
+                { color: theme.colors.textColor + "80" },
+              ]}
+            >
+              {retryTimerDisplay || "Retrying soon..."}
+            </Text>
+          </>
         ) : (
           <>
             <MaterialCommunityIcons
               name="comment-text-outline"
-              size={48}
+              size={64}
               color={theme.colors.textColor + "50"}
             />
             <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
@@ -441,24 +670,90 @@ const Comments = () => {
                 { color: theme.colors.textColor + "80" },
               ]}
             >
-              Be the first to share your thoughts
+              Be the first to share your thoughts on this product
             </Text>
+            <TouchableOpacity
+              style={[
+                styles.emptyButton,
+                { backgroundColor: theme.colors.button },
+              ]}
+              onPress={() => inputRef.current?.focus()}
+            >
+              <Text style={styles.emptyButtonText}>Write a comment</Text>
+            </TouchableOpacity>
           </>
         )}
       </View>
     ),
-    [isLoading, theme.colors]
+    [isLoading, isRetrying, retryTimerDisplay, theme.colors]
   );
 
-  const ListFooterComponent = useCallback(
-    () =>
-      hasMoreComments && comments.length > 0 ? (
-        <View style={styles.listFooter}>
+  const ListFooterComponent = useCallback(() => {
+    if (isRetrying) {
+      return (
+        <View style={styles.retryContainer}>
           <ActivityIndicator size="small" color={theme.colors.textColor} />
+          <Text style={[styles.retryText, { color: theme.colors.textColor }]}>
+            {retryTimerDisplay || "Retrying..."}
+          </Text>
         </View>
-      ) : null,
-    [hasMoreComments, comments.length, theme.colors.textColor]
-  );
+      );
+    }
+
+    if (
+      hasMoreComments &&
+      comments.length > 0 &&
+      comments.length < numOfComments
+    ) {
+      return (
+        <TouchableOpacity
+          style={[
+            styles.loadMoreButton,
+            { backgroundColor: theme.colors.button },
+          ]}
+          onPress={handleLoadMore}
+          disabled={isLoadingMore || isLoading}
+        >
+          {isLoadingMore ? (
+            <View style={styles.loadMoreButtonContent}>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={styles.loadMoreButtonText}>Loading...</Text>
+            </View>
+          ) : (
+            <View style={styles.loadMoreButtonContent}>
+              <MaterialCommunityIcons name="refresh" size={16} color="#fff" />
+              <Text style={styles.loadMoreButtonText}>
+                Show More Comments ({comments.length} of {numOfComments})
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    } else if (comments.length > 0) {
+      return (
+        <Text
+          style={[
+            styles.noMoreCommentsText,
+            { color: theme.colors.textColor + "80" },
+          ]}
+        >
+          No more comments to load
+        </Text>
+      );
+    }
+
+    return null;
+  }, [
+    hasMoreComments,
+    comments.length,
+    theme.colors,
+    handleLoadMore,
+    isLoadingMore,
+    isLoading,
+    isRetrying,
+    retryTimerDisplay,
+    numOfComments,
+  ]);
 
   return (
     <GestureHandlerRootView
@@ -468,14 +763,32 @@ const Comments = () => {
         <FlashList
           ref={listRef}
           data={comments}
-          keyExtractor={(item) => item.product_comments_id.toString()}
+          keyExtractor={(item) => {
+            // Ensure we always have a valid key even if product_comments_id is missing
+            if (!item || !item.product_comments_id) {
+              console.warn("Missing product_comments_id for item:", item);
+              return `fallback_${Date.now()}_${Math.random()}`;
+            }
+            return item.product_comments_id.toString();
+          }}
           renderItem={renderCommentItem}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
           estimatedItemSize={120}
           ListEmptyComponent={EmptyListComponent}
           ListFooterComponent={ListFooterComponent}
           showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContentContainer}
+          removeClippedSubviews={true}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          ItemSeparatorComponent={() => (
+            <View
+              style={[
+                styles.separator,
+                { borderColor: theme.colors.subInactiveColor + "70" },
+              ]}
+            />
+          )}
         />
       </View>
 
@@ -489,6 +802,11 @@ const Comments = () => {
             {
               backgroundColor: theme.colors.primary,
               borderTopColor: theme.colors.inactiveColor + "30",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: -3 },
+              shadowOpacity: 0.1,
+              shadowRadius: 3,
+              elevation: 5,
             },
           ]}
         >
@@ -545,6 +863,7 @@ const Comments = () => {
                 setNewComment("");
               }}
               style={styles.cancelButton}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <MaterialCommunityIcons
                 name="close"
@@ -573,7 +892,13 @@ const Comments = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
+  listContentContainer: {
+    paddingBottom: 100,
+    paddingTop: 8,
+  },
   commentItemContainer: {
     marginHorizontal: 16,
     marginVertical: 8,
@@ -581,18 +906,38 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: "transparent",
   },
-  commentItem: { padding: 16 },
-  commentHeader: { flexDirection: "row", alignItems: "center" },
-  commentTitleContainer: { flex: 1, paddingLeft: 12 },
-  commentAuthor: { fontSize: 15, fontWeight: "600" },
+  commentItem: {
+    padding: 16,
+    borderRadius: 12,
+  },
+  commentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  commentTitleContainer: {
+    flex: 1,
+    paddingLeft: 12,
+  },
+  commentAuthor: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
   commentContent: {
     fontSize: 15,
     lineHeight: 22,
     paddingTop: 8,
     marginLeft: 48,
   },
-  commentDate: { fontSize: 12, color: "#888", marginTop: 2 },
-  commentUserPhoto: { width: 36, height: 36, borderRadius: 18 },
+  commentDate: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 2,
+  },
+  commentUserPhoto: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
   addCommentContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -600,15 +945,14 @@ const styles = StyleSheet.create({
     position: "absolute",
     paddingBottom: 40,
     bottom: 0,
+    left: 0,
+    right: 0,
+    borderTopWidth: 1,
   },
-  inputWrapper: { flex: 1, flexDirection: "row", alignItems: "center" },
-  userAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    marginRight: 8,
+  inputWrapper: {
+    flex: 1,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
   },
   commentInput: {
     flex: 1,
@@ -636,24 +980,74 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginLeft: 4,
   },
-  listFooter: { paddingVertical: 20, alignItems: "center" },
+  loadMoreButton: {
+    marginVertical: 16,
+    marginHorizontal: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadMoreButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  noMoreCommentsText: {
+    textAlign: "center",
+    paddingVertical: 16,
+    fontStyle: "italic",
+  },
   emptyCommentContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
-    paddingVertical: 60,
+    paddingVertical: 80,
   },
-  emptyText: { fontSize: 18, fontWeight: "600", marginTop: 16 },
-  emptySubtext: { fontSize: 14, textAlign: "center", marginTop: 8 },
+  emptyText: {
+    fontSize: 20,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 15,
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 24,
+  },
   emptyButton: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
   },
-  emptyButtonText: { color: "#fff", fontWeight: "500" },
-  optionsButton: { padding: 4 },
+  emptyButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  optionsButton: {
+    padding: 4,
+  },
+  separator: {
+    borderBottomWidth: 1,
+    marginHorizontal: 16,
+  },
+  retryContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 16,
+    gap: 8,
+  },
+  retryText: {
+    fontSize: 14,
+  },
 });
 
 export default React.memo(Comments);

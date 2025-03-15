@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
-  Animated,
   Platform,
   Modal,
 } from "react-native";
@@ -24,7 +23,7 @@ import {
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import useOrderStore from "../../../components/store/useOrderStore";
 import useProductStore from "../../../components/api/useProductStore";
-import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Feather, Entypo } from "@expo/vector-icons";
 import useThemeStore from "../../../components/store/useThemeStore";
 
 const ProductVariantSelection = () => {
@@ -43,14 +42,9 @@ const ProductVariantSelection = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [totalPrice, setTotalPrice] = useState(0);
   const [expandedItem, setExpandedItem] = useState(null);
-
-  // Billing address state
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [selectedBillingAddress, setSelectedBillingAddress] = useState(null);
-
-  // Animation values
-  const fadeAnim = useState(new Animated.Value(0))[0];
-  const slideAnim = useState(new Animated.Value(50))[0];
+  const [expandedAddressId, setExpandedAddressId] = useState(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -62,7 +56,6 @@ const ProductVariantSelection = () => {
     });
   }, [navigation, theme]);
 
-  // Parse items and initialize selections
   useEffect(() => {
     try {
       const parsedItems = JSON.parse(item);
@@ -76,24 +69,9 @@ const ProductVariantSelection = () => {
         }))
       );
 
-      // Set first item as expanded by default
       if (parsedItems.length > 0) {
         setExpandedItem(parsedItems[0].consumer_cart_items_id);
       }
-
-      // Animate in the content
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 400,
-          useNativeDriver: true,
-        }),
-      ]).start();
 
       setIsLoading(false);
     } catch (error) {
@@ -104,9 +82,8 @@ const ProductVariantSelection = () => {
       );
       router.back();
     }
-  }, [item, router, fadeAnim, slideAnim]);
+  }, [item, router]);
 
-  // Calculate total price whenever selections change
   useEffect(() => {
     if (selectedItems.length > 0 && selections.length > 0) {
       const total = selectedItems.reduce((sum, item) => {
@@ -122,7 +99,6 @@ const ProductVariantSelection = () => {
     }
   }, [selectedItems, selections]);
 
-  // Handle variant selection
   const handleVariantSelect = (itemId, variantTitle, value) => {
     setSelections((prev) =>
       prev.map((sel) =>
@@ -139,7 +115,6 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Handle quantity change
   const handleQuantityChange = (itemId, delta) => {
     setSelections((prev) =>
       prev.map((sel) =>
@@ -150,12 +125,10 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Toggle expanded item
   const toggleExpandItem = (itemId) => {
     setExpandedItem(expandedItem === itemId ? null : itemId);
   };
 
-  // Check if all variants are selected for an item
   const isItemComplete = (itemId) => {
     const currentItem = selectedItems.find(
       (i) => i.consumer_cart_items_id === itemId
@@ -164,10 +137,8 @@ const ProductVariantSelection = () => {
 
     if (!currentItem || !selection) return false;
 
-    // Check if variants array doesn't exist or is empty
     if (!currentItem.variants || currentItem.variants.length === 0) return true;
 
-    // Check if variants array has a single entry with null values
     if (
       currentItem.variants.length === 1 &&
       (currentItem.variants[0].variants_id === null ||
@@ -183,7 +154,6 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Get completion percentage for an item
   const getCompletionPercentage = (itemId) => {
     const currentItem = selectedItems.find(
       (i) => i.consumer_cart_items_id === itemId
@@ -192,10 +162,8 @@ const ProductVariantSelection = () => {
 
     if (!currentItem || !selection) return 0;
 
-    // Check if variants array doesn't exist or is empty
     if (!currentItem.variants || currentItem.variants.length === 0) return 100;
 
-    // Check if variants array has a single entry with null values
     if (
       currentItem.variants.length === 1 &&
       (currentItem.variants[0].variants_id === null ||
@@ -211,10 +179,8 @@ const ProductVariantSelection = () => {
     return (selectedVariants / totalVariants) * 100;
   };
 
-  // Check for billing addresses and show modal if needed
   const checkBillingAddresses = () => {
     if (!consumerBillingAddress || consumerBillingAddress.length === 0) {
-      // No billing addresses, redirect to add one
       Alert.alert(
         "Billing Address Required",
         "You need to add a billing address before placing an order.",
@@ -228,28 +194,23 @@ const ProductVariantSelection = () => {
       );
       return false;
     } else if (consumerBillingAddress.length === 1) {
-      // Only one address, use it automatically
       setSelectedBillingAddress(consumerBillingAddress[0]);
       return true;
     } else {
-      // Multiple addresses, show selection modal
       setShowBillingModal(true);
       return false;
     }
   };
 
-  // Handle order confirmation
   const handleConfirm = async () => {
     const incompleteItems = selections.filter((sel) => {
       const currentItem = selectedItems.find(
         (i) => i.consumer_cart_items_id === sel.id
       );
 
-      // Skip validation for items without variants
       if (!currentItem.variants || currentItem.variants.length === 0)
         return false;
 
-      // Skip validation for items with a single null variant entry
       if (
         currentItem.variants.length === 1 &&
         (currentItem.variants[0].variants_id === null ||
@@ -273,18 +234,15 @@ const ProductVariantSelection = () => {
       return;
     }
 
-    // Check for billing addresses before proceeding
     if (!checkBillingAddresses()) {
       return;
     }
 
-    // If we have a selected billing address, proceed with order
     if (selectedBillingAddress) {
       processOrder();
     }
   };
 
-  // Process the order after billing address is selected
   const processOrder = async () => {
     setIsSubmitting(true);
     try {
@@ -294,7 +252,6 @@ const ProductVariantSelection = () => {
             (i) => i.consumer_cart_items_id === sel.id
           );
 
-          // Handle the case with null variant values
           const hasRealVariants =
             currentItem.variants &&
             currentItem.variants.length > 0 &&
@@ -336,7 +293,7 @@ const ProductVariantSelection = () => {
         [
           {
             text: "View Orders",
-            onPress: () => router.push("/screens/Orders"),
+            onPress: () => router.replace("/Orders"),
           },
           {
             text: "Continue Shopping",
@@ -356,16 +313,23 @@ const ProductVariantSelection = () => {
     }
   };
 
-  // Billing Address Selection Modal
+  // Optimized to handle address selection without closing modal
+  const handleAddressSelection = (addressId) => {
+    const address = consumerBillingAddress.find(
+      (addr) => addr.consumer_billing_address_id === addressId
+    );
+    setSelectedBillingAddress(address);
+  };
+
   const BillingAddressModal = () => (
     <Modal
       visible={showBillingModal}
       transparent={true}
-      animationType="slide"
+      animationType="fade" // Changed from "slide" for better performance
       onRequestClose={() => setShowBillingModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <View
+        <Surface
           style={[
             styles.modalContent,
             { backgroundColor: theme.colors.primary },
@@ -378,131 +342,153 @@ const ProductVariantSelection = () => {
               Select Billing Address
             </Text>
             <TouchableOpacity onPress={() => setShowBillingModal(false)}>
-              <Feather name="x" size={24} color={theme.colors.textColor} />
+              <Feather
+                name="x"
+                size={24}
+                color={theme.colors.textColor}
+                style={{ padding: 10 }}
+              />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.addressList}>
             <RadioButton.Group
-              onValueChange={(value) => {
-                const address = consumerBillingAddress.find(
-                  (addr) => addr.consumer_billing_address_id === value
-                );
-                setSelectedBillingAddress(address);
-              }}
+              onValueChange={handleAddressSelection}
               value={selectedBillingAddress?.consumer_billing_address_id || ""}
             >
-              {consumerBillingAddress.map((address) => (
-                <Surface
-                  key={address.consumer_billing_address_id}
-                  style={[
-                    styles.addressItem,
-                    selectedBillingAddress?.consumer_billing_address_id ===
-                    address.consumer_billing_address_id
-                      ? styles.selectedAddressItem
-                      : {},
-                    { backgroundColor: theme.colors.primary },
-                  ]}
-                >
-                  <View style={styles.addressRadioRow}>
-                    <RadioButton
-                      value={address.consumer_billing_address_id}
-                      color={theme.colors.button}
-                    />
-                    <View style={styles.addressDetails}>
-                      <Text
-                        style={[
-                          styles.addressName,
-                          { color: theme.colors.textColor },
-                        ]}
-                      >
-                        {address.name}
-                      </Text>
-                      <View style={styles.addressIconRow}>
-                        <Feather
-                          name="map-pin"
-                          size={14}
-                          color={theme.colors.textColor}
-                          style={styles.addressIcon}
-                        />
+              {consumerBillingAddress.map((address) => {
+                const isExpanded =
+                  expandedAddressId === address.consumer_billing_address_id;
+                const hasPinLocation = !!address.pin_location;
+
+                return (
+                  <Surface
+                    key={address.consumer_billing_address_id}
+                    style={[
+                      styles.addressItem,
+                      selectedBillingAddress?.consumer_billing_address_id ===
+                      address.consumer_billing_address_id
+                        ? styles.selectedAddressItem
+                        : {},
+                      { backgroundColor: theme.colors.primary },
+                    ]}
+                  >
+                    <TouchableOpacity
+                      style={styles.addressHeader}
+                      onPress={() =>
+                        setExpandedAddressId(
+                          isExpanded
+                            ? null
+                            : address.consumer_billing_address_id
+                        )
+                      }
+                    >
+                      <RadioButton
+                        value={address.consumer_billing_address_id}
+                        color={theme.colors.button}
+                      />
+                      <View style={styles.addressHeaderContent}>
                         <Text
                           style={[
-                            styles.addressText,
+                            styles.addressName,
                             { color: theme.colors.textColor },
                           ]}
                         >
-                          {address.address}
+                          {address.name}
                         </Text>
                       </View>
-                      <View style={styles.addressIconRow}>
-                        <Feather
-                          name="map"
-                          size={14}
-                          color={theme.colors.textColor}
-                          style={styles.addressIcon}
-                        />
-                        <Text
-                          style={[
-                            styles.addressText,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          {address.district_name}, {address.province_name}{" "}
-                          {address.postal_code}
-                        </Text>
+                      <Feather
+                        name={isExpanded ? "chevron-up" : "chevron-down"}
+                        size={20}
+                        color={theme.colors.textColor}
+                      />
+                    </TouchableOpacity>
+
+                    {isExpanded && (
+                      <View style={styles.addressDetailsExpanded}>
+                        <View style={styles.addressIconRow}>
+                          <Feather
+                            name="map-pin"
+                            size={14}
+                            color={theme.colors.textColor}
+                            style={styles.addressIcon}
+                          />
+                          <Text
+                            style={[
+                              styles.addressText,
+                              { color: theme.colors.textColor },
+                            ]}
+                          >
+                            {address.address}
+                          </Text>
+                        </View>
+                        <View style={styles.addressIconRow}>
+                          <Feather
+                            name="map"
+                            size={14}
+                            color={theme.colors.textColor}
+                            style={styles.addressIcon}
+                          />
+                          <Text
+                            style={[
+                              styles.addressText,
+                              { color: theme.colors.textColor },
+                            ]}
+                          >
+                            {hasPinLocation
+                              ? "Pin location available"
+                              : "Pin location not available"}
+                          </Text>
+                        </View>
+                        <View style={styles.addressIconRow}>
+                          <Entypo
+                            name="email"
+                            size={14}
+                            color={theme.colors.textColor}
+                            style={styles.addressIcon}
+                          />
+                          <Text
+                            style={[
+                              styles.addressText,
+                              { color: theme.colors.textColor },
+                            ]}
+                          >
+                            {address.email}
+                          </Text>
+                        </View>
+                        <View style={styles.addressIconRow}>
+                          <Feather
+                            name="phone"
+                            size={14}
+                            color={theme.colors.textColor}
+                            style={styles.addressIcon}
+                          />
+                          <Text
+                            style={[
+                              styles.addressText,
+                              { color: theme.colors.textColor },
+                            ]}
+                          >
+                            {address.phone}
+                          </Text>
+                        </View>
                       </View>
-                      <View style={styles.addressIconRow}>
-                        <Feather
-                          name="globe"
-                          size={14}
-                          color={theme.colors.textColor}
-                          style={styles.addressIcon}
-                        />
-                        <Text
-                          style={[
-                            styles.addressText,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          {address.country_name}
-                        </Text>
-                      </View>
-                      <View style={styles.addressIconRow}>
-                        <Feather
-                          name="phone"
-                          size={14}
-                          color={theme.colors.textColor}
-                          style={styles.addressIcon}
-                        />
-                        <Text
-                          style={[
-                            styles.addressText,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          {address.phone}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </Surface>
-              ))}
+                    )}
+                  </Surface>
+                );
+              })}
             </RadioButton.Group>
           </ScrollView>
 
           <View style={styles.modalButtons}>
             <Button
               mode="outlined"
-              onPress={() => {
-                setShowBillingModal(false);
-                setSelectedBillingAddress(null);
-              }}
+              onPress={() => setShowBillingModal(false)}
               style={styles.modalButton}
               textColor={theme.colors.textColor}
             >
               Cancel
             </Button>
-
             <Button
               mode="contained"
               onPress={() => {
@@ -518,13 +504,14 @@ const ProductVariantSelection = () => {
                 { backgroundColor: theme.colors.button },
               ]}
               disabled={!selectedBillingAddress}
+              textColor="white"
             >
               Confirm
             </Button>
           </View>
 
           <Button
-            mode="text"
+            mode="contained"
             onPress={() => {
               setShowBillingModal(false);
               router.push("/screens/BillingAddress");
@@ -533,17 +520,19 @@ const ProductVariantSelection = () => {
             icon={({ size, color }) => (
               <Feather name="plus" size={size} color={color} />
             )}
+            style={{ marginHorizontal: 15 }}
           >
             Add New Address
           </Button>
-        </View>
+        </Surface>
       </View>
     </Modal>
   );
 
-  // Selected Billing Address Component
   const SelectedBillingAddress = () => {
     if (!selectedBillingAddress) return null;
+
+    const hasPinLocation = !!selectedBillingAddress.pin_location;
 
     return (
       <Surface
@@ -614,14 +603,14 @@ const ProductVariantSelection = () => {
                 { color: theme.colors.textColor },
               ]}
             >
-              {selectedBillingAddress.district_name},{" "}
-              {selectedBillingAddress.province_name}{" "}
-              {selectedBillingAddress.postal_code}
+              {hasPinLocation
+                ? "Pin location available"
+                : "Pin location not available"}
             </Text>
           </View>
           <View style={styles.addressIconRow}>
-            <Feather
-              name="globe"
+            <Entypo
+              name="email"
               size={14}
               color={theme.colors.textColor}
               style={styles.addressIcon}
@@ -632,7 +621,7 @@ const ProductVariantSelection = () => {
                 { color: theme.colors.textColor },
               ]}
             >
-              {selectedBillingAddress.country_name}
+              {selectedBillingAddress.email}
             </Text>
           </View>
           <View style={styles.addressIconRow}>
@@ -656,7 +645,6 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Payment Method Component
   const PaymentMethodSection = () => {
     return (
       <Surface
@@ -730,7 +718,6 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Quantity Selector Component
   const QuantitySelector = ({ quantity, onDecrease, onIncrease }) => (
     <View style={styles.quantityContainer}>
       <TouchableOpacity
@@ -759,7 +746,20 @@ const ProductVariantSelection = () => {
     </View>
   );
 
-  // Render each product item
+  // Memoized function to determine if variants exist and are valid
+  const hasValidVariants = (item) => {
+    return (
+      item.variants &&
+      item.variants.length > 0 &&
+      !(
+        item.variants.length === 1 &&
+        (item.variants[0].variants_id === null ||
+          item.variants[0].variant_values === null ||
+          item.variants[0].variant_title === null)
+      )
+    );
+  };
+
   const renderItem = ({ item, index }) => {
     const selection = selections.find(
       (sel) => sel.id === item.consumer_cart_items_id
@@ -773,6 +773,7 @@ const ProductVariantSelection = () => {
     );
     const isExpanded = expandedItem === item.consumer_cart_items_id;
     const itemSubtotal = Number.parseFloat(item.spu) * selection.quantity;
+    const itemHasValidVariants = hasValidVariants(item);
 
     return (
       <Surface
@@ -886,14 +887,7 @@ const ProductVariantSelection = () => {
 
             <Divider style={styles.divider} />
 
-            {item.variants &&
-            item.variants.length > 0 &&
-            !(
-              item.variants.length === 1 &&
-              (item.variants[0].variants_id === null ||
-                item.variants[0].variant_values === null ||
-                item.variants[0].variant_title === null)
-            ) ? (
+            {itemHasValidVariants ? (
               <View style={styles.variantsContainer}>
                 {item.variants.map((variant) => {
                   const isVariantSelected =
@@ -1035,13 +1029,8 @@ const ProductVariantSelection = () => {
 
     return (
       <View style={styles.orderSummaryWrapper}>
-        {/* Billing Address Section */}
         {selectedBillingAddress && <SelectedBillingAddress />}
-
-        {/* Payment Method Section */}
         <PaymentMethodSection />
-
-        {/* Order Summary Section */}
         <Surface
           style={[
             styles.orderSummaryContainer,
@@ -1079,7 +1068,6 @@ const ProductVariantSelection = () => {
               />
             </View>
 
-            {/* Product quantity summary section */}
             <View style={styles.productQuantitySummary}>
               <Text
                 style={[
@@ -1175,7 +1163,6 @@ const ProductVariantSelection = () => {
     );
   };
 
-  // Empty state component
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
       <MaterialCommunityIcons
@@ -1216,15 +1203,7 @@ const ProductVariantSelection = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <Animated.View
-        style={[
-          styles.animatedContainer,
-          {
-            opacity: fadeAnim,
-            transform: [{ translateY: slideAnim }],
-          },
-        ]}
-      >
+      <View style={styles.mainContainer}>
         <FlatList
           data={selectedItems}
           renderItem={renderItem}
@@ -1235,10 +1214,12 @@ const ProductVariantSelection = () => {
           ListFooterComponent={
             selectedItems.length > 0 ? <OrderSummary /> : null
           }
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews={true}
         />
-      </Animated.View>
-
-      {/* Billing Address Selection Modal */}
+      </View>
       <BillingAddressModal />
     </View>
   );
@@ -1249,7 +1230,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#f8f8f8",
   },
-  animatedContainer: {
+  mainContainer: {
     flex: 1,
   },
   loadingContainer: {
@@ -1380,7 +1361,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   divider: {
-    marginVertical: 16,
+    // marginVertical: 16,
   },
   variantsContainer: {
     marginTop: 8,
@@ -1562,7 +1543,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
   },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -1574,7 +1554,6 @@ const styles = StyleSheet.create({
     width: "100%",
     maxWidth: 500,
     borderRadius: 16,
-    padding: 20,
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -1586,21 +1565,32 @@ const styles = StyleSheet.create({
         elevation: 5,
       },
     }),
+    paddingBottom: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 16,
     textAlign: "center",
+    flex: 1,
+    paddingTop: 15,
   },
   addressList: {
     maxHeight: 400,
     marginBottom: 16,
+    paddingTop: 10,
   },
   addressItem: {
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 12,
-    padding: 12,
+    marginHorizontal: 15,
+
+    overflow: "hidden",
     ...Platform.select({
       ios: {
         shadowColor: "#000",
@@ -1613,18 +1603,27 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  addressRadioRow: {
+  addressHeader: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
-  addressDetails: {
+  addressHeaderContent: {
     flex: 1,
     marginLeft: 8,
+  },
+  addressDetailsExpanded: {
+    padding: 12,
+    backgroundColor: "rgba(0, 0, 0, 0.03)",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.1)",
+    paddingBottom: 8,
+    paddingLeft: 15,
   },
   addressName: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 4,
   },
   addressText: {
     fontSize: 14,
@@ -1634,12 +1633,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 16,
+    marginHorizontal: 10,
   },
   modalButton: {
     flex: 1,
     marginHorizontal: 5,
   },
-  // Add these styles to the StyleSheet object
   productQuantitySummary: {
     marginBottom: 16,
     backgroundColor: "rgba(0, 0, 0, 0.03)",
@@ -1680,16 +1679,9 @@ const styles = StyleSheet.create({
     minWidth: 70,
     textAlign: "right",
   },
-  // New styles for the modernized components
   selectedAddressItem: {
     borderWidth: 1,
     borderColor: "#4CAF50",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
   },
   addressIconRow: {
     flexDirection: "row",

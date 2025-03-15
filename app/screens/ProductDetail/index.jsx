@@ -54,6 +54,7 @@ const ProductDetail = () => {
   const [questions, setQuestions] = useState([]);
   const [currentSlide, setCurrentSlide] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  const [totalComments, setTotalComments] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   const {
@@ -67,6 +68,8 @@ const ProductDetail = () => {
     error,
     getProductQuestionList,
     deleteProductQuestion,
+    productQuestions,
+    productComments,
   } = useProductStore();
   const { isDarkTheme } = useThemeStore();
 
@@ -96,20 +99,27 @@ const ProductDetail = () => {
     });
   }, [navigation, product, theme]);
 
+  useEffect(() => {
+    setTotalQuestions(productQuestions);
+  }, [productQuestions]);
+
+  useEffect(() => {
+    setTotalComments(productComments);
+  }, [productComments]);
+
   // Refresh questions
   const onRefresh = useCallback(async () => {
     if (!product) return;
     setRefreshing(true);
     try {
       const questionData = await getProductQuestionList(product.products_id);
-      setQuestions(questionData.questions || []); // Adjust based on your API response structure
-      setTotalQuestions(questionData.total || 0);
+      setQuestions((questionData.questions || []).slice(0, 2));
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
       setRefreshing(false);
     }
-  }, [product, getProductQuestionList]);
+  }, [product]);
 
   // Update favorite state
   useEffect(() => {
@@ -128,8 +138,7 @@ const ProductDetail = () => {
           const questionData = await getProductQuestionList(
             product.products_id
           );
-          setQuestions(questionData.questions || []); // Adjust based on your API response structure
-          setTotalQuestions(questionData.total || 0);
+          setQuestions((questionData.questions || []).slice(0, 2));
         } catch (err) {
           console.error("Error fetching questions:", err);
         }
@@ -476,8 +485,15 @@ const ProductDetail = () => {
               <Ionicons
                 name={isFavorite ? "heart" : "heart-outline"}
                 size={28}
-                color={isFavorite ? "#FF0000" : "#333"}
-                style={isFavoriting && { opacity: 0.5 }}
+                color={
+                  isFavorite
+                    ? theme.colors.deleteButton
+                    : theme.colors.inactiveColor
+                }
+                style={[
+                  isFavoriting && { opacity: 0.5 },
+                  { borderColor: theme.colors.inactiveColor },
+                ]}
               />
             </Pressable>
           </View>
@@ -509,7 +525,10 @@ const ProductDetail = () => {
           <Link
             href={{
               pathname: "/screens/Comments",
-              params: { productId: product.products_id },
+              params: {
+                productId: product.products_id,
+                numOfComments: product.total_comments,
+              },
             }}
             asChild
           >
@@ -528,7 +547,7 @@ const ProductDetail = () => {
                   { color: theme.colors.textColor },
                 ]}
               >
-                {product.total_comments} Comments
+                {(totalComments || product.total_comments) + " Comments"}
               </Text>
             </Pressable>
           </Link>
@@ -542,7 +561,7 @@ const ProductDetail = () => {
               loading={isAddingToCart}
               accessibilityLabel={isInCart ? "Product in cart" : "Add to cart"}
             >
-              "Add to Cart"
+              Add to Cart
             </Button>
             <Button
               onPress={handleShare}

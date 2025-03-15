@@ -19,7 +19,6 @@ import TermsModal from "./screens/ConsentScreen/index";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import { registerBackgroundNotifications } from "../notification-services";
 
-// Define background task for notifications
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 const Layout = () => {
@@ -34,11 +33,9 @@ const Layout = () => {
   const [showAlert, setShowAlert] = useState(false);
   const router = useRouter();
 
-  // Initialize background tasks and notifications
   useEffect(() => {
     const initBackgroundTasks = async () => {
       try {
-        // Register background notifications
         await registerBackgroundNotifications();
       } catch (error) {
         console.error("Error initializing background tasks:", error);
@@ -48,7 +45,6 @@ const Layout = () => {
     initBackgroundTasks();
 
     return () => {
-      // Clean up background tasks if needed
       try {
         BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
           (err) => console.log("Failed to unregister background task", err)
@@ -175,13 +171,15 @@ const Layout = () => {
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
           )}
-          <AlertDialog
-            visible={showAlert}
-            title="No Internet Connection"
-            message="Please check your internet connection and try again."
-            onConfirm={handleRefresh}
-            confirmText="Try again"
-          />
+          {hasAcceptedTerms && (
+            <AlertDialog
+              visible={showAlert}
+              title="No Internet Connection"
+              message="Please check your internet connection and try again."
+              onConfirm={handleRefresh}
+              confirmText="Try again"
+            />
+          )}
         </PaperProvider>
       </ActionSheetProvider>
     </GestureHandlerRootView>

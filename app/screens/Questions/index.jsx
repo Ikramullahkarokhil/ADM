@@ -23,6 +23,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../../components/api/useProductStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 const Questions = () => {
   const { productId } = useLocalSearchParams();
@@ -68,11 +69,13 @@ const Questions = () => {
       try {
         const data = await getProductQuestionList(productId, page);
         setQuestions((prev) => {
-          const existingIds = new Set(prev.map((q) => q.products_qna_id));
-          const filteredNewQuestions = data.filter(
+          const existingIds = new Set(prev.map((q) => data.q.products_qna_id));
+          const filteredNewQuestions = data.questions.filter(
             (q) => !existingIds.has(q.products_qna_id)
           );
-          return page === 1 ? data : [...prev, ...filteredNewQuestions];
+          return page === 1
+            ? data.questions
+            : [...prev, ...filteredNewQuestions];
         });
         setQuestionPage(page);
         setHasMoreQuestions(data.questions?.length > 0);
@@ -120,7 +123,7 @@ const Questions = () => {
       ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
 
       // Background server update
-      addProductQuestion({
+      await addProductQuestion({
         productID: productId,
         consumerID: user.consumer_id,
         question: trimmed,
@@ -140,9 +143,10 @@ const Questions = () => {
       setQuestions((prev) =>
         prev.filter((q) => q.products_qna_id !== questionId)
       );
+
       ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
       // Background server update
-      deleteProductQuestion({
+      await deleteProductQuestion({
         consumerID: user.consumer_id,
         questionId,
       }).catch((err) => {
@@ -150,7 +154,7 @@ const Questions = () => {
         ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
       });
     },
-    [user, deleteProductQuestion]
+    [user]
   );
 
   const handleUpdateQuestion = useCallback(
@@ -327,82 +331,98 @@ const Questions = () => {
   );
 };
 
-const QuestionItem = memo(({ item, theme }) => (
-  <View
-    style={[styles.questionItem, { backgroundColor: theme.colors.surface }]}
-  >
-    <View style={styles.questionHeader}>
-      <Image
-        source={
-          item.online_image_url
-            ? { uri: item.online_image_url }
-            : require("../../../assets/images/imageSkeleton.jpg")
-        }
-        style={styles.questionUserPhoto}
-      />
-      <View style={styles.questionTitleContainer}>
-        <Text
-          style={[styles.questionAuthor, { color: theme.colors.textColor }]}
-        >
-          {item.consumer_name || "Anonymous"}
-        </Text>
-        <Text
-          style={[
-            styles.questionDate,
-            { color: theme.colors.subInactiveColor },
-          ]}
-        >
-          {item.date}
-        </Text>
-      </View>
-    </View>
-    <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
-      {item.question}
-    </Text>
-    {item.answers && item.answers.length > 0 && (
-      <View style={styles.answersContainer}>
-        {item.answers.map((ans) => (
-          <View
-            key={`${item.products_qna_id}_${ans.products_ana_id}`}
-            style={styles.answerItem}
+const QuestionItem = memo(({ item, theme }) => {
+  const { user } = useProductStore();
+  const isUserQuestion = user && item.consumer_id === user.consumer_id;
+  return (
+    <View
+      style={[styles.questionItem, { backgroundColor: theme.colors.surface }]}
+    >
+      <View style={styles.questionHeader}>
+        <Image
+          source={
+            item.online_image_url
+              ? { uri: item.online_image_url }
+              : require("../../../assets/images/imageSkeleton.jpg")
+          }
+          style={styles.questionUserPhoto}
+        />
+        <View style={styles.questionTitleContainer}>
+          <Text
+            style={[styles.questionAuthor, { color: theme.colors.textColor }]}
           >
-            <Image
-              source={
-                ans.seller_image_url
-                  ? { uri: ans.seller_image_url }
-                  : require("../../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.answerSellerPhoto}
+            {item.consumer_name || "Anonymous"}
+          </Text>
+          <Text
+            style={[
+              styles.questionDate,
+              { color: theme.colors.subInactiveColor },
+            ]}
+          >
+            {item.date}
+          </Text>
+        </View>
+        {isUserQuestion && (
+          <TouchableOpacity
+            style={styles.optionsButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialCommunityIcons
+              name="dots-vertical"
+              size={20}
+              color={theme.colors.textColor + "80"}
             />
-            <View>
-              <Text
-                style={[
-                  styles.answerSellerName,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                {ans.seller_name}
-              </Text>
-              <Text
-                style={[
-                  styles.answerDate,
-                  { color: theme.colors.inactiveColor },
-                ]}
-              >
-                {ans.date}
-              </Text>
-              <Text
-                style={[styles.answerText, { color: theme.colors.textColor }]}
-              >
-                {ans.answer}
-              </Text>
-            </View>
-          </View>
-        ))}
+          </TouchableOpacity>
+        )}
       </View>
-    )}
-  </View>
-));
+      <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
+        {item.question}
+      </Text>
+      {item.answers && item.answers.length > 0 && (
+        <View style={styles.answersContainer}>
+          {item.answers.map((ans) => (
+            <View
+              key={`${item.products_qna_id}_${ans.products_ana_id}`}
+              style={styles.answerItem}
+            >
+              <Image
+                source={
+                  ans.seller_image_url
+                    ? { uri: ans.seller_image_url }
+                    : require("../../../assets/images/imageSkeleton.jpg")
+                }
+                style={styles.answerSellerPhoto}
+              />
+              <View>
+                <Text
+                  style={[
+                    styles.answerSellerName,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  {ans.seller_name}
+                </Text>
+                <Text
+                  style={[
+                    styles.answerDate,
+                    { color: theme.colors.inactiveColor },
+                  ]}
+                >
+                  {ans.date}
+                </Text>
+                <Text
+                  style={[styles.answerText, { color: theme.colors.textColor }]}
+                >
+                  {ans.answer}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+});
 
 const styles = StyleSheet.create({
   container: {

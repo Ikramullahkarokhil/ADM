@@ -26,7 +26,7 @@ const ChangePasswordModal = ({ isVisible, onClose }) => {
   const handleChangePassword = async () => {
     const { newPassword, confirmPassword } = passwords;
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < 6) {
       Alert.alert("Error", "Password must be at least 8 characters long.");
       return;
     }
@@ -189,7 +189,6 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     marginBottom: 20,
-
     textAlign: "center",
   },
   input: {

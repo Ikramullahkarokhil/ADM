@@ -1,3 +1,4 @@
+import AlertDialog from "../../../components/ui/AlertDialog";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
@@ -6,33 +7,28 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
-  AppState,
-  ActivityIndicator,
-  Alert,
+  ToastAndroid,
 } from "react-native";
 import { Button, useTheme, Checkbox, Divider } from "react-native-paper";
 import { Link, useNavigation, useRouter, useFocusEffect } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
-import { useLayoutEffect } from "react";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  requestNotificationPermissions,
-  registerBackgroundNotifications,
-  loadCartTimers,
-  saveCartTimers,
-  scheduleCartNotifications,
-  removeItemFromCartTimer,
-  setupNotificationListeners,
-} from "../../../notification-services";
 
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
 const Cart = () => {
-  const { user, deleteFromCart, cartItem, isLoading, listCart } =
-    useProductStore();
+  const {
+    user,
+    deleteFromCart,
+    cartItem,
+    isLoading,
+    listCart,
+    deleteAllFromCart,
+  } = useProductStore();
+
   const navigation = useNavigation();
   const router = useRouter();
   const theme = useTheme();
@@ -43,103 +39,57 @@ const Cart = () => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [timers, setTimers] = useState({});
   const [refreshing, setRefreshing] = useState(false);
-  const [notificationsInitialized, setNotificationsInitialized] =
-    useState(false);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [expiredItems, setExpiredItems] = useState([]);
+  const [alertConfig, setAlertConfig] = useState(null); // Unified alert state
 
   const isFirstLoad = useRef(true);
   const hasCheckedExpiration = useRef(false);
 
-  // Initialize notifications
+  // Hide the default header
   useEffect(() => {
-    const initNotifications = async () => {
-      const permissionGranted = await requestNotificationPermissions();
-      if (permissionGranted) {
-        await registerBackgroundNotifications();
-        setNotificationsInitialized(true);
-      }
-    };
-
-    initNotifications();
-
-    // Set up notification listeners
-    const subscription = setupNotificationListeners((notification) => {
-      const data = notification.request.content.data;
-      if (data?.expired && data?.itemId) {
-        const expiredItem = cartItem.find(
-          (item) => item.consumer_cart_items_id === data.itemId
-        );
-        if (expiredItem) {
-          handleRemoveFromCart(expiredItem, true);
-        }
-      }
-    });
-
-    return () => subscription.remove();
-  }, [cartItem]);
-
-  // Set up navigation options
-  useLayoutEffect(() => {
     navigation.setOptions({
-      title: "Shopping Cart",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
-      headerRight: () => (
-        <TouchableOpacity
-          style={{ marginRight: 16 }}
-          onPress={() => {
-            if (cartItem.length > 0) {
-              Alert.alert(
-                "Clear Cart",
-                "Are you sure you want to remove all items?",
-                [
-                  { text: "Cancel", style: "cancel" },
-                  {
-                    text: "Clear All",
-                    style: "destructive",
-                    onPress: () => {
-                      cartItem.forEach((item) =>
-                        handleRemoveFromCart(item, false)
-                      );
-                    },
-                  },
-                ]
-              );
-            }
-          }}
-        >
-          <MaterialCommunityIcons
-            name="cart-remove"
-            size={24}
-            color={theme.colors.textColor}
-          />
-        </TouchableOpacity>
-      ),
+      headerShown: false,
     });
-  }, [navigation, theme, cartItem]);
+  }, [navigation]);
 
-  // Parse server date string to local timestamp
-  const parseCartItemDate = (dateString) => {
-    if (!dateString) return Date.now();
+  const handleClearCart = async () => {
     try {
-      // Convert server UTC time to local timestamp
-      return Date.parse(dateString + " UTC");
+      if (!user?.consumer_id) return;
+
+      await deleteAllFromCart(user.consumer_id);
+
+      setTimers({});
+      setSelectedIds(new Set());
+
+      ToastAndroid.show("Cart cleared successfully", ToastAndroid.SHORT);
     } catch (error) {
-      console.error("Error parsing date:", error);
-      return Date.now();
+      console.error("Failed to clear cart:", error);
+      ToastAndroid.show("Failed to clear cart", ToastAndroid.SHORT);
     }
   };
 
-  // Load cart timers from storage
+  const parseCartItemDate = (dateString) => {
+    if (!dateString) return null;
+
+    try {
+      const [datePart, timePart] = dateString.split(" ");
+      if (!datePart || !timePart) return null;
+
+      const [year, month, day] = datePart.split("-").map(Number);
+      const [hour, minute, second] = timePart.split(":").map(Number);
+
+      const date = new Date(year, month - 1, day, hour, minute, second);
+      return date.getTime();
+    } catch (error) {
+      console.error("Error parsing date:", error, dateString);
+      return null;
+    }
+  };
+
   useEffect(() => {
     const loadTimersData = async () => {
       try {
-        const loadedTimers = await loadCartTimers();
-        logDebug("Loaded timers:", loadedTimers);
-        setTimers(loadedTimers);
         setInitialLoadComplete(true);
       } catch (error) {
         console.error("Error loading timers:", error);
@@ -153,7 +103,6 @@ const Cart = () => {
     };
   }, []);
 
-  // Update timers when cart items change
   useEffect(() => {
     if (!initialLoadComplete) return;
 
@@ -168,26 +117,18 @@ const Cart = () => {
           if (timestamp) {
             newTimers[itemId] = timestamp;
             hasChanges = true;
-            logDebug(`Added timer for item ${itemId}:`, {
-              date: item.date,
-              timestamp,
-              now: Date.now(),
-              diff: Date.now() - timestamp,
-            });
           }
         }
       }
 
       if (hasChanges) {
         setTimers(newTimers);
-        await saveCartTimers(newTimers);
       }
     };
 
     updateTimers();
   }, [cartItem, initialLoadComplete]);
 
-  // Check for expired items
   useFocusEffect(
     useCallback(() => {
       if (!initialLoadComplete || isFirstLoad.current) {
@@ -211,8 +152,7 @@ const Cart = () => {
         }
 
         if (expired.length > 0) {
-          logDebug("Found expired items:", expired.length);
-          setExpiredItems(expired);
+          setExpiredItems((prev) => [...prev, ...expired]);
         }
       }
 
@@ -222,7 +162,6 @@ const Cart = () => {
     }, [cartItem, timers, initialLoadComplete])
   );
 
-  // Remove expired items
   useEffect(() => {
     if (expiredItems.length > 0) {
       const removeExpiredItems = async () => {
@@ -230,35 +169,18 @@ const Cart = () => {
           await handleRemoveFromCart(item, true);
           await new Promise((resolve) => setTimeout(resolve, 100));
         }
+        if (expiredItems.length > 0) {
+          ToastAndroid.show(
+            `${expiredItems.length} expired item(s) removed from cart`,
+            ToastAndroid.LONG
+          );
+        }
         setExpiredItems([]);
       };
       removeExpiredItems();
     }
   }, [expiredItems]);
 
-  // Schedule notifications when timers or cart items change
-  useEffect(() => {
-    if (
-      notificationsInitialized &&
-      cartItem.length > 0 &&
-      initialLoadComplete
-    ) {
-      scheduleCartNotifications(cartItem, timers);
-    }
-  }, [timers, cartItem, notificationsInitialized, initialLoadComplete]);
-
-  // Handle app state changes
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (nextAppState) => {
-      if (nextAppState === "active" && notificationsInitialized) {
-        scheduleCartNotifications(cartItem, timers);
-      }
-    });
-
-    return () => subscription.remove();
-  }, [cartItem, timers, notificationsInitialized, initialLoadComplete]);
-
-  // Handle item removal
   const handleRemoveFromCart = useCallback(
     async (item, isExpired = false) => {
       try {
@@ -267,23 +189,21 @@ const Cart = () => {
           consumerID: user?.consumer_id,
         });
 
-        await removeItemFromCartTimer(item.consumer_cart_items_id);
-
         const newTimers = { ...timers };
         delete newTimers[item.consumer_cart_items_id];
         setTimers(newTimers);
 
-        if (isExpired) {
-          console.log(`Item ${item.title} expired and was removed from cart`);
+        if (!isExpired) {
+          ToastAndroid.show("Product removed from cart", ToastAndroid.SHORT);
         }
       } catch (error) {
         console.error("Failed to remove item:", error);
+        ToastAndroid.show("Failed to remove product", ToastAndroid.SHORT);
       }
     },
     [deleteFromCart, user?.consumer_id, timers]
   );
 
-  // Toggle item selection
   const toggleSelection = useCallback((consumerCartItemsId) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -293,35 +213,33 @@ const Cart = () => {
     });
   }, []);
 
-  // Derive selected items from selectedIds
   const selectedItems = cartItem.filter((item) =>
     selectedIds.has(item.consumer_cart_items_id)
   );
 
-  // Calculate total price
   const totalPrice =
     selectedItems && selectedItems.length > 0
       ? selectedItems.reduce((sum, item) => sum + Number(item.spu || 0), 0)
       : 0;
 
-  // Format time remaining for display
   const formatTimeRemaining = (timeAdded) => {
     if (!timeAdded) return { text: "Unknown", isExpiringSoon: false };
 
-    const timeElapsed = Date.now() - timeAdded;
+    const currentTime = Date.now();
+    const timeElapsed = currentTime - timeAdded;
     const timeRemaining = Math.max(0, CART_TIMEOUT - timeElapsed);
+
     const hours = Math.floor(timeRemaining / (60 * 60 * 1000));
     const minutes = Math.floor(
       (timeRemaining % (60 * 60 * 1000)) / (60 * 1000)
     );
 
     return {
-      text: `${hours}h ${minutes}m`,
+      text: hours > 0 || minutes > 0 ? `${hours}h ${minutes}m` : "Expiring",
       isExpiringSoon: hours < 3,
     };
   };
 
-  // Refresh cart data
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -335,9 +253,99 @@ const Cart = () => {
     }
   }, [listCart, user?.consumer_id]);
 
-  // Render cart item
+  const showActionSheet = (item) => {
+    const options = ["Remove from cart", "Cancel"];
+    const destructiveButtonIndex = 0;
+    const cancelButtonIndex = 1;
+
+    showActionSheetWithOptions(
+      {
+        options,
+        cancelButtonIndex,
+        destructiveButtonIndex,
+      },
+      (index) => {
+        if (index === destructiveButtonIndex) {
+          setAlertConfig({
+            title: "Remove Item",
+            message: `Are you sure you want to remove "${item.title}" from your cart?`,
+            onConfirm: () => {
+              handleRemoveFromCart(item);
+              setAlertConfig(null);
+            },
+            onCancel: () => setAlertConfig(null),
+            confirmText: "Remove",
+            cancelText: "Cancel",
+          });
+        }
+      }
+    );
+  };
+
+  // Custom Header Component
+  const CustomHeader = () => (
+    <View
+      style={[
+        styles.headerContainer,
+        {
+          backgroundColor: theme.colors.primary,
+          paddingTop: insets.top,
+        },
+      ]}
+    >
+      <View style={styles.headerContent}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={24}
+            color={theme.colors.textColor}
+          />
+        </TouchableOpacity>
+
+        <Text style={[styles.headerTitle, { color: theme.colors.textColor }]}>
+          Shopping Cart
+        </Text>
+
+        <TouchableOpacity
+          style={styles.clearButton}
+          onPress={() => {
+            if (cartItem.length > 0) {
+              setAlertConfig({
+                title: "Clear Cart",
+                message:
+                  "Are you sure you want to remove all items from your cart?",
+                onConfirm: () => {
+                  handleClearCart();
+                  setAlertConfig(null);
+                },
+                onCancel: () => setAlertConfig(null),
+                confirmText: "Clear All",
+                cancelText: "Cancel",
+              });
+            }
+          }}
+          disabled={cartItem.length === 0}
+        >
+          <MaterialCommunityIcons
+            name="cart-remove"
+            size={24}
+            color={
+              cartItem.length > 0
+                ? theme.colors.textColor
+                : theme.colors.inactiveColor
+            }
+          />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
   const renderItem = ({ item }) => {
-    const timeInfo = formatTimeRemaining(timers[item.consumer_cart_items_id]);
+    const timeAdded = parseCartItemDate(item.date);
+    const timeInfo = formatTimeRemaining(timeAdded);
 
     return (
       <View
@@ -395,7 +403,9 @@ const Cart = () => {
                   },
                 ]}
               >
-                {timeInfo.text} left
+                {timeInfo.text === "Unknown"
+                  ? "Expiry: Unknown"
+                  : `${timeInfo.text} left`}
               </Text>
             </View>
           </View>
@@ -403,7 +413,19 @@ const Cart = () => {
           <View>
             <TouchableOpacity
               style={styles.deleteButton}
-              onPress={() => handleRemoveFromCart(item)}
+              onPress={() => {
+                setAlertConfig({
+                  title: "Remove Item",
+                  message: `Are you sure you want to remove "${item.title}" from your cart?`,
+                  onConfirm: () => {
+                    handleRemoveFromCart(item);
+                    setAlertConfig(null);
+                  },
+                  onCancel: () => setAlertConfig(null),
+                  confirmText: "Remove",
+                  cancelText: "Cancel",
+                });
+              }}
             >
               <MaterialCommunityIcons
                 name="delete-outline"
@@ -454,7 +476,6 @@ const Cart = () => {
     </View>
   );
 
-  // Render footer with total price and checkout button
   const renderFooter = () => {
     if (selectedItems.length === 0) return null;
 
@@ -495,7 +516,7 @@ const Cart = () => {
             mode="contained"
             style={styles.orderButton}
             buttonColor={theme.colors.button}
-            textColor={theme.colors.primary}
+            textColor="white"
             disabled={selectedItems.length === 0}
             icon="cart-arrow-right"
           >
@@ -509,21 +530,21 @@ const Cart = () => {
   if (isLoading) {
     return (
       <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: theme.colors.primary },
-        ]}
+        style={[styles.container, { backgroundColor: theme.colors.primary }]}
       >
-        <ActivityIndicator size="large" color={theme.colors.button} />
-        <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
-          Loading your cart...
-        </Text>
+        <CustomHeader />
+        <View style={styles.loadingContainer}>
+          <Text style={[styles.loadingText, { color: theme.colors.textColor }]}>
+            Loading your cart...
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <CustomHeader />
       <FlatList
         data={cartItem}
         renderItem={renderItem}
@@ -539,6 +560,19 @@ const Cart = () => {
         showsVerticalScrollIndicator={false}
       />
       {renderFooter()}
+
+      {/* Unified Alert Dialog */}
+      {alertConfig && (
+        <AlertDialog
+          visible={true}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          onDismiss={alertConfig.onCancel}
+          onConfirm={alertConfig.onConfirm}
+          confirmText={alertConfig.confirmText}
+          cancelText={alertConfig.cancelText}
+        />
+      )}
     </View>
   );
 };
@@ -546,7 +580,31 @@ const Cart = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+  },
+  headerContainer: {
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    zIndex: 10,
+  },
+  headerContent: {
+    height: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+  },
+  backButton: {
+    padding: 8,
+  },
+  clearButton: {
+    padding: 8,
   },
   loadingContainer: {
     flex: 1,

@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-  useState,
-  useRef,
-} from "react";
+import { useEffect, useState, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,28 +6,18 @@ import {
   FlatList,
   Pressable,
   Image,
-  Animated,
-  TouchableOpacity,
   StatusBar,
   RefreshControl,
+  ToastAndroid,
+  useColorScheme,
 } from "react-native";
-import {
-  IconButton,
-  useTheme,
-  Button,
-  Surface,
-  Chip,
-  Snackbar,
-  ActivityIndicator,
-  Badge,
-} from "react-native-paper";
-import { Link, useNavigation } from "expo-router";
+import { useTheme, Surface, Chip, ActivityIndicator } from "react-native-paper";
+import { Link, useNavigation, useRouter } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const AnimatedSurface = Animated.createAnimatedComponent(Surface);
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
+import { useActionSheet } from "@expo/react-native-action-sheet";
+import useThemeStore from "../../../components/store/useThemeStore";
 
 const FavoriteProductPage = () => {
   const {
@@ -47,52 +31,66 @@ const FavoriteProductPage = () => {
   const theme = useTheme();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
   const [loadingStates, setLoadingStates] = useState({});
   const [refreshing, setRefreshing] = useState(false);
-  const scrollY = useRef(new Animated.Value(0)).current;
+  const { showActionSheetWithOptions } = useActionSheet();
+  const { isDarkTheme } = useThemeStore();
+  const router = useRouter();
 
-  // Fetch favorites on mount and when user changes
+  // Use native header
+  useEffect(() => {
+    navigation.setOptions({
+      headerShown: true,
+      title: "My Favorites",
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.textColor,
+
+      headerRight: () => (
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={() => router.navigate("/screens/Cart")}
+            style={styles.headerIcon}
+          >
+            <MaterialCommunityIcons
+              name="cart-outline"
+              size={24}
+              color={theme.colors.textColor}
+            />
+            {cartItems?.length > 0 && (
+              <View
+                style={[
+                  styles.cartBadge,
+                  { backgroundColor: theme.colors.deleteButton },
+                ]}
+              >
+                <Text style={styles.cartBadgeText}>{cartItems.length}</Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
+      ),
+    });
+  }, [navigation, cartItems, theme.colors]);
+
   useEffect(() => {
     if (user?.consumer_id) {
       fetchFavProducts(user.consumer_id);
     }
   }, [user?.consumer_id, fetchFavProducts]);
 
-  // Header animation values
-  const headerHeight = 60;
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [1, 0.9],
-    extrapolate: "clamp",
-  });
-
-  const headerElevation = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, 4],
-    extrapolate: "clamp",
-  });
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
-
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
       await fetchFavProducts(user.consumer_id);
     } catch (error) {
-      setSnackbarMessage("Failed to refresh favorites");
-      setSnackbarVisible(true);
+      ToastAndroid.show("Failed to refresh favorites", ToastAndroid.SHORT);
     } finally {
       setRefreshing(false);
     }
-  }, [user.consumer_id, fetchFavProducts]);
+  }, [user?.consumer_id, fetchFavProducts]);
 
-  // Memoizing the remove function to avoid unnecessary re-renders
   const handleRemoveFav = useCallback(
     async (favId) => {
       const favItem = favProducts.find((item) => item.product_fav_id === favId);
@@ -103,21 +101,23 @@ const FavoriteProductPage = () => {
             favId: favItem.product_fav_id,
             consumerID: user.consumer_id,
           });
-
-          setSnackbarMessage(`${favItem.name} removed from favorites`);
-          setSnackbarVisible(true);
+          ToastAndroid.show(
+            `${favItem.name} removed from favorites`,
+            ToastAndroid.SHORT
+          );
         } catch (error) {
-          setSnackbarMessage("Failed to remove from favorites");
-          setSnackbarVisible(true);
+          ToastAndroid.show(
+            "Failed to remove from favorites",
+            ToastAndroid.SHORT
+          );
         } finally {
           setLoadingStates((prev) => ({ ...prev, [`remove_${favId}`]: false }));
         }
       }
     },
-    [favProducts, removeFavorite, user.consumer_id]
+    [favProducts, removeFavorite, user?.consumer_id]
   );
 
-  // Add to cart handler with improved feedback
   const handleAddToCart = useCallback(
     async (product) => {
       setLoadingStates((prev) => ({
@@ -129,13 +129,9 @@ const FavoriteProductPage = () => {
           productID: product.products_id,
           consumerID: user.consumer_id,
         });
-
-        setSnackbarMessage(`${product.name} added to cart`);
-        setSnackbarVisible(true);
+        ToastAndroid.show(`${product.name} added to cart`, ToastAndroid.SHORT);
       } catch (error) {
-        console.error("Failed to add to cart:", error);
-        setSnackbarMessage("Failed to add to cart");
-        setSnackbarVisible(true);
+        ToastAndroid.show("Failed to add to cart", ToastAndroid.SHORT);
       } finally {
         setLoadingStates((prev) => ({
           ...prev,
@@ -143,50 +139,65 @@ const FavoriteProductPage = () => {
         }));
       }
     },
-    [addToCart, user.consumer_id]
+    [addToCart, user?.consumer_id]
   );
 
-  const renderFavoriteItem = useCallback(
-    ({ item, index }) => {
-      const scaleAnim = new Animated.Value(1);
+  // Handle long press to show action sheet
+  const handleLongPress = useCallback(
+    (item) => {
       const isInCart = cartItems?.some(
         (cartItem) => cartItem.products_id === item.products_id
       );
 
-      const onPressIn = () => {
-        Animated.spring(scaleAnim, {
-          toValue: 0.97,
-          friction: 5,
-          tension: 40,
-          useNativeDriver: true,
-        }).start();
-      };
+      const options = [
+        isInCart ? "Already in cart" : "Add to cart",
+        "Remove from favorites",
+        "Cancel",
+      ];
 
-      const onPressOut = () => {
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true,
-        }).start();
-      };
+      const destructiveButtonIndex = 1;
+      const cancelButtonIndex = 2;
+
+      showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          destructiveButtonIndex,
+          tintColor: theme.colors.textColor,
+          containerStyle: {
+            backgroundColor: theme.colors.primary,
+            borderTopRightRadius: 16,
+            borderTopLeftRadius: 16,
+          },
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0 && !isInCart) {
+            // Add to cart
+            handleAddToCart(item);
+          } else if (buttonIndex === 1) {
+            // Remove from favorites
+            handleRemoveFav(item.product_fav_id);
+          }
+        }
+      );
+    },
+    [handleAddToCart, handleRemoveFav, cartItems, showActionSheetWithOptions]
+  );
+
+  const renderFavoriteItem = useCallback(
+    ({ item, index }) => {
+      const isInCart = cartItems?.some(
+        (cartItem) => cartItem.products_id === item.products_id
+      );
 
       return (
-        <Animated.View
-          style={{
-            opacity: 1,
-            transform: [{ scale: scaleAnim }],
-            marginBottom: 16,
-          }}
-        >
-          <AnimatedSurface
+        <View>
+          <Surface
             style={[
               styles.productCard,
-              {
-                backgroundColor: theme.colors.primary,
-                borderColor: theme.colors.subInactiveColor,
-              },
+              { backgroundColor: theme.colors.primary },
             ]}
+            elevation={5}
           >
             <Link
               href={{
@@ -197,23 +208,25 @@ const FavoriteProductPage = () => {
             >
               <Pressable
                 style={styles.productContent}
-                android_ripple={{ color: theme.colors.ripple }}
-                onPressIn={onPressIn}
-                onPressOut={onPressOut}
+                onLongPress={() => handleLongPress(item)}
+                delayLongPress={300}
               >
                 <View style={styles.imageContainer}>
                   <Image
-                    source={{
-                      uri: item.image_url || "https://via.placeholder.com/100",
-                    }}
+                    source={
+                      isDarkTheme
+                        ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                        : require("../../../assets/images/imageSkeleton.jpg")
+                    }
                     style={styles.productImage}
                     resizeMode="cover"
                   />
+
                   {item.discount && (
                     <View
                       style={[
                         styles.discountBadge,
-                        { backgroundColor: theme.colors.error },
+                        { backgroundColor: theme.colors.deleteButton },
                       ]}
                     >
                       <Text style={styles.discountText}>-{item.discount}%</Text>
@@ -222,147 +235,85 @@ const FavoriteProductPage = () => {
                 </View>
 
                 <View style={styles.productInfo}>
-                  <View>
+                  <Text
+                    style={[
+                      styles.productName,
+                      { color: theme.colors.textColor },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.name}
+                  </Text>
+
+                  <View style={styles.priceContainer}>
                     <Text
                       style={[
-                        styles.productName,
-                        { color: theme.colors.textColor },
+                        styles.productPrice,
+                        { color: theme.colors.button },
                       ]}
-                      numberOfLines={2}
                     >
-                      {item.name}
+                      AF {item.price}
                     </Text>
-
-                    <View style={styles.priceContainer}>
+                    {item.originalPrice && (
                       <Text
                         style={[
-                          styles.productPrice,
-                          { color: theme.colors.button },
+                          styles.originalPrice,
+                          { color: theme.colors.inactiveColor },
                         ]}
                       >
-                        AF {item.price}
+                        AF {item.originalPrice}
                       </Text>
-                      {item.originalPrice && (
-                        <Text style={styles.originalPrice}>
-                          AF {item.originalPrice}
-                        </Text>
-                      )}
-                    </View>
+                    )}
+                  </View>
 
-                    <View style={styles.chipRow}>
+                  <View style={styles.chipRow}>
+                    <Chip
+                      style={[
+                        styles.categoryChip,
+                        { backgroundColor: theme.colors.subInactiveColor },
+                      ]}
+                      textStyle={{
+                        fontSize: 12,
+                        color: theme.colors.textColor,
+                      }}
+                    >
+                      {item.system_name}
+                    </Chip>
+
+                    {isInCart && (
                       <Chip
                         style={[
-                          styles.categoryChip,
-                          { backgroundColor: theme.colors.subInactiveColor },
+                          styles.inCartChip,
+                          { backgroundColor: theme.colors.primary },
                         ]}
                         textStyle={{
                           fontSize: 12,
                           color: theme.colors.textColor,
                         }}
+                        icon="check-circle"
                       >
-                        {item.system_name}
+                        In Cart
                       </Chip>
-
-                      {isInCart && (
-                        <Chip
-                          style={[
-                            styles.inCartChip,
-                            { backgroundColor: theme.colors.primaryContainer },
-                          ]}
-                          textStyle={{
-                            fontSize: 12,
-                            color: theme.colors.onPrimaryContainer,
-                          }}
-                          icon="check-circle"
-                        >
-                          In Cart
-                        </Chip>
-                      )}
-                    </View>
-
-                    <Text
-                      style={[
-                        styles.productDate,
-                        { color: theme.colors.inactiveColor },
-                      ]}
-                    >
-                      Added {formatRelativeTime(new Date(item.date))}
-                    </Text>
-                  </View>
-
-                  <View style={styles.actionButtons}>
-                    <Button
-                      mode="contained"
-                      onPress={() => handleAddToCart(item)}
-                      style={[
-                        styles.addButton,
-                        {
-                          backgroundColor: isInCart
-                            ? theme.colors.primary
-                            : theme.colors.button,
-                        },
-                      ]}
-                      textColor={
-                        isInCart ? theme.colors.onSurfaceVariant : "white"
-                      }
-                      labelStyle={styles.buttonLabel}
-                      disabled={
-                        loadingStates[`cart_${item.products_id}`] || isInCart
-                      }
-                      icon={
-                        loadingStates[`cart_${item.products_id}`]
-                          ? () => <ActivityIndicator size={16} color="white" />
-                          : isInCart
-                          ? "check"
-                          : "cart-plus"
-                      }
-                    >
-                      {loadingStates[`cart_${item.products_id}`]
-                        ? "Adding..."
-                        : isInCart
-                        ? "In Cart"
-                        : "Add to Cart"}
-                    </Button>
-
-                    <IconButton
-                      icon={
-                        loadingStates[`remove_${item.product_fav_id}`]
-                          ? () => (
-                              <ActivityIndicator
-                                size={16}
-                                color={theme.colors.deleteButton}
-                              />
-                            )
-                          : "heart"
-                      }
-                      iconColor={theme.colors.deleteButton}
-                      size={24}
-                      onPress={() => handleRemoveFav(item.product_fav_id)}
-                      style={styles.favoriteButton}
-                      disabled={loadingStates[`remove_${item.product_fav_id}`]}
-                    />
+                    )}
                   </View>
                 </View>
               </Pressable>
             </Link>
-          </AnimatedSurface>
-        </Animated.View>
+          </Surface>
+        </View>
       );
     },
-    [handleRemoveFav, handleAddToCart, theme.colors, loadingStates, cartItems]
+    [handleLongPress, theme.colors, cartItems]
   );
 
   const EmptyState = () => (
     <View
-      style={[
-        styles.emptyContainer,
-        { backgroundColor: theme.colors.background },
-      ]}
+      style={[styles.emptyContainer, { backgroundColor: theme.colors.primary }]}
     >
       <MaterialCommunityIcons
         name="heart-off-outline"
         size={80}
-        color={theme.colors.deleteButton}
+        color={theme.colors.error}
       />
       <Text style={[styles.emptyTitle, { color: theme.colors.textColor }]}>
         No favorites yet
@@ -370,141 +321,48 @@ const FavoriteProductPage = () => {
       <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
         Products you mark as favorites will appear here
       </Text>
-      <Button
-        mode="contained"
+      <Pressable
+        style={[styles.browseButton, { backgroundColor: theme.colors.primary }]}
         onPress={() => navigation.navigate("Products")}
-        buttonColor={theme.colors.button}
-        textColor="white"
-        style={{ marginTop: 20, borderRadius: 12 }}
-        icon="shopping"
+        android_ripple={{ color: "rgba(255,255,255,0.2)" }}
       >
-        Browse Products
-      </Button>
+        <MaterialCommunityIcons
+          name="shopping"
+          size={20}
+          color={theme.colors.textColor}
+        />
+        <Text style={styles.browseButtonText}>Browse Products</Text>
+      </Pressable>
     </View>
-  );
-
-  // Custom header component
-  const renderHeader = () => (
-    <Animated.View
-      style={[
-        styles.header,
-        {
-          backgroundColor: theme.colors.primary,
-          opacity: headerOpacity,
-          elevation: headerElevation,
-          paddingTop: insets.top,
-        },
-      ]}
-    >
-      <View style={styles.headerContent}>
-        <Text style={[styles.headerTitle, { color: theme.colors.textColor }]}>
-          My Favorites
-        </Text>
-        <View style={styles.headerActions}>
-          <IconButton
-            icon="magnify"
-            iconColor={theme.colors.textColor}
-            size={24}
-            onPress={() => navigation.navigate("Search")}
-          />
-          <View>
-            <IconButton
-              icon="cart-outline"
-              iconColor={theme.colors.textColor}
-              size={24}
-              onPress={() => navigation.navigate("Cart")}
-            />
-            {cartItems?.length > 0 && (
-              <Badge style={styles.cartBadge} size={18}>
-                {cartItems.length}
-              </Badge>
-            )}
-          </View>
-        </View>
-      </View>
-    </Animated.View>
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <StatusBar barStyle="light-content" translucent />
-
-      {renderHeader()}
-
-      {favProducts.length > 0 ? (
-        <AnimatedFlatList
-          data={favProducts}
-          keyExtractor={(item) => item.product_fav_id.toString()}
-          renderItem={renderFavoriteItem}
-          contentContainerStyle={[
-            styles.listContainer,
-            { paddingTop: headerHeight + insets.top },
-          ]}
-          showsVerticalScrollIndicator={false}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false }
-          )}
-          scrollEventThrottle={16}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={[theme.colors.button]}
-              progressBackgroundColor={theme.colors.surface}
-              progressViewOffset={headerHeight + insets.top}
-            />
-          }
-        />
-      ) : (
-        <EmptyState />
-      )}
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => setSnackbarVisible(false)}
-        duration={3000}
-        style={[
-          styles.snackbar,
-          { backgroundColor: theme.colors.surfaceVariant },
-        ]}
-        action={{
-          label: "OK",
-          onPress: () => setSnackbarVisible(false),
-          labelStyle: { color: theme.colors.primary },
-        }}
-      >
-        {snackbarMessage}
-      </Snackbar>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.colors.primary,
+        },
+      ]}
+    >
+      <FlatList
+        data={favProducts}
+        keyExtractor={(item) => item.product_fav_id.toString()}
+        renderItem={renderFavoriteItem}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={EmptyState}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.colors.primary]}
+            progressBackgroundColor={theme.colors.surface}
+          />
+        }
+        showsVerticalScrollIndicator={false}
+      />
     </View>
   );
-};
-
-// Helper function to format relative time
-const formatRelativeTime = (date) => {
-  const now = new Date();
-  const diffInSeconds = Math.floor((now - date) / 1000);
-
-  if (diffInSeconds < 60) {
-    return "just now";
-  }
-
-  const diffInMinutes = Math.floor(diffInSeconds / 60);
-  if (diffInMinutes < 60) {
-    return `${diffInMinutes} ${diffInMinutes === 1 ? "minute" : "minutes"} ago`;
-  }
-
-  const diffInHours = Math.floor(diffInMinutes / 60);
-  if (diffInHours < 24) {
-    return `${diffInHours} ${diffInHours === 1 ? "hour" : "hours"} ago`;
-  }
-
-  const diffInDays = Math.floor(diffInHours / 24);
-  if (diffInDays < 30) {
-    return `${diffInDays} ${diffInDays === 1 ? "day" : "days"} ago`;
-  }
-
-  return date.toLocaleDateString();
 };
 
 export default FavoriteProductPage;
@@ -513,56 +371,60 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-  },
-  headerContent: {
-    height: 60,
+  headerRight: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "white",
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerIcon: {
+    padding: 8,
+    marginLeft: 8,
+    borderRadius: 20,
   },
   cartBadge: {
     position: "absolute",
-    top: -4,
-    right: -4,
+    top: 0,
+    right: 0,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cartBadgeText: {
+    color: "white",
+    fontSize: 10,
+    fontWeight: "bold",
   },
   listContainer: {
-    padding: 16,
+    paddingHorizontal: 16,
     paddingBottom: 24,
+    paddingTop: 20,
   },
   productCard: {
     borderRadius: 16,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
+    marginBottom: 16,
   },
   productContent: {
     flexDirection: "row",
-    padding: 0,
   },
   imageContainer: {
-    width: 100,
-    height: 130,
-    position: "relative",
+    width: 120,
+    height: 140,
   },
   productImage: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 140,
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
+  },
+  imagePlaceholder: {
+    width: 120,
+    height: 140,
+    justifyContent: "center",
+    alignItems: "center",
+    borderTopLeftRadius: 16,
+    borderBottomLeftRadius: 16,
   },
   discountBadge: {
     position: "absolute",
@@ -580,7 +442,6 @@ const styles = StyleSheet.create({
   productInfo: {
     flex: 1,
     padding: 16,
-    justifyContent: "space-between",
   },
   productName: {
     fontSize: 16,
@@ -594,54 +455,35 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   productPrice: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "800",
     marginRight: 8,
   },
   originalPrice: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "400",
     textDecorationLine: "line-through",
-    color: "#999",
   },
   chipRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    marginBottom: 8,
+    marginBottom: 12,
   },
   categoryChip: {
     alignSelf: "flex-start",
+    borderRadius: 8,
   },
   inCartChip: {
     alignSelf: "flex-start",
-  },
-  productDate: {
-    fontSize: 12,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 8,
-  },
-  addButton: {
-    flex: 1,
-    marginRight: 8,
-    borderRadius: 12,
-  },
-  buttonLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  favoriteButton: {
-    margin: 0,
+    borderRadius: 8,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
+    minHeight: 400,
   },
   emptyTitle: {
     fontSize: 22,
@@ -652,10 +494,18 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 24,
   },
-  snackbar: {
-    marginBottom: 16,
-    borderRadius: 8,
+  browseButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  browseButtonText: {
+    color: "white",
+    fontWeight: "600",
+    marginLeft: 8,
   },
 });

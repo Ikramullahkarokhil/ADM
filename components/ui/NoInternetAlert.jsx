@@ -7,10 +7,8 @@ const AlertDialog = ({
   visible,
   title,
   message,
-  onDismiss,
   onConfirm,
   confirmText = "OK",
-  cancelText = "",
   animationIn = "zoomIn",
   animationOut = "zoomOut",
 }) => {
@@ -19,8 +17,6 @@ const AlertDialog = ({
   return (
     <Modal
       isVisible={visible}
-      onBackdropPress={onDismiss}
-      onBackButtonPress={onDismiss}
       animationIn={animationIn}
       animationOut={animationOut}
       backdropOpacity={0.1}
@@ -34,16 +30,6 @@ const AlertDialog = ({
           {message}
         </Text>
         <View style={styles.buttonsContainer}>
-          {cancelText ? (
-            <Button
-              mode="outlined"
-              onPress={onDismiss}
-              style={[styles.button, { borderColor: theme.colors.button }]}
-              labelStyle={{ color: theme.colors.button }}
-            >
-              {cancelText}
-            </Button>
-          ) : null}
           <Button
             mode="contained"
             onPress={onConfirm}

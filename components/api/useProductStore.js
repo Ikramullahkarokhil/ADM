@@ -21,7 +21,8 @@ const initialState = {
   favProducts: [],
   cartItem: [],
   productsBySubcategory: {},
-  productQuestions: {},
+  productQuestions: null,
+  productComments: null,
   consumerBillingAddress: [],
   loginError: null,
   user: null,
@@ -219,6 +220,16 @@ const useProductStore = create(
         }
       },
 
+      deleteAllFromCart: async (consumerID) => {
+        try {
+          await api.delete(`/cart/delete-all?consumer_id=${consumerID}`);
+          set({ cartItem: [] });
+        } catch (error) {
+          const errorMessage = error.response?.data?.message || error.message;
+          throw new Error(errorMessage);
+        }
+      },
+
       fetchProfile: async (consumerId) => {
         try {
           set({
@@ -241,25 +252,31 @@ const useProductStore = create(
       },
 
       getProductQuestionList: async (productID) => {
-        const data = await get().apiRequest(
+        const response = await get().apiRequest(
           `/questions/list?product_id=${productID}`
         );
-        set({ productQuestions: data.questions || [] });
-        return data.questions || [];
+        set({ productQuestions: response.total || [] });
+        return response || [];
       },
 
       addProductQuestion: async ({ consumerID, productID, question }) => {
-        const data = await api.post(
+        await api.post(
           `/question/add?question=${question}&product_id=${productID}&consumer_id=${consumerID}`
         );
-        return data;
+        await get().getProductQuestionList(productID);
+      },
+
+      editQuestion: async (questionData) => {
+        await get().apiRequest("/question/edit", {
+          method: "POST",
+          data: questionData,
+        });
       },
 
       deleteProductQuestion: async ({ consumerID, questionId }) => {
-        const data = await api.delete(
+        await api.delete(
           `/question/delete?question_id=${questionId}&consumer_id=${consumerID}`
         );
-        return data;
       },
 
       loginUser: async (credentials) => {
@@ -362,19 +379,33 @@ const useProductStore = create(
         }
       },
 
-      fetchComments: async ({ productID, page }) => {
+      updateConsumer: async (formData) => {
+        console.log(formData);
+        const data = await get().apiRequest("/consumer/edit-profile-details", {
+          method: "POST",
+          data: formData,
+        });
+
+        return data.data;
+      },
+
+      fetchComments: async ({ productID, page, limitData }) => {
         const response = await get().apiRequest(
-          `/comment/list?product_id=${productID}&page=${page}`
+          `/comment/list?product_id=${productID}&page=${page}&limitData=${limitData}`
         );
+        set({ productComments: response.comments.total });
         return response.comments.data;
       },
 
       addComment: async (commentData) => {
-        const data = await get().apiRequest("/comment/add", {
+        await get().apiRequest("/comment/add", {
           method: "POST",
           data: commentData,
         });
-        return data;
+        await get().fetchComments({
+          productID: commentData.product_id,
+          limitData: 1,
+        });
       },
 
       deleteComment: async ({ commentId, consumerID }) => {
@@ -383,6 +414,13 @@ const useProductStore = create(
           params: { comment_id: commentId, consumer_id: consumerID },
         });
         return data;
+      },
+
+      editComment: async (commentData) => {
+        await get().apiRequest("/comment/edit", {
+          method: "POST",
+          data: commentData,
+        });
       },
 
       fetchBillingAddresses: async (consumerID) => {
@@ -398,6 +436,7 @@ const useProductStore = create(
           `/consumer/add-billing-address`,
           billingData
         );
+        console.log("from api: ", billingData);
         const consumerID = billingData.consumer_id;
         await get().fetchBillingAddresses(consumerID);
         return data.data;
@@ -415,6 +454,7 @@ const useProductStore = create(
           `/consumer/edit-billing-address`,
           billingData
         );
+        console.log(billingData);
         const consumerID = billingData.consumer_id;
         await get().fetchBillingAddresses(consumerID);
         return data.data;
@@ -426,6 +466,14 @@ const useProductStore = create(
         );
         await get().fetchBillingAddresses(consumerID);
         return data.data;
+      },
+
+      deleteConsumerAccount: async (consumerID) => {
+        const data = await get().apiRequest("/consumer/delete", {
+          method: "DELETE",
+          params: { consumer_id: consumerID },
+        });
+        return data;
       },
 
       logout: () => {
