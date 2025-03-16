@@ -1,4 +1,6 @@
-import React, {
+"use client";
+
+import {
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -32,6 +34,7 @@ import AlertDialog from "../../../components/ui/AlertDialog";
 import useProductStore from "../../../components/api/useProductStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
+import RelatedProducts from "../../../components/ui/RelatedProducts";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -56,6 +59,7 @@ const ProductDetail = () => {
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [totalComments, setTotalComments] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasProduct, setHasProduct] = useState(false); // New state to track if product exists
 
   const {
     user,
@@ -82,13 +86,15 @@ const ProductDetail = () => {
 
   const product = useMemo(() => {
     const searchId = id || categoryProductId;
-    return searchId ? productMap[searchId] || null : null;
+    return searchId ? productMap[searchId.toString()] || null : null;
   }, [id, categoryProductId, productMap]);
 
-  const isInCart = useMemo(
-    () => cartItem.some((item) => item.products_id === product?.products_id),
-    [cartItem, product]
-  );
+  const isInCart = useMemo(() => {
+    if (!product || !cartItem || cartItem.length === 0) return false;
+    return cartItem.some(
+      (item) => item.products_id.toString() === product.products_id.toString()
+    );
+  }, [cartItem, product]);
 
   // Update header
   useLayoutEffect(() => {
@@ -132,6 +138,7 @@ const ProductDetail = () => {
 
   // Fetch questions
   useEffect(() => {
+    // Fetch questions only if product exists
     if (product) {
       const fetchQuestions = async () => {
         try {
@@ -144,6 +151,9 @@ const ProductDetail = () => {
         }
       };
       fetchQuestions();
+      setHasProduct(true); // Set hasProduct to true when product exists
+    } else {
+      setHasProduct(false); // Set hasProduct to false when product doesn't exist
     }
   }, [product, getProductQuestionList]);
 
@@ -175,6 +185,8 @@ const ProductDetail = () => {
       );
       return;
     }
+
+    // Check if product is already in cart
     if (isInCart) {
       showAlert(
         "Product already in cart",
@@ -184,12 +196,14 @@ const ProductDetail = () => {
       );
       return;
     }
+
     try {
       setIsAddingToCart(true);
       await addToCart({
         productID: product.products_id,
         consumerID: user.consumer_id,
       });
+      // Force re-render by updating a state
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
     } catch (err) {
       showAlert("Error", err.message || "Failed to add to cart");
@@ -412,6 +426,15 @@ const ProductDetail = () => {
     );
   }
 
+  // Add this useEffect to refresh product data when ID changes
+  useEffect(() => {
+    // Reset states when product ID changes
+    setCurrentSlide(0);
+
+    // You might need to add a function to fetch product details if needed
+    // For example: fetchProductDetails(id || categoryProductId);
+  }, [id, categoryProductId]);
+
   return (
     <View style={styles.mainContainer}>
       <ScrollView
@@ -554,14 +577,21 @@ const ProductDetail = () => {
           <View style={styles.buttonRow}>
             <Button
               textColor={theme.colors.button}
-              // buttonColor={theme.colors.button}
               onPress={handleAddToCart}
-              style={[styles.button, { borderColor: theme.colors.button }]}
-              disabled={isInCart}
+              style={[
+                styles.button,
+                {
+                  borderColor: theme.colors.button,
+                  backgroundColor: isInCart
+                    ? theme.colors.background
+                    : undefined,
+                },
+              ]}
+              disabled={isAddingToCart || isInCart}
               loading={isAddingToCart}
-              accessibilityLabel={isInCart ? "Product in cart" : "Add to cart"}
+              accessibilityLabel={isInCart ? "Already in cart" : "Add to cart"}
             >
-              Add to Cart
+              {isInCart === true ? "Already in cart" : "Add to cart"}
             </Button>
             <Button
               onPress={handleShare}
@@ -591,7 +621,7 @@ const ProductDetail = () => {
           <Text
             style={[styles.questionsTitle, { color: theme.colors.textColor }]}
           >
-            Product Questions ({totalQuestions})
+            Product Questions {totalQuestions && `(${totalQuestions})`}
           </Text>
           {displayedQuestions.length > 0 ? (
             displayedQuestions.map((q) => {
@@ -638,6 +668,10 @@ const ProductDetail = () => {
             Ask a Question
           </Button>
         </View>
+        <RelatedProducts
+          relatedProducts={productData}
+          currentProductId={product?.products_id}
+        />
       </ScrollView>
 
       {/* Alert Dialog */}

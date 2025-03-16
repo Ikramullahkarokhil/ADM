@@ -25,8 +25,14 @@ const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = isDarkTheme ? darkTheme : lightTheme;
-  const { fetchProfile, logout, user, listCart, fetchBillingAddresses } =
-    useProductStore();
+  const {
+    fetchProfile,
+    logout,
+    user,
+    listCart,
+    fetchBillingAddresses,
+    listOrders,
+  } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
@@ -82,8 +88,14 @@ const Layout = () => {
         const profilePromise = fetchProfile(consumer_id);
         const cartPromise = listCart(consumer_id);
         const billingAddressPromise = fetchBillingAddresses(consumer_id);
+        const ordersPromise = listOrders(consumer_id);
 
-        await Promise.all([profilePromise, cartPromise, billingAddressPromise]);
+        await Promise.all([
+          profilePromise,
+          cartPromise,
+          billingAddressPromise,
+          ordersPromise,
+        ]);
       } catch (error) {
         console.error("Error fetching user data:", error);
       }

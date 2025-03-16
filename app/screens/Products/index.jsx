@@ -4,6 +4,7 @@ import React, {
   useState,
   useLayoutEffect,
   useRef,
+  useMemo,
 } from "react";
 import {
   View,
@@ -39,6 +40,7 @@ const ProductItem = ({
   onLongPress,
   onAddToCart,
   onShare,
+  isInCart,
   renderRatingStars,
 }) => {
   return (
@@ -117,7 +119,11 @@ const ProductItem = ({
                 }}
                 activeOpacity={0.7}
               >
-                <Feather name="shopping-cart" size={16} color="white" />
+                {isInCart ? ( // Correctly uses the boolean isInCart prop
+                  <Feather name="check-circle" size={16} color="white" />
+                ) : (
+                  <Feather name="shopping-cart" size={16} color="white" />
+                )}
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -240,6 +246,14 @@ const ProductList = () => {
     }
   }, [subcategoryId, fetchProductsBySubcategory]);
 
+  const isInCart = (item) => {
+    if (!item || !cartItem || cartItem.length === 0) return false;
+    return cartItem.some(
+      (cartItem) =>
+        cartItem.products_id.toString() === item.products_id.toString()
+    );
+  };
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -268,6 +282,7 @@ const ProductList = () => {
         return;
       }
 
+      // Check if the product is already in the cart
       if (cartItem.some((item) => item.products_id === product.products_id)) {
         setAlertState({
           title: "Product already in cart",
@@ -280,6 +295,7 @@ const ProductList = () => {
       }
 
       try {
+        // Show success message
         ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
         await addToCart({
           productID: product.products_id,
@@ -410,6 +426,7 @@ const ProductList = () => {
                   onAddToCart={handleAddToCart}
                   onShare={shareProduct}
                   renderRatingStars={renderRatingStars}
+                  isInCart={isInCart(item)}
                 />
               )
         }

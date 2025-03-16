@@ -20,6 +20,7 @@ const initialState = {
   productData: [],
   favProducts: [],
   cartItem: [],
+  orders: [],
   productsBySubcategory: {},
   productQuestions: null,
   productComments: null,
@@ -247,7 +248,7 @@ const useProductStore = create(
       changePassword: async ({ consumerID, password }) => {
         const data = await api.post(
           `/consumer/change-password?consumer_id=${consumerID}&password=${password}`
-        ); // Fixed trailing comma in URL
+        );
         return data;
       },
 
@@ -408,10 +409,14 @@ const useProductStore = create(
         });
       },
 
-      deleteComment: async ({ commentId, consumerID }) => {
+      deleteComment: async ({ commentId, consumerID, productId }) => {
         const data = await get().apiRequest("/comment/delete", {
           method: "DELETE",
           params: { comment_id: commentId, consumer_id: consumerID },
+        });
+        await get().fetchComments({
+          productID: productId,
+          limitData: 1,
         });
         return data;
       },
@@ -466,6 +471,16 @@ const useProductStore = create(
         );
         await get().fetchBillingAddresses(consumerID);
         return data.data;
+      },
+
+      proceedOrder: async (items) => {
+        const response = await api.post(`/order/process`, items);
+        return response.data;
+      },
+
+      listOrders: async (consumerId) => {
+        const response = await api.get(`/orders/${consumerId}`);
+        set({ orders: response.data.orders });
       },
 
       deleteConsumerAccount: async (consumerID) => {

@@ -1,79 +1,170 @@
 import React, { useLayoutEffect } from "react";
-import { View, Text, FlatList, Image, StyleSheet } from "react-native";
-import { Button, useTheme } from "react-native-paper";
-import { useNavigation } from "expo-router";
-import useOrderStore from "../../components/store/useOrderStore";
-import { MaterialIcons } from "@expo/vector-icons"; // Import the icon library
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  Pressable,
+} from "react-native";
+import { useNavigation, useRouter } from "expo-router";
+import { MaterialIcons } from "@expo/vector-icons";
+import { useTheme } from "react-native-paper";
+import useProductStore from "../../components/api/useProductStore";
+
+const getOrderStatus = (status) => {
+  // Ensure status is a string and provide a default if undefined
+  const statusStr =
+    typeof status === "string" ? status.toLowerCase() : "unknown";
+  return statusStr.charAt(0).toUpperCase() + statusStr.slice(1);
+};
 
 const Orders = () => {
-  const orders = useOrderStore((state) => state.orders);
-  const deleteOrder = useOrderStore((state) => state.deleteOrder);
   const navigation = useNavigation();
-  const theme = useTheme();
+  const router = useRouter();
+  const { colors } = useTheme();
+  const { orders } = useProductStore();
 
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Your Orders",
+      headerStyle: {
+        backgroundColor: colors.primary,
+      },
+      headerTintColor: colors.textColor,
     });
-  }, [navigation]);
+  }, [navigation, colors]);
 
-  const handleCancel = (ItemId) => {
-    deleteOrder(ItemId);
+  const handleCancel = (orderId) => {
+    console.log("Canceling order:", orderId);
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.itemContainer}>
-      <Image
-        source={
-          item.image
-            ? { uri: item.image }
-            : require("../../assets/images/imageSkeleton.jpg")
-        }
-        style={styles.itemImage}
-      />
-      <View style={styles.itemDetails}>
-        <Text style={styles.itemName} numberOfLines={2}>
-          {item.title}
-        </Text>
-        <Text style={styles.itemPrice}>${item.spu}</Text>
-        <View style={styles.buttonContainer}>
-          <Button
-            style={styles.button}
-            mode="contained"
-            contentStyle={{ backgroundColor: theme.colors.button }}
-            onPress={() => {
-              // For example, navigate to an order detail page
-              // navigation.navigate("OrderDetail", { orderId: item.id });
-            }}
-          >
-            Details
-          </Button>
-          <Button
-            onPress={() => handleCancel(item.products_id)}
-            style={styles.button}
-            contentStyle={{ backgroundColor: theme.colors.button }}
-            mode="contained"
-          >
-            Cancel
-          </Button>
+  const getStatusColor = (status) => {
+    // Ensure status is a string and handle undefined/null cases
+    const statusStr =
+      typeof status === "string" ? status.toLowerCase() : "unknown";
+    switch (statusStr) {
+      case "pending":
+        return colors.progressColor; // Blue
+      case "in-process":
+        return colors.primary; // Primary color
+      case "on-way":
+        return colors.inactiveColor; // Dark
+      case "delivered":
+        return colors.button; // Green
+      case "cancelled":
+      case "rejected":
+        return colors.deleteButton; // Red
+      case "packing":
+        return "#FFA500"; // Orange
+      default:
+        return colors.textColor; // Fallback
+    }
+  };
+
+  const renderItem = ({ item }) => {
+    const statusText = getOrderStatus(item.status);
+    const statusColor = getStatusColor(item.status);
+
+    return (
+      <Pressable style={[styles.card, { backgroundColor: colors.primary }]}>
+        <View
+          style={[
+            styles.cardHeader,
+            { borderBottomColor: colors.activeIndicatorStyle },
+          ]}
+        >
+          <Text style={[styles.orderNumber, { color: colors.textColor }]}>
+            Order #{item.order_no}
+          </Text>
+          <Text style={[styles.status, { color: statusColor }]}>
+            {statusText}
+          </Text>
         </View>
-      </View>
-    </View>
-  );
+
+        <View style={styles.cardBody}>
+          <View style={styles.infoRow}>
+            <MaterialIcons
+              name="payment"
+              size={20}
+              color={colors.inactiveColor}
+            />
+            <Text style={[styles.infoText, { color: colors.textColor }]}>
+              Payment type: {item.payment_type}
+            </Text>
+          </View>
+          <View style={styles.infoRow}>
+            <MaterialIcons
+              name="calendar-today"
+              size={20}
+              color={colors.inactiveColor}
+            />
+            <Text style={[styles.infoText, { color: colors.textColor }]}>
+              Ordered on: {item.date}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.cardFooter}>
+          <TouchableOpacity
+            style={[styles.detailButton, { backgroundColor: colors.button }]}
+            onPress={() =>
+              router.navigate({
+                pathname: "/screens/OrderDetails",
+                params: { orderId: item.consumer_orders_id },
+              })
+            }
+            activeOpacity={0.7}
+          >
+            <Text style={styles.detailButtonText}>View Details</Text>
+          </TouchableOpacity>
+          {statusText === "Pending" && (
+            <TouchableOpacity
+              style={[
+                styles.cancelButton,
+                { borderColor: colors.deleteButton },
+              ]}
+              onPress={() => handleCancel(item.consumer_orders_id)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.cancelButtonText,
+                  { color: colors.deleteButton },
+                ]}
+              >
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+    <View style={[styles.container, { backgroundColor: colors.primary }]}>
       {orders.length > 0 ? (
         <FlatList
           data={orders}
           renderItem={renderItem}
-          keyExtractor={(item) => item.products_id}
+          keyExtractor={(item) => item.consumer_orders_id}
           contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={false}
         />
       ) : (
-        <View style={styles.emptyContainer}>
-          <MaterialIcons name="remove-shopping-cart" size={64} color="#888" />
-          <Text style={styles.emptyText}>You have no orders</Text>
+        <View style={styles.emptyState}>
+          <MaterialIcons
+            name="remove-shopping-cart"
+            size={80}
+            color={colors.subInactiveColor}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
+            No Orders Yet
+          </Text>
+          <Text style={[styles.emptySubtitle, { color: colors.inactiveColor }]}>
+            Your placed orders will appear here
+          </Text>
         </View>
       )}
     </View>
@@ -85,50 +176,95 @@ export default Orders;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 16,
   },
   list: {
-    paddingBottom: 16,
+    padding: 16,
+    paddingBottom: 20,
   },
-  itemContainer: {
+  card: {
+    borderRadius: 16,
+    marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  cardHeader: {
     flexDirection: "row",
-    backgroundColor: "#f9f9f9",
-    borderRadius: 8,
-    marginBottom: 16,
-    overflow: "hidden",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
   },
-  itemImage: {
-    width: 110,
-    height: 130,
-  },
-  itemDetails: {
-    flex: 1,
-    paddingHorizontal: 16,
-    justifyContent: "center",
-  },
-  itemName: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  itemPrice: {
+  orderNumber: {
     fontSize: 16,
-    color: "#888",
-    marginVertical: 8,
+    fontWeight: "600",
   },
-  emptyContainer: {
+  status: {
+    fontSize: 14,
+    fontWeight: "500",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  cardBody: {
+    padding: 16,
+  },
+  infoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  infoText: {
+    fontSize: 14,
+    marginLeft: 12,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    padding: 16,
+    paddingTop: 0,
+    gap: 12,
+  },
+  detailButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    elevation: 2,
+  },
+  detailButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    backgroundColor: "transparent",
+  },
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
-  emptyText: {
-    fontSize: 18,
-    color: "#888",
-    textAlign: "center",
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: "700",
     marginTop: 16,
   },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 2,
+  emptySubtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 8,
+    opacity: 0.8,
   },
 });

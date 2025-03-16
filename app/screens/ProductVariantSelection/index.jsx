@@ -1,3 +1,5 @@
+"use client";
+
 import { useLayoutEffect, useState, useEffect } from "react";
 import {
   View,
@@ -7,7 +9,6 @@ import {
   Image,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
   ScrollView,
   Platform,
   Modal,
@@ -21,10 +22,10 @@ import {
   RadioButton,
 } from "react-native-paper";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import useOrderStore from "../../../components/store/useOrderStore";
 import useProductStore from "../../../components/api/useProductStore";
 import { MaterialCommunityIcons, Feather, Entypo } from "@expo/vector-icons";
 import useThemeStore from "../../../components/store/useThemeStore";
+import AlertDialog from "../../../components/ui/AlertDialog";
 
 const ProductVariantSelection = () => {
   const navigation = useNavigation();
@@ -32,9 +33,8 @@ const ProductVariantSelection = () => {
   const theme = useTheme();
   const { isDarkTheme } = useThemeStore();
   const { item } = useLocalSearchParams();
-  const { deleteFromCart } = useProductStore();
-  const { addOrder } = useOrderStore();
-  const { user, consumerBillingAddress } = useProductStore();
+  const { user, consumerBillingAddress, proceedOrder, listCart } =
+    useProductStore();
 
   const [selectedItems, setSelectedItems] = useState([]);
   const [selections, setSelections] = useState([]);
@@ -45,6 +45,12 @@ const ProductVariantSelection = () => {
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [selectedBillingAddress, setSelectedBillingAddress] = useState(null);
   const [expandedAddressId, setExpandedAddressId] = useState(null);
+
+  // Alert dialog state
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -74,15 +80,28 @@ const ProductVariantSelection = () => {
       }
 
       setIsLoading(false);
+
+      // Auto-select default billing address (status = 1)
+      if (consumerBillingAddress && consumerBillingAddress.length > 0) {
+        const defaultAddress = consumerBillingAddress.find(
+          (addr) => addr.status === 1
+        );
+        if (defaultAddress) {
+          setSelectedBillingAddress(defaultAddress);
+        } else {
+          // If no address with status 1, select the first one
+          setSelectedBillingAddress(consumerBillingAddress[0]);
+        }
+      }
     } catch (error) {
       console.error("Error parsing items:", error);
-      Alert.alert(
+      showAlert(
         "Error",
-        "There was a problem loading your selected items. Please try again."
+        "There was a problem loading your selected items. Please try again.",
+        () => router.back()
       );
-      router.back();
     }
-  }, [item, router]);
+  }, [item, router, consumerBillingAddress]);
 
   useEffect(() => {
     if (selectedItems.length > 0 && selections.length > 0) {
@@ -98,6 +117,14 @@ const ProductVariantSelection = () => {
       setTotalPrice(total);
     }
   }, [selectedItems, selections]);
+
+  // Helper function to show alerts
+  const showAlert = (title, message, confirmAction = () => {}) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertConfirmAction(() => confirmAction);
+    setAlertVisible(true);
+  };
 
   const handleVariantSelect = (itemId, variantTitle, value) => {
     setSelections((prev) =>
@@ -181,24 +208,26 @@ const ProductVariantSelection = () => {
 
   const checkBillingAddresses = () => {
     if (!consumerBillingAddress || consumerBillingAddress.length === 0) {
-      Alert.alert(
+      showAlert(
         "Billing Address Required",
         "You need to add a billing address before placing an order.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Add Address",
-            onPress: () => router.push("/screens/BillingAddress"),
-          },
-        ]
+        () => router.push("/screens/BillingAddress")
       );
       return false;
-    } else if (consumerBillingAddress.length === 1) {
-      setSelectedBillingAddress(consumerBillingAddress[0]);
-      return true;
     } else {
-      setShowBillingModal(true);
-      return false;
+      // If no address is selected yet, try to select the default one (status = 1)
+      if (!selectedBillingAddress) {
+        const defaultAddress = consumerBillingAddress.find(
+          (addr) => addr.status === 1
+        );
+        if (defaultAddress) {
+          setSelectedBillingAddress(defaultAddress);
+        } else {
+          // If no default address, select the first one
+          setSelectedBillingAddress(consumerBillingAddress[0]);
+        }
+      }
+      return true;
     }
   };
 
@@ -226,10 +255,9 @@ const ProductVariantSelection = () => {
     });
 
     if (incompleteItems.length > 0) {
-      Alert.alert(
+      showAlert(
         "Incomplete Selection",
-        "Please select all variants for each item before placing your order.",
-        [{ text: "OK" }]
+        "Please select all variants for each item before placing your order."
       );
       return;
     }
@@ -246,67 +274,65 @@ const ProductVariantSelection = () => {
   const processOrder = async () => {
     setIsSubmitting(true);
     try {
-      await Promise.all(
-        selections.map((sel) => {
-          const currentItem = selectedItems.find(
-            (i) => i.consumer_cart_items_id === sel.id
+      // Format items for the API
+      const formattedItems = selections.map((sel) => {
+        const currentItem = selectedItems.find(
+          (i) => i.consumer_cart_items_id === sel.id
+        );
+
+        // Check if item has valid variants
+        const hasRealVariants =
+          currentItem.variants &&
+          currentItem.variants.length > 0 &&
+          !(
+            currentItem.variants.length === 1 &&
+            (currentItem.variants[0].variants_id === null ||
+              currentItem.variants[0].variant_values === null ||
+              currentItem.variants[0].variant_title === null)
           );
 
-          const hasRealVariants =
-            currentItem.variants &&
-            currentItem.variants.length > 0 &&
-            !(
-              currentItem.variants.length === 1 &&
-              (currentItem.variants[0].variants_id === null ||
-                currentItem.variants[0].variant_values === null ||
-                currentItem.variants[0].variant_title === null)
-            );
+        // Format variants for API
+        const formattedVariants = hasRealVariants
+          ? Object.entries(sel.selectedVariants).map(([title, value]) => {
+              // Find the variant_id that matches this title
+              const variantObj = currentItem.variants.find(
+                (v) => v.variant_title === title
+              );
+              return {
+                variant_id: variantObj?.variants_id,
+                variant_value: value,
+              };
+            })
+          : [];
 
-          const orderItem = {
-            ...currentItem,
-            select_variant_values: hasRealVariants
-              ? Object.values(sel.selectedVariants)
-              : [],
-            select_variant_ids: hasRealVariants
-              ? currentItem.variants.map((v) => v.variants_id)
-              : [],
-            qty: sel.quantity,
-            billing_address_id:
-              selectedBillingAddress.consumer_billing_address_id,
-          };
-          return addOrder(orderItem);
-        })
-      );
+        return {
+          product_id: currentItem.products_id || currentItem.id,
+          qty: sel.quantity,
+          variants: formattedVariants,
+        };
+      });
+      // Create the order payload
+      const orderPayload = {
+        items: formattedItems,
+        payment_type: "cash",
+        consumer_id: user.consumer_id,
+        billing_address_id: selectedBillingAddress.consumer_billing_address_id,
+      };
 
-      await Promise.all(
-        selectedItems.map((item) =>
-          deleteFromCart({
-            productID: item.consumer_cart_items_id,
-            consumerID: user?.consumer_id,
-          })
-        )
-      );
+      // Process the order using the API
+      const response = await proceedOrder(orderPayload);
+      await listCart(user.consumer_id);
 
-      Alert.alert(
+      showAlert(
         "Order Placed Successfully",
-        "Your order has been placed and items removed from cart.",
-        [
-          {
-            text: "View Orders",
-            onPress: () => router.replace("/Orders"),
-          },
-          {
-            text: "Continue Shopping",
-            onPress: () => router.back(),
-          },
-        ]
+        `Your order no is ${response.order_no}`,
+        () => router.replace("/Orders")
       );
     } catch (error) {
-      console.error("Failed to place orders:", error);
-      Alert.alert(
+      console.error("Failed to place order:", error);
+      showAlert(
         "Order Failed",
-        "An error occurred while placing your order. Please try again.",
-        [{ text: "OK" }]
+        "An error occurred while placing your order. Please try again."
       );
     } finally {
       setIsSubmitting(false);
@@ -496,7 +522,7 @@ const ProductVariantSelection = () => {
                 if (selectedBillingAddress) {
                   processOrder();
                 } else {
-                  Alert.alert("Please select a billing address");
+                  showAlert("Error", "Please select a billing address");
                 }
               }}
               style={[
@@ -887,7 +913,7 @@ const ProductVariantSelection = () => {
 
             <Divider style={styles.divider} />
 
-            {itemHasValidVariants ? (
+            {itemHasValidVariants && (
               <View style={styles.variantsContainer}>
                 {item.variants.map((variant) => {
                   const isVariantSelected =
@@ -997,17 +1023,6 @@ const ProductVariantSelection = () => {
                     </View>
                   );
                 })}
-              </View>
-            ) : (
-              <View style={styles.noVariantsContainer}>
-                <Text
-                  style={[
-                    styles.noVariantsText,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  This product has no variants to select.
-                </Text>
               </View>
             )}
           </View>
@@ -1140,9 +1155,10 @@ const ProductVariantSelection = () => {
                 allComplete ? styles.completeButton : styles.incompleteButton,
               ]}
               contentStyle={styles.buttonContent}
-              labelStyle={[styles.buttonLabel, { color: theme.colors.primary }]}
+              labelStyle={styles.buttonLabel}
               loading={isSubmitting}
               disabled={isSubmitting || !allComplete}
+              textColor="white"
               icon={({ size, color }) => (
                 <Feather
                   name={allComplete ? "check-circle" : "alert-circle"}
@@ -1221,6 +1237,20 @@ const ProductVariantSelection = () => {
         />
       </View>
       <BillingAddressModal />
+
+      {/* Add the AlertDialog component */}
+      <AlertDialog
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onDismiss={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          alertConfirmAction();
+        }}
+        confirmText="OK"
+        cancelText="Cancel"
+      />
     </View>
   );
 };

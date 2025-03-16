@@ -43,15 +43,19 @@ const Questions = () => {
     message: "",
     onConfirm: () => {},
   });
+  const [editingQuestionId, setEditingQuestionId] = useState(null);
 
   const {
     user,
     getProductQuestionList,
     addProductQuestion,
     deleteProductQuestion,
-    updateProductQuestion,
+    editQuestion,
   } = useProductStore();
   const isLoadingRef = useRef(false);
+  const pendingQuestionsRef = useRef(new Set());
+  const initialLoadDoneRef = useRef(false);
+  const editInputRef = useRef(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -62,24 +66,44 @@ const Questions = () => {
   }, [navigation, theme]);
 
   const loadQuestions = useCallback(
-    async (page = 1) => {
+    async (page = 1, isInitialLoad = false) => {
+      if (isInitialLoad && initialLoadDoneRef.current) {
+        return;
+      }
+
       if (isLoadingRef.current) return;
       isLoadingRef.current = true;
       setIsLoading(true);
+
       try {
         const data = await getProductQuestionList(productId, page);
+
+        if (isInitialLoad) {
+          initialLoadDoneRef.current = true;
+        }
+
         setQuestions((prev) => {
-          const existingIds = new Set(prev.map((q) => data.q.products_qna_id));
-          const filteredNewQuestions = data.questions.filter(
-            (q) => !existingIds.has(q.products_qna_id)
+          const serverQuestionIds = new Set(
+            data.questions.map((q) => q.products_qna_id)
           );
-          return page === 1
-            ? data.questions
-            : [...prev, ...filteredNewQuestions];
+          const filteredPrev =
+            page === 1
+              ? []
+              : prev.filter(
+                  (q) =>
+                    !serverQuestionIds.has(q.products_qna_id) && !q.isTemporary
+                );
+
+          return [...filteredPrev, ...data.questions];
         });
         setQuestionPage(page);
         setHasMoreQuestions(data.questions?.length > 0);
+
+        data.questions.forEach((q) => {
+          pendingQuestionsRef.current.delete(q.question);
+        });
       } catch (err) {
+        console.error("Failed to load questions:", err);
         showAlert("Error", "Failed to load questions.", () => {});
       } finally {
         isLoadingRef.current = false;
@@ -90,11 +114,18 @@ const Questions = () => {
   );
 
   useEffect(() => {
-    loadQuestions(1);
+    loadQuestions(1, true);
+    return () => {
+      initialLoadDoneRef.current = false;
+    };
   }, [loadQuestions]);
 
   const showAlert = useCallback((title, message, onConfirm) => {
-    setAlertConfig({ title, message, onConfirm });
+    setAlertConfig({
+      title,
+      message,
+      onConfirm,
+    });
     setAlertVisible(true);
   }, []);
 
@@ -108,35 +139,60 @@ const Questions = () => {
       showAlert("Login Required", "Please login to ask a question.", () => {});
       return;
     }
+
+    if (pendingQuestionsRef.current.has(trimmed)) {
+      ToastAndroid.show("Question already being processed", ToastAndroid.SHORT);
+      return;
+    }
+
     setIsAddingQuestion(true);
+    pendingQuestionsRef.current.add(trimmed);
+
     try {
+      const tempId = Date.now();
       const newQ = {
-        products_qna_id: Date.now(), // Temporary ID until server responds
+        products_qna_id: tempId,
         question: trimmed,
         consumer_id: user.consumer_id,
         consumer_name: user.name || "Anonymous",
         date: new Date().toISOString().split("T")[0],
         answers: [],
+        isTemporary: true,
       };
+
       setQuestions((prev) => [...prev, newQ]);
       setNewQuestion("");
-      ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
 
-      // Background server update
-      await addProductQuestion({
+      const response = await addProductQuestion({
         productID: productId,
         consumerID: user.consumer_id,
         question: trimmed,
-      }).catch((err) => {
-        console.error("Background add failed:", err);
-        ToastAndroid.show("Failed to sync question", ToastAndroid.SHORT);
       });
+
+      if (response && response.success) {
+        loadQuestions(1);
+        ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
+      } else {
+        setQuestions((prev) =>
+          prev.filter((q) => q.products_qna_id !== tempId)
+        );
+        ToastAndroid.show("Failed to post question", ToastAndroid.SHORT);
+      }
     } catch (err) {
-      showAlert("Error", err.message, () => {});
+      console.error("Error adding question:", err);
+      showAlert("Error", err.message || "Failed to add question", () => {});
+      pendingQuestionsRef.current.delete(trimmed);
     } finally {
       setIsAddingQuestion(false);
     }
-  }, [newQuestion, user, addProductQuestion, productId, showAlert]);
+  }, [
+    newQuestion,
+    user,
+    addProductQuestion,
+    productId,
+    showAlert,
+    loadQuestions,
+  ]);
 
   const handleDeleteQuestion = useCallback(
     async (questionId) => {
@@ -144,43 +200,72 @@ const Questions = () => {
         prev.filter((q) => q.products_qna_id !== questionId)
       );
 
-      ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
-      // Background server update
-      await deleteProductQuestion({
-        consumerID: user.consumer_id,
-        questionId,
-      }).catch((err) => {
-        console.error("Background delete failed:", err);
-        ToastAndroid.show("Failed to sync deletion", ToastAndroid.SHORT);
-      });
+      try {
+        await deleteProductQuestion({
+          consumerID: user.consumer_id,
+          questionId,
+        });
+        ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
+      } catch (err) {
+        console.error("Failed to delete question:", err);
+        ToastAndroid.show("Failed to delete question", ToastAndroid.SHORT);
+        loadQuestions(1);
+      }
     },
-    [user]
+    [user, deleteProductQuestion, loadQuestions]
   );
 
   const handleUpdateQuestion = useCallback(
     async (questionId, newText) => {
+      setEditingQuestionId(null);
+
+      const originalQuestion = questions.find(
+        (q) => q.products_qna_id === questionId
+      );
+      if (
+        !originalQuestion ||
+        !newText.trim() ||
+        newText === originalQuestion.question
+      ) {
+        return;
+      }
+
       setQuestions((prev) =>
         prev.map((q) =>
           q.products_qna_id === questionId ? { ...q, question: newText } : q
         )
       );
-      ToastAndroid.show("Question updated", ToastAndroid.SHORT);
 
-      // Background server update (assuming updateProductQuestion exists)
-      updateProductQuestion({
-        consumerID: user.consumer_id,
-        questionId,
-        question: newText,
-      }).catch((err) => {
-        console.error("Background update failed:", err);
-        ToastAndroid.show("Failed to sync update", ToastAndroid.SHORT);
-      });
+      try {
+        ToastAndroid.show("Question updated", ToastAndroid.SHORT);
+        await editQuestion({
+          question: newText,
+          question_id: questionId,
+          consumer_id: user.consumer_id,
+        });
+      } catch (err) {
+        console.error("Failed to update question:", err);
+        ToastAndroid.show("Failed to update question", ToastAndroid.SHORT);
+
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.products_qna_id === questionId ? originalQuestion : q
+          )
+        );
+      }
     },
-    [user, updateProductQuestion]
+    [user, editQuestion, questions]
   );
 
+  const startEditingQuestion = useCallback((questionId, questionText) => {
+    setEditingQuestionId(questionId);
+    setNewQuestion(questionText);
+  }, []);
+
   const showQuestionOptions = useCallback(
-    (question) => {
+    (question, event) => {
+      event.stopPropagation();
+
       const isUserQuestion = user && question.consumer_id === user.consumer_id;
       if (!isUserQuestion || (question.answers && question.answers.length > 0))
         return;
@@ -194,36 +279,31 @@ const Questions = () => {
           options,
           destructiveButtonIndex,
           cancelButtonIndex,
-          tintColor: theme.colors.textColor, // Text color for options
+          tintColor: theme.colors.textColor,
           containerStyle: { backgroundColor: theme.colors.primary },
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
-            showAlert(
-              "Update Question",
-              "Enter new question text:",
-              (newText) => {
-                if (newText)
-                  handleUpdateQuestion(question.products_qna_id, newText);
-              },
-              true
-            );
+            startEditingQuestion(question.products_qna_id, question.question);
           } else if (buttonIndex === 1) {
             handleDeleteQuestion(question.products_qna_id);
           }
         }
       );
     },
-    [user, handleDeleteQuestion, handleUpdateQuestion, showAlert, theme]
+    [user, handleDeleteQuestion, startEditingQuestion, theme]
   );
 
   const renderQuestionItem = useCallback(
     ({ item }) => (
-      <TouchableOpacity onPress={() => showQuestionOptions(item)}>
-        <QuestionItem item={item} theme={theme} />
-      </TouchableOpacity>
+      <QuestionItem
+        item={item}
+        theme={theme}
+        isEditing={editingQuestionId === item.products_qna_id}
+        onOptionsPress={(e) => showQuestionOptions(item, e)}
+      />
     ),
-    [showQuestionOptions, theme]
+    [showQuestionOptions, theme, editingQuestionId]
   );
 
   const handleLoadMore = useCallback(() => {
@@ -234,6 +314,11 @@ const Questions = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
+      <MaterialCommunityIcons
+        name="comment-question-outline"
+        size={80}
+        color={theme.colors.inactiveColor}
+      />
       <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
         No questions yet. Be the first to ask!
       </Text>
@@ -268,18 +353,13 @@ const Questions = () => {
           keyExtractor={(item) => item.products_qna_id.toString()}
           renderItem={renderQuestionItem}
           ItemSeparatorComponent={ItemSeparator}
-          ListEmptyComponent={
-            isLoading && questionPage > 1 ? (
-              <ActivityIndicator
-                size="small"
-                color={theme.colors.textColor}
-                style={styles.footerIndicator}
-              />
-            ) : (
-              renderEmptyState
-            )
-          }
-          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={renderEmptyState}
+          contentContainerStyle={[
+            styles.listContent,
+            questions.length === 0 && styles.emptyListContent,
+          ]}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.3}
         />
       )}
       <View
@@ -289,6 +369,7 @@ const Questions = () => {
         ]}
       >
         <TextInput
+          ref={editInputRef}
           value={newQuestion}
           onChangeText={setNewQuestion}
           placeholder="Ask a question..."
@@ -306,7 +387,11 @@ const Questions = () => {
         />
         <IconButton
           icon={isAddingQuestion ? "loading" : "send"}
-          onPress={handleAddQuestion}
+          onPress={
+            editingQuestionId
+              ? () => handleUpdateQuestion(editingQuestionId, newQuestion)
+              : handleAddQuestion
+          }
           iconColor={theme.colors.button}
           disabled={isAddingQuestion}
           accessibilityLabel="Post Question"
@@ -325,18 +410,25 @@ const Questions = () => {
         }}
         confirmText="OK"
         cancelText="Cancel"
-        withInput={alertConfig.title === "Update Question"} // Assuming AlertDialog supports this
       />
     </GestureHandlerRootView>
   );
 };
 
-const QuestionItem = memo(({ item, theme }) => {
+const QuestionItem = memo(({ item, theme, isEditing, onOptionsPress }) => {
   const { user } = useProductStore();
   const isUserQuestion = user && item.consumer_id === user.consumer_id;
+  const isTemporary = item.isTemporary;
+
   return (
     <View
-      style={[styles.questionItem, { backgroundColor: theme.colors.surface }]}
+      style={[
+        styles.questionItem,
+        {
+          backgroundColor: theme.colors.surface,
+          opacity: isTemporary ? 0.8 : 1,
+        },
+      ]}
     >
       <View style={styles.questionHeader}>
         <Image
@@ -352,6 +444,7 @@ const QuestionItem = memo(({ item, theme }) => {
             style={[styles.questionAuthor, { color: theme.colors.textColor }]}
           >
             {item.consumer_name || "Anonymous"}
+            {isTemporary && " (Posting...)"}
           </Text>
           <Text
             style={[
@@ -365,6 +458,7 @@ const QuestionItem = memo(({ item, theme }) => {
         {isUserQuestion && (
           <TouchableOpacity
             style={styles.optionsButton}
+            onPress={onOptionsPress}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <MaterialCommunityIcons
@@ -375,9 +469,11 @@ const QuestionItem = memo(({ item, theme }) => {
           </TouchableOpacity>
         )}
       </View>
+
       <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
         {item.question}
       </Text>
+
       {item.answers && item.answers.length > 0 && (
         <View style={styles.answersContainer}>
           {item.answers.map((ans) => (
@@ -431,6 +527,10 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 100, // Increased to ensure scrolling doesn't hide content behind input
+  },
+  emptyListContent: {
+    flex: 1,
+    justifyContent: "center",
   },
   questionItem: {
     padding: 15,
@@ -505,6 +605,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingBottom: 40,
     elevation: 10,
+    width: "100%",
   },
   questionInput: {
     flex: 1,
@@ -520,14 +621,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    // padding: 20,
-    // minHeight: 200,
-    alignSelf: "center",
+    padding: 20,
   },
   emptyText: {
     fontSize: 16,
     textAlign: "center",
     opacity: 0.7,
+    marginTop: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -541,6 +641,32 @@ const styles = StyleSheet.create({
   },
   footerIndicator: {
     padding: 20,
+  },
+  optionsButton: {
+    padding: 5,
+  },
+  // New styles for inline editing
+  editContainer: {
+    marginLeft: 50,
+  },
+  editInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    minHeight: 80,
+  },
+  editButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 8,
+  },
+  editButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 4,
+    marginLeft: 8,
   },
 });
 

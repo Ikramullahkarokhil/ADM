@@ -460,27 +460,29 @@ const Comments = () => {
   }, [editingComment, newComment, editComment, user, handleAddComment]);
 
   const handleDeleteComment = useCallback(
-    (commentId) => {
+    (comment) => {
       showAlert(
         "Delete Comment",
         "Are you sure you want to delete this comment?",
         () => {
           // Store the comment being deleted in case we need to restore it
           const commentToDelete = comments.find(
-            (c) => c.product_comments_id === commentId
+            (c) => c.product_comments_id === comment.product_comments_id
           );
 
           // Update UI immediately
           setComments((prev) =>
-            prev.filter((c) => c.product_comments_id !== commentId)
+            prev.filter(
+              (c) => c.product_comments_id !== comment.product_comments_id
+            )
           );
 
           ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
 
-          // Make API call in background
           deleteComment({
-            commentId: commentId,
+            commentId: comment.product_comments_id,
             consumerID: user.consumer_id,
+            productId: comment.products_id,
           })
             .then(() => {
               // Invalidate cache after deleting
@@ -521,8 +523,7 @@ const Comments = () => {
         },
         (buttonIndex) => {
           if (buttonIndex === 0) handleEditComment(comment);
-          else if (buttonIndex === 1)
-            handleDeleteComment(comment.product_comments_id);
+          else if (buttonIndex === 1) handleDeleteComment(comment);
         }
       );
     },
