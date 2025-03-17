@@ -139,6 +139,19 @@ const useProductStore = create(
         }
       },
 
+      searchFavoriteProduct: async (productId) => {
+        try {
+          set({ loading: true, error: null });
+          const data = await get().apiRequest("/get-search-products", {
+            params: { products_id: productId },
+          });
+          return data?.data || [];
+        } catch (err) {
+          set({ error: err.message, loading: false });
+          throw err;
+        }
+      },
+
       fetchProductByCategories: async (subCategoryIds = []) => {
         if (subCategoryIds.length === 0) return [];
         const data = await get().apiRequest("/get-search-products", {
@@ -386,6 +399,7 @@ const useProductStore = create(
           method: "POST",
           data: formData,
         });
+        await get().fetchProfile(formData.consumer_id);
 
         return data.data;
       },
@@ -475,12 +489,24 @@ const useProductStore = create(
 
       proceedOrder: async (items) => {
         const response = await api.post(`/order/process`, items);
+        await get().listOrders(items.consumer_id);
         return response.data;
       },
 
       listOrders: async (consumerId) => {
         const response = await api.get(`/orders/${consumerId}`);
         set({ orders: response.data.orders });
+      },
+
+      orderDetails: async (consumerId) => {
+        const response = await api.get(`/orders/items/${consumerId}`);
+        return response.data;
+      },
+
+      changeOrderStatus: async (data) => {
+        const response = await api.post(`/orders/change-status`, data);
+        await get().listOrders(data.consumer_id);
+        return response.data;
       },
 
       deleteConsumerAccount: async (consumerID) => {

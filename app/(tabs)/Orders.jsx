@@ -5,19 +5,11 @@ import {
   FlatList,
   StyleSheet,
   TouchableOpacity,
-  Pressable,
 } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useTheme } from "react-native-paper";
 import useProductStore from "../../components/api/useProductStore";
-
-const getOrderStatus = (status) => {
-  // Ensure status is a string and provide a default if undefined
-  const statusStr =
-    typeof status === "string" ? status.toLowerCase() : "unknown";
-  return statusStr.charAt(0).toUpperCase() + statusStr.slice(1);
-};
 
 const Orders = () => {
   const navigation = useNavigation();
@@ -35,39 +27,18 @@ const Orders = () => {
     });
   }, [navigation, colors]);
 
-  const handleCancel = (orderId) => {
-    console.log("Canceling order:", orderId);
-  };
-
-  const getStatusColor = (status) => {
-    // Ensure status is a string and handle undefined/null cases
-    const statusStr =
-      typeof status === "string" ? status.toLowerCase() : "unknown";
-    switch (statusStr) {
-      case "pending":
-        return colors.progressColor; // Blue
-      case "in-process":
-        return colors.primary; // Primary color
-      case "on-way":
-        return colors.inactiveColor; // Dark
-      case "delivered":
-        return colors.button; // Green
-      case "cancelled":
-      case "rejected":
-        return colors.deleteButton; // Red
-      case "packing":
-        return "#FFA500"; // Orange
-      default:
-        return colors.textColor; // Fallback
-    }
-  };
-
   const renderItem = ({ item }) => {
-    const statusText = getOrderStatus(item.status);
-    const statusColor = getStatusColor(item.status);
-
     return (
-      <Pressable style={[styles.card, { backgroundColor: colors.primary }]}>
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: colors.primary }]}
+        onPress={() =>
+          router.navigate({
+            pathname: "/screens/OrderDetails",
+            params: { orderId: item.consumer_orders_id },
+          })
+        }
+        activeOpacity={0.7}
+      >
         <View
           style={[
             styles.cardHeader,
@@ -76,9 +47,6 @@ const Orders = () => {
         >
           <Text style={[styles.orderNumber, { color: colors.textColor }]}>
             Order #{item.order_no}
-          </Text>
-          <Text style={[styles.status, { color: statusColor }]}>
-            {statusText}
           </Text>
         </View>
 
@@ -90,7 +58,7 @@ const Orders = () => {
               color={colors.inactiveColor}
             />
             <Text style={[styles.infoText, { color: colors.textColor }]}>
-              Payment type: {item.payment_type}
+              Payment Type: {item.payment_type}
             </Text>
           </View>
           <View style={styles.infoRow}>
@@ -100,45 +68,11 @@ const Orders = () => {
               color={colors.inactiveColor}
             />
             <Text style={[styles.infoText, { color: colors.textColor }]}>
-              Ordered on: {item.date}
+              Ordered On: {item.date}
             </Text>
           </View>
         </View>
-
-        <View style={styles.cardFooter}>
-          <TouchableOpacity
-            style={[styles.detailButton, { backgroundColor: colors.button }]}
-            onPress={() =>
-              router.navigate({
-                pathname: "/screens/OrderDetails",
-                params: { orderId: item.consumer_orders_id },
-              })
-            }
-            activeOpacity={0.7}
-          >
-            <Text style={styles.detailButtonText}>View Details</Text>
-          </TouchableOpacity>
-          {statusText === "Pending" && (
-            <TouchableOpacity
-              style={[
-                styles.cancelButton,
-                { borderColor: colors.deleteButton },
-              ]}
-              onPress={() => handleCancel(item.consumer_orders_id)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[
-                  styles.cancelButtonText,
-                  { color: colors.deleteButton },
-                ]}
-              >
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Pressable>
+      </TouchableOpacity>
     );
   };
 
@@ -219,36 +153,6 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: 14,
     marginLeft: 12,
-  },
-  cardFooter: {
-    flexDirection: "row",
-    padding: 16,
-    paddingTop: 0,
-    gap: 12,
-  },
-  detailButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    elevation: 2,
-  },
-  detailButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    borderWidth: 1,
-    backgroundColor: "transparent",
-  },
-  cancelButtonText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   emptyState: {
     flex: 1,

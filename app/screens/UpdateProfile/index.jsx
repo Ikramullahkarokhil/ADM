@@ -54,7 +54,7 @@ const UpdateProfile = () => {
 
   const navigation = useNavigation();
   const theme = useTheme();
-  const { profileData, uploadConsumerImage, updateConsumer } =
+  const { profileData, uploadConsumerImage, updateConsumer, fetchProfile } =
     useProductStore();
 
   const [initialValues, setInitialValues] = useState({
@@ -67,7 +67,7 @@ const UpdateProfile = () => {
   useEffect(() => {
     if (profileData?.updated_at) {
       const lastUpdate = new Date(profileData.updated_at);
-      const nextUpdate = new Date(lastUpdate.getTime() + 24 * 60 * 60 * 1000);
+      const nextUpdate = new Date(lastUpdate.getTime() + 60 * 60 * 1000);
       const now = new Date();
 
       const diffMs = nextUpdate - now;
@@ -192,6 +192,7 @@ const UpdateProfile = () => {
       }
 
       await updateConsumer(updatedValues);
+      await fetchProfile(profileData.consumer_id);
       Alert.alert("Success", "Profile updated successfully");
     } catch (error) {
       console.error("Error updating profile:", error);

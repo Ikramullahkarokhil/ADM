@@ -6,18 +6,17 @@ import {
   FlatList,
   Pressable,
   Image,
-  StatusBar,
   RefreshControl,
   ToastAndroid,
-  useColorScheme,
 } from "react-native";
-import { useTheme, Surface, Chip, ActivityIndicator } from "react-native-paper";
+import { useTheme, Surface, Chip } from "react-native-paper";
 import { Link, useNavigation, useRouter } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
+import FavoriteProductPlaceholder from "../../../components/skeleton/FavoriteSkeleton"; // Adjust path as needed
 
 const FavoriteProductPage = () => {
   const {
@@ -33,50 +32,84 @@ const FavoriteProductPage = () => {
   const insets = useSafeAreaInsets();
   const [loadingStates, setLoadingStates] = useState({});
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const { showActionSheetWithOptions } = useActionSheet();
   const { isDarkTheme } = useThemeStore();
   const router = useRouter();
 
-  // Use native header
+  // Custom Header Component Embedded
+  const CustomHeader = () => (
+    <View
+      style={[
+        styles.header,
+        {
+          backgroundColor: theme.colors.primary,
+          paddingTop: insets.top,
+        },
+      ]}
+    >
+      {/* Back Button */}
+      <Pressable
+        onPress={() => navigation.goBack()}
+        style={styles.headerButton}
+      >
+        <MaterialCommunityIcons
+          name="chevron-left"
+          size={28}
+          color={theme.colors.textColor}
+        />
+      </Pressable>
+
+      {/* Centered Title */}
+      <Text style={[styles.headerTitle, { color: theme.colors.textColor }]}>
+        My Favorites
+      </Text>
+
+      {/* Cart Icon */}
+      <Pressable
+        onPress={() => router.navigate("/screens/Cart")}
+        style={styles.headerIcon}
+      >
+        <MaterialCommunityIcons
+          name="cart-outline"
+          size={24}
+          color={theme.colors.textColor}
+        />
+        {cartItems?.length > 0 && (
+          <View
+            style={[
+              styles.cartBadge,
+              { backgroundColor: theme.colors.deleteButton },
+            ]}
+          >
+            <Text style={styles.cartBadgeText}>{cartItems.length}</Text>
+          </View>
+        )}
+      </Pressable>
+    </View>
+  );
+
+  // Set custom header
   useEffect(() => {
     navigation.setOptions({
-      headerShown: true,
-      title: "My Favorites",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
-
-      headerRight: () => (
-        <View style={styles.headerRight}>
-          <Pressable
-            onPress={() => router.navigate("/screens/Cart")}
-            style={styles.headerIcon}
-          >
-            <MaterialCommunityIcons
-              name="cart-outline"
-              size={24}
-              color={theme.colors.textColor}
-            />
-            {cartItems?.length > 0 && (
-              <View
-                style={[
-                  styles.cartBadge,
-                  { backgroundColor: theme.colors.deleteButton },
-                ]}
-              >
-                <Text style={styles.cartBadgeText}>{cartItems.length}</Text>
-              </View>
-            )}
-          </Pressable>
-        </View>
-      ),
+      header: () => <CustomHeader />,
     });
-  }, [navigation, cartItems, theme.colors]);
+  }, [navigation, cartItems]); // Include cartItems to update badge dynamically
 
+  // Fetch favorites with loading state
   useEffect(() => {
+    const loadFavorites = async () => {
+      setIsLoading(true);
+      try {
+        await fetchFavProducts(user.consumer_id);
+      } catch (error) {
+        ToastAndroid.show("Failed to load favorites", ToastAndroid.SHORT);
+      } finally {
+        setIsLoading(false);
+      }
+    };
     if (user?.consumer_id) {
-      fetchFavProducts(user.consumer_id);
+      loadFavorites();
     }
   }, [user?.consumer_id, fetchFavProducts]);
 
@@ -142,7 +175,6 @@ const FavoriteProductPage = () => {
     [addToCart, user?.consumer_id]
   );
 
-  // Handle long press to show action sheet
   const handleLongPress = useCallback(
     (item) => {
       const isInCart = cartItems?.some(
@@ -172,10 +204,8 @@ const FavoriteProductPage = () => {
         },
         (buttonIndex) => {
           if (buttonIndex === 0 && !isInCart) {
-            // Add to cart
             handleAddToCart(item);
           } else if (buttonIndex === 1) {
-            // Remove from favorites
             handleRemoveFav(item.product_fav_id);
           }
         }
@@ -185,7 +215,7 @@ const FavoriteProductPage = () => {
   );
 
   const renderFavoriteItem = useCallback(
-    ({ item, index }) => {
+    ({ item }) => {
       const isInCart = cartItems?.some(
         (cartItem) => cartItem.products_id === item.products_id
       );
@@ -202,7 +232,7 @@ const FavoriteProductPage = () => {
             <Link
               href={{
                 pathname: "/screens/ProductDetail",
-                params: { id: item.products_id },
+                params: { idFromFavorite: item.products_id },
               }}
               asChild
             >
@@ -221,7 +251,6 @@ const FavoriteProductPage = () => {
                     style={styles.productImage}
                     resizeMode="cover"
                   />
-
                   {item.discount && (
                     <View
                       style={[
@@ -233,7 +262,6 @@ const FavoriteProductPage = () => {
                     </View>
                   )}
                 </View>
-
                 <View style={styles.productInfo}>
                   <Text
                     style={[
@@ -244,7 +272,6 @@ const FavoriteProductPage = () => {
                   >
                     {item.name}
                   </Text>
-
                   <View style={styles.priceContainer}>
                     <Text
                       style={[
@@ -265,7 +292,6 @@ const FavoriteProductPage = () => {
                       </Text>
                     )}
                   </View>
-
                   <View style={styles.chipRow}>
                     <Chip
                       style={[
@@ -279,7 +305,6 @@ const FavoriteProductPage = () => {
                     >
                       {item.system_name}
                     </Chip>
-
                     {isInCart && (
                       <Chip
                         style={[
@@ -337,20 +362,27 @@ const FavoriteProductPage = () => {
   );
 
   return (
-    <View
-      style={[
-        styles.container,
-        {
-          backgroundColor: theme.colors.primary,
-        },
-      ]}
-    >
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <FlatList
-        data={favProducts}
-        keyExtractor={(item) => item.product_fav_id.toString()}
-        renderItem={renderFavoriteItem}
+        data={
+          isLoading
+            ? Array(4)
+                .fill()
+                .map((_, index) => ({ id: `placeholder-${index}` }))
+            : favProducts
+        }
+        keyExtractor={(item) =>
+          isLoading ? item.id : item.product_fav_id.toString()
+        }
+        renderItem={({ item }) =>
+          isLoading ? (
+            <FavoriteProductPlaceholder />
+          ) : (
+            renderFavoriteItem({ item })
+          )
+        }
         contentContainerStyle={styles.listContainer}
-        ListEmptyComponent={EmptyState}
+        ListEmptyComponent={!isLoading && EmptyState}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -371,14 +403,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  headerRight: {
+  header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between", // Ensures space is distributed evenly
+    paddingHorizontal: 16,
+    height: 80,
+    elevation: 5,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    flex: 1, // Allows the title to take up available space and center itself
   },
   headerIcon: {
     padding: 8,
-    marginLeft: 8,
-    borderRadius: 20,
   },
   cartBadge: {
     position: "absolute",
@@ -415,14 +458,6 @@ const styles = StyleSheet.create({
   productImage: {
     width: 120,
     height: 140,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-  },
-  imagePlaceholder: {
-    width: 120,
-    height: 140,
-    justifyContent: "center",
-    alignItems: "center",
     borderTopLeftRadius: 16,
     borderBottomLeftRadius: 16,
   },

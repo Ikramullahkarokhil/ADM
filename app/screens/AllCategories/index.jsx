@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   Pressable,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import {
@@ -20,10 +21,10 @@ import useThemeStore from "../../../components/store/useThemeStore";
 import useProductStore from "../../../components/api/useProductStore";
 import AllCategoriesSkeleton from "../../../components/skeleton/AllCategoriesSkeleton";
 
-// Data transformation function
+// Data transformation function (unchanged)
 const transformSubCategories = (subCategories) => {
   return subCategories
-    .filter((sub) => sub !== null && sub !== undefined) // Filter out null or undefined items
+    .filter((sub) => sub !== null && sub !== undefined)
     .map((sub) => ({
       categories_id: sub.categories_id || sub.id || `${Math.random()}`,
       title: sub.title || sub.name || "Unnamed Subcategory",
@@ -31,7 +32,7 @@ const transformSubCategories = (subCategories) => {
     }));
 };
 
-// SubcategoryItem component
+// SubcategoryItem component (unchanged)
 const SubcategoryItem = ({ item, index, isDarkTheme, theme }) => {
   return (
     <View style={styles.itemContainer}>
@@ -100,14 +101,20 @@ const AllCategories = () => {
   const numColumns = width > 550 ? 3 : 2;
   const router = useRouter();
   const { isDarkTheme } = useThemeStore();
-  const { mainCategoryId, MainCategorieName } = useLocalSearchParams();
+  const { mainCategoryId, MainCategorieName, totalSubCategories } =
+    useLocalSearchParams();
   const { fetchSubcategories } = useProductStore();
   const navigation = useNavigation();
 
+  // State management
   const [subCategories, setSubCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
+  const limit = 15;
+  const total = parseInt(totalSubCategories, 10) || 0; // Ensure total is a number, default to 0 if invalid
 
+  // Header configuration
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: MainCategorieName,
@@ -116,31 +123,52 @@ const AllCategories = () => {
     });
   }, [navigation, MainCategorieName]);
 
-  useEffect(() => {
-    const loadSubCategories = async () => {
-      setLoading(true);
+  // Function to load subcategories (initial or more)
+  const loadSubCategories = async (isLoadMore = false) => {
+    if (isLoadMore) {
+      setLoadingMore(true);
+    } else {
+      setInitialLoading(true);
       setError(null);
-      try {
-        const limit = 50;
-        const data = await fetchSubcategories(mainCategoryId, limit);
-        if (data) {
-          const transformedData = transformSubCategories(data);
-          setSubCategories(transformedData);
-        } else {
-          setError("No data received from the API");
-        }
-      } catch (err) {
-        console.error("Error loading subcategories:", err);
-        setError("Failed to load subcategories");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (mainCategoryId) {
-      loadSubCategories();
     }
-  }, [mainCategoryId, fetchSubcategories]);
+    try {
+      const offset = isLoadMore ? subCategories.length : 0;
+      const data = await fetchSubcategories(mainCategoryId, limit, offset);
+      if (data) {
+        const transformedData = transformSubCategories(data);
+        if (isLoadMore) {
+          setSubCategories((prev) => [...prev, ...transformedData]);
+        } else {
+          setSubCategories(transformedData);
+        }
+      } else {
+        setError("No data received from the API");
+      }
+    } catch (err) {
+      console.error("Error loading subcategories:", err);
+      setError("Failed to load subcategories");
+    } finally {
+      if (isLoadMore) {
+        setLoadingMore(false);
+      } else {
+        setInitialLoading(false);
+      }
+    }
+  };
+
+  // Initial load
+  useEffect(() => {
+    if (mainCategoryId) {
+      loadSubCategories(false);
+    }
+  }, [mainCategoryId]);
+
+  // Handle "Load More" button press
+  const handleLoadMore = () => {
+    if (!loadingMore && subCategories.length < total) {
+      loadSubCategories(true);
+    }
+  };
 
   // Error state
   if (error) {
@@ -161,21 +189,7 @@ const AllCategories = () => {
             styles.retryButton,
             { backgroundColor: theme.colors.primary },
           ]}
-          onPress={() => {
-            if (mainCategoryId) {
-              setLoading(true);
-              fetchSubcategories(mainCategoryId, 50)
-                .then((data) => {
-                  setSubCategories(transformSubCategories(data));
-                  setError(null);
-                })
-                .catch((err) => {
-                  console.error("Error retrying:", err);
-                  setError("Failed to load subcategories");
-                })
-                .finally(() => setLoading(false));
-            }
-          }}
+          onPress={() => loadSubCategories(false)}
         >
           <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
@@ -184,7 +198,7 @@ const AllCategories = () => {
   }
 
   // Empty state
-  if (!loading && (!subCategories || subCategories.length === 0)) {
+  if (!initialLoading && (!subCategories || subCategories.length === 0)) {
     return (
       <View
         style={[
@@ -213,9 +227,9 @@ const AllCategories = () => {
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <FlatList
-        data={loading ? Array(8).fill({}) : subCategories}
+        data={initialLoading ? Array(8).fill({}) : subCategories}
         renderItem={({ item, index }) =>
-          loading ? (
+          initialLoading ? (
             <AllCategoriesSkeleton />
           ) : (
             <SubcategoryItem
@@ -230,11 +244,38 @@ const AllCategories = () => {
           item.categories_id
             ? item.categories_id.toString()
             : `skeleton-${index}`
-        } // Handle skeleton keys
+        }
         numColumns={numColumns}
         contentContainerStyle={styles.listContainer}
         initialNumToRender={10}
         windowSize={5}
+        ListFooterComponent={() => {
+          if (initialLoading) return null; // Hide footer during initial load
+          if (loadingMore) {
+            return (
+              <View style={styles.footer}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+              </View>
+            );
+          }
+          if (subCategories.length < total) {
+            return (
+              <View style={styles.footer}>
+                <TouchableOpacity
+                  style={[
+                    styles.loadMoreButton,
+                    { backgroundColor: theme.colors.primary },
+                  ]}
+                  onPress={handleLoadMore}
+                  disabled={loadingMore}
+                >
+                  <Text style={styles.loadMoreText}>Load More</Text>
+                </TouchableOpacity>
+              </View>
+            );
+          }
+          return null;
+        }}
       />
     </View>
   );
@@ -242,7 +283,7 @@ const AllCategories = () => {
 
 export default AllCategories;
 
-// Styles
+// Updated styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -314,5 +355,20 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: "#fff",
     fontWeight: "600",
+  },
+  footer: {
+    paddingVertical: 20,
+    alignItems: "center",
+  },
+  loadMoreButton: {
+    padding: 12,
+    borderRadius: 8,
+    marginVertical: 16,
+    alignItems: "center",
+  },
+  loadMoreText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
   },
 });

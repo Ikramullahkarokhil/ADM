@@ -1,10 +1,11 @@
+"use client";
+
 import React, {
   useEffect,
   useCallback,
   useState,
   useLayoutEffect,
   useRef,
-  useMemo,
 } from "react";
 import {
   View,
@@ -111,15 +112,21 @@ const ProductItem = ({
               <TouchableOpacity
                 style={[
                   styles.iconButton,
-                  { backgroundColor: theme.colors.button },
+                  {
+                    backgroundColor: theme.colors.button,
+                    opacity: isInCart ? 0.6 : 1,
+                  },
                 ]}
                 onPress={(e) => {
                   e.stopPropagation();
-                  onAddToCart(item);
+                  if (!isInCart) {
+                    onAddToCart(item);
+                  }
                 }}
                 activeOpacity={0.7}
+                disabled={isInCart}
               >
-                {isInCart ? ( // Correctly uses the boolean isInCart prop
+                {isInCart ? (
                   <Feather name="check-circle" size={16} color="white" />
                 ) : (
                   <Feather name="shopping-cart" size={16} color="white" />
@@ -224,6 +231,7 @@ const ProductList = () => {
   const { showActionSheetWithOptions } = useActionSheet();
   const router = useRouter();
   const flatListRef = useRef(null);
+  const [addingToCart, setAddingToCart] = useState([]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -246,13 +254,29 @@ const ProductList = () => {
     }
   }, [subcategoryId, fetchProductsBySubcategory]);
 
-  const isInCart = (item) => {
-    if (!item || !cartItem || cartItem.length === 0) return false;
-    return cartItem.some(
-      (cartItem) =>
-        cartItem.products_id.toString() === item.products_id.toString()
-    );
-  };
+  const isAddingToCart = useCallback(
+    (productId) => {
+      return addingToCart.includes(productId);
+    },
+    [addingToCart]
+  );
+
+  const isInCart = useCallback(
+    (item) => {
+      if (!item) return false;
+
+      // Check if it's in the cart or currently being added
+      return (
+        (cartItem &&
+          cartItem.some(
+            (cartItem) =>
+              cartItem.products_id.toString() === item.products_id.toString()
+          )) ||
+        addingToCart.includes(item.products_id)
+      );
+    },
+    [cartItem, addingToCart]
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -295,6 +319,9 @@ const ProductList = () => {
       }
 
       try {
+        // Immediately mark this product as being added to cart
+        setAddingToCart((prev) => [...prev, product.products_id]);
+
         // Show success message
         ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
         await addToCart({
@@ -302,6 +329,11 @@ const ProductList = () => {
           consumerID: user.consumer_id,
         });
       } catch (error) {
+        // Remove from addingToCart if there was an error
+        setAddingToCart((prev) =>
+          prev.filter((id) => id !== product.products_id)
+        );
+
         setAlertState({
           title: "Error",
           message: error.message || "Error adding product to cart",

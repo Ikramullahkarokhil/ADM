@@ -1,6 +1,4 @@
-"use client";
-
-import {
+import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -39,7 +37,7 @@ import RelatedProducts from "../../../components/ui/RelatedProducts";
 const { width: screenWidth } = Dimensions.get("window");
 
 const ProductDetail = () => {
-  const { id, categoryProductId } = useLocalSearchParams();
+  const { id, categoryProductId, idFromFavorite } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();
@@ -59,13 +57,14 @@ const ProductDetail = () => {
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [totalComments, setTotalComments] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [hasProduct, setHasProduct] = useState(false); // New state to track if product exists
+  const [hasProduct, setHasProduct] = useState(false);
+  const [userRating, setUserRating] = useState(0);
 
   const {
     user,
     addToFavorite,
     removeFavorite,
-    productData, // Use only productData
+    productData,
     favProducts,
     addToCart,
     cartItem,
@@ -74,6 +73,8 @@ const ProductDetail = () => {
     deleteProductQuestion,
     productQuestions,
     productComments,
+    updateProductRating,
+    searchFavoriteProduct,
   } = useProductStore();
   const { isDarkTheme } = useThemeStore();
 
@@ -96,6 +97,23 @@ const ProductDetail = () => {
     );
   }, [cartItem, product]);
 
+  // Fetch product details if navigated from favorite page
+  useEffect(() => {
+    if (idFromFavorite) {
+      const fetchFavoriteProduct = async () => {
+        try {
+          const favoratProduct = await searchFavoriteProduct(idFromFavorite);
+
+          setHasProduct(true);
+        } catch (err) {
+          console.error("Error fetching favorite product:", err);
+          showAlert("Error", "Failed to fetch product details.");
+        }
+      };
+      fetchFavoriteProduct();
+    }
+  }, [idFromFavorite, searchFavoriteProduct, showAlert]);
+
   // Update header
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -104,6 +122,13 @@ const ProductDetail = () => {
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, product, theme]);
+
+  // Update userRating when product data loads or changes
+  useEffect(() => {
+    if (product) {
+      setUserRating(Math.floor(product.average_rating || 0));
+    }
+  }, [product]);
 
   useEffect(() => {
     setTotalQuestions(productQuestions);
@@ -138,7 +163,6 @@ const ProductDetail = () => {
 
   // Fetch questions
   useEffect(() => {
-    // Fetch questions only if product exists
     if (product) {
       const fetchQuestions = async () => {
         try {
@@ -151,9 +175,9 @@ const ProductDetail = () => {
         }
       };
       fetchQuestions();
-      setHasProduct(true); // Set hasProduct to true when product exists
+      setHasProduct(true);
     } else {
-      setHasProduct(false); // Set hasProduct to false when product doesn't exist
+      setHasProduct(false);
     }
   }, [product, getProductQuestionList]);
 
@@ -186,7 +210,6 @@ const ProductDetail = () => {
       return;
     }
 
-    // Check if product is already in cart
     if (isInCart) {
       showAlert(
         "Product already in cart",
@@ -203,7 +226,6 @@ const ProductDetail = () => {
         productID: product.products_id,
         consumerID: user.consumer_id,
       });
-      // Force re-render by updating a state
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
     } catch (err) {
       showAlert("Error", err.message || "Failed to add to cart");
@@ -222,6 +244,7 @@ const ProductDetail = () => {
       await Share.share({
         message: `Check out ${product.title}: ${deepLink}`,
         title: product.title,
+        url: deepLink,
       });
     } catch (err) {
       console.error("Share error:", err);
@@ -275,6 +298,31 @@ const ProductDetail = () => {
     navigation,
   ]);
 
+  // New handler for rating updates
+  const handleRate = useCallback(
+    async (rating) => {
+      if (!user || !product) return;
+      const previousRating = userRating;
+      setUserRating(rating);
+      try {
+        if (updateProductRating) {
+          await updateProductRating({
+            productID: product.products_id,
+            consumerID: user.consumer_id,
+            rating,
+          });
+          ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
+        } else {
+          ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
+        }
+      } catch (err) {
+        setUserRating(previousRating);
+        showAlert("Error", err.message || "Failed to update rating");
+      }
+    },
+    [user, product, userRating, updateProductRating, showAlert]
+  );
+
   // Delete question handler
   const handleDeleteQuestion = useCallback(
     async (questionId) => {
@@ -321,7 +369,7 @@ const ProductDetail = () => {
   const showQuestionActionSheet = useCallback(
     (questionId) => {
       const options = ["Edit", "Delete", "Cancel"];
-      const destructiveButtonIndex = 1; // "Delete" is destructive
+      const destructiveButtonIndex = 1;
       const cancelButtonIndex = 2;
 
       showActionSheetWithOptions(
@@ -348,19 +396,19 @@ const ProductDetail = () => {
     ]
   );
 
-  // Render rating stars
+  // Render clickable rating stars
   const ratingStars = useMemo(() => {
-    const rating = Math.floor(product?.average_rating || 0);
     return [...Array(5)].map((_, index) => (
-      <FontAwesome
-        key={index}
-        name={index < rating ? "star" : "star-o"}
-        size={15}
-        color={index < rating ? "#FFD700" : "#ccc"}
-        style={styles.starIcon}
-      />
+      <Pressable key={index} onPress={() => handleRate(index + 1)}>
+        <FontAwesome
+          name={index < userRating ? "star" : "star-o"}
+          size={15}
+          color={index < userRating ? "#FFD700" : "#ccc"}
+          style={styles.starIcon}
+        />
+      </Pressable>
     ));
-  }, [product?.average_rating]);
+  }, [userRating, handleRate]);
 
   // Prepare images and questions
   const displayedQuestions = questions.slice(0, 3);
@@ -373,7 +421,6 @@ const ProductDetail = () => {
             : require("../../../assets/images/imageSkeleton.jpg"),
         ];
 
-  // Error and Not Found views
   if (error) {
     return (
       <View
@@ -426,13 +473,9 @@ const ProductDetail = () => {
     );
   }
 
-  // Add this useEffect to refresh product data when ID changes
+  // Reset states when product ID changes
   useEffect(() => {
-    // Reset states when product ID changes
     setCurrentSlide(0);
-
-    // You might need to add a function to fetch product details if needed
-    // For example: fetchProductDetails(id || categoryProductId);
   }, [id, categoryProductId]);
 
   return (
@@ -589,9 +632,9 @@ const ProductDetail = () => {
               ]}
               disabled={isAddingToCart || isInCart}
               loading={isAddingToCart}
-              accessibilityLabel={isInCart ? "Already in cart" : "Add to cart"}
+              accessibilityLabel={isInCart ? "In Cart" : "Add to cart"}
             >
-              {isInCart === true ? "Already in cart" : "Add to cart"}
+              {isInCart === true ? "In Cart" : "Add to cart"}
             </Button>
             <Button
               onPress={handleShare}
@@ -769,7 +812,6 @@ const QuestionItem = memo(({ item, theme }) => (
   </View>
 ));
 
-// Styles remain unchanged
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,

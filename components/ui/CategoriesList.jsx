@@ -15,7 +15,7 @@ import { Link, useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 
-// Data transformation function
+// Data transformation function (no worklet needed here)
 const transformData = (rawData) => {
   return rawData.map((category) => ({
     main_category_id: category.main_category.main_category_id,
@@ -32,7 +32,7 @@ const transformData = (rawData) => {
   }));
 };
 
-// SubcategoryItem component
+// SubcategoryItem component (unchanged)
 const SubcategoryItem = ({ item, index, isDarkTheme }) => {
   return (
     <View style={styles.itemContainer}>
@@ -95,7 +95,7 @@ const SubcategoryItem = ({ item, index, isDarkTheme }) => {
   );
 };
 
-// CategorySection component
+// CategorySection component (unchanged)
 const CategorySection = ({
   item,
   index,
@@ -120,7 +120,13 @@ const CategorySection = ({
         {item.totalSubCategories > 6 && (
           <TouchableOpacity
             style={styles.viewAllButton}
-            onPress={() => handleShowMore(item.main_category_id, item.name)}
+            onPress={() =>
+              handleShowMore(
+                item.main_category_id,
+                item.name,
+                item.totalSubCategories
+              )
+            }
             accessibilityLabel={`View all in ${item.name}`}
           >
             <Text style={[styles.viewAllText, { color: theme.colors.button }]}>
@@ -161,7 +167,7 @@ const CategoriesSectionList = ({ data: rawData }) => {
   const { isDarkTheme } = useThemeStore();
   const [expandedCategories, setExpandedCategories] = useState({});
 
-  // Transform raw data
+  // Transform raw data using useMemo (no Reanimated needed)
   const data = useMemo(() => transformData(rawData), [rawData]);
 
   // Toggle category expansion
@@ -174,10 +180,10 @@ const CategoriesSectionList = ({ data: rawData }) => {
 
   // Handle "Show More" button click
   const handleShowMore = useCallback(
-    (mainCategoryId, MainCategorieName) => {
+    (mainCategoryId, MainCategorieName, totalSubCategories) => {
       router.push({
         pathname: "/screens/AllCategories",
-        params: { mainCategoryId, MainCategorieName },
+        params: { mainCategoryId, MainCategorieName, totalSubCategories },
       });
     },
     [router]
@@ -243,7 +249,7 @@ const CategoriesSectionList = ({ data: rawData }) => {
 
 export default CategoriesSectionList;
 
-// Styles
+// Styles (unchanged)
 const styles = StyleSheet.create({
   container: {
     paddingBottom: 20,

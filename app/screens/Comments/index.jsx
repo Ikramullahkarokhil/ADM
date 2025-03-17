@@ -272,53 +272,65 @@ const Comments = () => {
     };
   }, []);
 
-  const handleAddComment = useCallback(() => {
-    const trimmedComment = newComment.trim();
-    if (!trimmedComment) {
-      showAlert(
-        "Empty Comment",
-        "Please write a comment before submitting.",
-        () => {}
-      );
-      return;
+  const handleAddComment = useCallback(async () => {
+    try {
+      const trimmedComment = newComment.trim();
+      if (!trimmedComment) {
+        showAlert(
+          "Empty Comment",
+          "Please write a comment before submitting.",
+          () => {}
+        );
+        return;
+      }
+      if (!user?.consumer_id) {
+        showAlert("Login Required", "Please login to add a comment.", () => {});
+        return;
+      }
+
+      // Create a local ID for the new comment
+
+      // Send to server
+      try {
+        const localId = `local_${Date.now()}`;
+
+        // Create the local comment object
+        const newLocalComment = {
+          product_comments_id: localId,
+          product_id: productId,
+          comment: trimmedComment,
+          consumer_id: user.consumer_id,
+          date: new Date().toISOString(),
+          consumer_name: user.name || "Anonymous",
+          consumer_photo: user.photo || null,
+        };
+
+        // Update UI immediately
+        setComments((prev) => [...prev, newLocalComment]);
+        setNewComment("");
+        Keyboard.dismiss();
+
+        ToastAndroid.show("Comment added", ToastAndroid.SHORT);
+        console.log(comments);
+
+        await addComment({
+          product_id: productId,
+          comment: trimmedComment,
+          consumer_id: user.consumer_id,
+        });
+
+        setComments((prev) =>
+          prev.filter((comment) => comment.product_comments_id !== localId)
+        );
+      } catch (err) {
+        console.error(
+          "Error adding comment to server (will sync on refresh):",
+          err
+        );
+      }
+    } catch (err) {
+      console.error("An unexpected error occurred:", err);
     }
-    if (!user?.consumer_id) {
-      showAlert("Login Required", "Please login to add a comment.", () => {});
-      return;
-    }
-
-    // Create a local ID for the new comment
-    const localId = `local_${Date.now()}`;
-
-    // Create the local comment object
-    const newLocalComment = {
-      product_comments_id: localId,
-      product_id: productId,
-      comment: trimmedComment,
-      consumer_id: user.consumer_id,
-      date: new Date().toISOString(),
-      consumer_name: user.name || "Anonymous",
-      consumer_photo: user.photo || null,
-    };
-
-    // Update UI immediately
-    setComments((prev) => [...prev, newLocalComment]);
-    setNewComment("");
-    Keyboard.dismiss();
-
-    ToastAndroid.show("Comment added", ToastAndroid.SHORT);
-
-    // Fire and forget - send to server in background
-    addComment({
-      product_id: productId,
-      comment: trimmedComment,
-      consumer_id: user.consumer_id,
-    }).catch((err) => {
-      console.error(
-        "Error adding comment to server (will sync on refresh):",
-        err
-      );
-    });
   }, [newComment, user, addComment, productId, showAlert]);
 
   const handleEditComment = useCallback(

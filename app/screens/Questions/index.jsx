@@ -24,6 +24,7 @@ import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../../components/api/useProductStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import debounce from "lodash.debounce";
 
 const Questions = () => {
   const { productId } = useLocalSearchParams();
@@ -66,7 +67,7 @@ const Questions = () => {
   }, [navigation, theme]);
 
   const loadQuestions = useCallback(
-    async (page = 1, isInitialLoad = false) => {
+    debounce(async (page = 1, isInitialLoad = false) => {
       if (isInitialLoad && initialLoadDoneRef.current) {
         return;
       }
@@ -109,7 +110,7 @@ const Questions = () => {
         isLoadingRef.current = false;
         setIsLoading(false);
       }
-    },
+    }, 300),
     [productId, showAlert]
   );
 
@@ -129,73 +130,72 @@ const Questions = () => {
     setAlertVisible(true);
   }, []);
 
-  const handleAddQuestion = useCallback(async () => {
-    const trimmed = newQuestion.trim();
-    if (!trimmed) {
-      showAlert("Empty Question", "Please enter a question.", () => {});
-      return;
-    }
-    if (!user) {
-      showAlert("Login Required", "Please login to ask a question.", () => {});
-      return;
-    }
+  const handleAddQuestion = useCallback(
+    debounce(async () => {
+      const trimmed = newQuestion.trim();
+      if (!trimmed) {
+        showAlert("Empty Question", "Please enter a question.", () => {});
+        return;
+      }
+      if (!user) {
+        showAlert(
+          "Login Required",
+          "Please login to ask a question.",
+          () => {}
+        );
+        return;
+      }
 
-    if (pendingQuestionsRef.current.has(trimmed)) {
-      ToastAndroid.show("Question already being processed", ToastAndroid.SHORT);
-      return;
-    }
+      if (pendingQuestionsRef.current.has(trimmed)) {
+        ToastAndroid.show(
+          "Question already being processed",
+          ToastAndroid.SHORT
+        );
+        return;
+      }
 
-    setIsAddingQuestion(true);
-    pendingQuestionsRef.current.add(trimmed);
+      setIsAddingQuestion(true);
+      pendingQuestionsRef.current.add(trimmed);
 
-    try {
-      const tempId = Date.now();
-      const newQ = {
-        products_qna_id: tempId,
-        question: trimmed,
-        consumer_id: user.consumer_id,
-        consumer_name: user.name || "Anonymous",
-        date: new Date().toISOString().split("T")[0],
-        answers: [],
-        isTemporary: true,
-      };
+      try {
+        const tempId = Date.now();
+        const newQ = {
+          products_qna_id: tempId,
+          question: trimmed,
+          consumer_id: user.consumer_id,
+          consumer_name: user.name || "Anonymous",
+          date: new Date().toISOString().split("T")[0],
+          answers: [],
+          isTemporary: true,
+        };
 
-      setQuestions((prev) => [...prev, newQ]);
-      setNewQuestion("");
+        setQuestions((prev) => [...prev, newQ]);
+        setNewQuestion("");
 
-      const response = await addProductQuestion({
-        productID: productId,
-        consumerID: user.consumer_id,
-        question: trimmed,
-      });
-
-      if (response && response.success) {
-        loadQuestions(1);
         ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
-      } else {
+
+        await addProductQuestion({
+          productID: productId,
+          consumerID: user.consumer_id,
+          question: trimmed,
+        });
         setQuestions((prev) =>
           prev.filter((q) => q.products_qna_id !== tempId)
         );
-        ToastAndroid.show("Failed to post question", ToastAndroid.SHORT);
+        loadQuestions(1);
+      } catch (err) {
+        console.error("Error adding question:", err);
+        showAlert("Error", err.message || "Failed to add question", () => {});
+        pendingQuestionsRef.current.delete(trimmed);
+      } finally {
+        setIsAddingQuestion(false);
       }
-    } catch (err) {
-      console.error("Error adding question:", err);
-      showAlert("Error", err.message || "Failed to add question", () => {});
-      pendingQuestionsRef.current.delete(trimmed);
-    } finally {
-      setIsAddingQuestion(false);
-    }
-  }, [
-    newQuestion,
-    user,
-    addProductQuestion,
-    productId,
-    showAlert,
-    loadQuestions,
-  ]);
+    }, 300),
+    [newQuestion, user, addProductQuestion, productId, showAlert, loadQuestions]
+  );
 
   const handleDeleteQuestion = useCallback(
-    async (questionId) => {
+    debounce(async (questionId) => {
       setQuestions((prev) =>
         prev.filter((q) => q.products_qna_id !== questionId)
       );
@@ -211,12 +211,12 @@ const Questions = () => {
         ToastAndroid.show("Failed to delete question", ToastAndroid.SHORT);
         loadQuestions(1);
       }
-    },
+    }, 300),
     [user, deleteProductQuestion, loadQuestions]
   );
 
   const handleUpdateQuestion = useCallback(
-    async (questionId, newText) => {
+    debounce(async (questionId, newText) => {
       setEditingQuestionId(null);
 
       const originalQuestion = questions.find(
@@ -253,7 +253,7 @@ const Questions = () => {
           )
         );
       }
-    },
+    }, 300),
     [user, editQuestion, questions]
   );
 
