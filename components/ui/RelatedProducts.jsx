@@ -50,35 +50,23 @@ const ProductCard = React.memo(({ product, theme, isDarkTheme, onPress }) => {
         <Text style={styles.productName} numberOfLines={1}>
           {product.title}
         </Text>
-        <Text style={styles.productPrice}>{product.spu}</Text>
+        <Text style={styles.productPrice}>AF {product.spu}</Text>
       </View>
     </Pressable>
   );
 });
 
-const RelatedProducts = ({ relatedProducts, currentProductId }) => {
+const RelatedProducts = ({ relatedProducts }) => {
   const [showAll, setShowAll] = useState(false);
   const theme = useTheme();
   const router = useRouter();
-
-  // Filter out the current product from related products
-  const filteredProducts = currentProductId
-    ? relatedProducts.filter(
-        (product) =>
-          product.products_id.toString() !== currentProductId.toString()
-      )
-    : relatedProducts;
-
-  const displayedProducts = showAll
-    ? filteredProducts
-    : filteredProducts.slice(0, 10);
 
   const { isDarkTheme } = useThemeStore();
 
   const handleProductPress = (productId) => {
     // Navigate to product details with the selected product ID
-    router.push({
-      pathname: "screens/ProductDetails",
+    router.replace({
+      pathname: "/screens/ProductDetails",
       params: { id: productId },
     });
   };
@@ -93,7 +81,7 @@ const RelatedProducts = ({ relatedProducts, currentProductId }) => {
   );
 
   // Don't show the component if there are no related products
-  if (!relatedProducts || filteredProducts.length === 0) return null;
+  if (!relatedProducts) return null;
 
   return (
     <View style={styles.container}>
@@ -102,13 +90,13 @@ const RelatedProducts = ({ relatedProducts, currentProductId }) => {
       </Text>
       <FlatList
         horizontal
-        data={displayedProducts}
+        data={relatedProducts}
         keyExtractor={(item) => item.products_id.toString()}
         renderItem={renderItem}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.flatListContent}
       />
-      {filteredProducts.length > 10 && (
+      {relatedProducts.length > 10 && (
         <Pressable
           style={styles.showAllButton}
           onPress={() => setShowAll(!showAll)}

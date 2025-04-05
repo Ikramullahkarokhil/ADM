@@ -1,11 +1,19 @@
 import React, {
   useEffect,
   useLayoutEffect,
-  useMemo,
-  useState,
+  useReducer,
   useCallback,
+  useMemo,
+  memo,
 } from "react";
-import { FlatList, Pressable, StyleSheet, View, Image } from "react-native";
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  View,
+  Image,
+  ScrollView,
+} from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -16,145 +24,255 @@ import AlertDialog from "../../components/ui/AlertDialog";
 import * as NavigationBar from "expo-navigation-bar";
 import NetInfo from "@react-native-community/netinfo";
 import useThemeStore from "../../components/store/useThemeStore";
+import NewArrivals from "../../components/ui/NewArrivals";
 
+// 1. Create a reducer for state management
+const initialState = {
+  loading: false,
+  refreshing: false,
+  categoriesWithSubCategories: [],
+  alertVisible: false,
+  isConnected: true,
+};
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "FETCH_START":
+      return {
+        ...state,
+        loading: true,
+        refreshing: true,
+      };
+    case "FETCH_SUCCESS":
+      return {
+        ...state,
+        loading: false,
+        refreshing: false,
+        categoriesWithSubCategories: action.payload,
+      };
+    case "FETCH_ERROR":
+      return {
+        ...state,
+        loading: false,
+        refreshing: false,
+        categoriesWithSubCategories: [],
+      };
+    case "SET_CONNECTED":
+      return {
+        ...state,
+        isConnected: action.payload,
+      };
+    case "SHOW_ALERT":
+      return {
+        ...state,
+        alertVisible: true,
+      };
+    case "HIDE_ALERT":
+      return {
+        ...state,
+        alertVisible: false,
+      };
+    default:
+      return state;
+  }
+}
+
+// 2. Create a memoized Header component
+const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
+  return (
+    <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
+      <Image
+        source={
+          !isDarkTheme
+            ? require("../../assets/images/darkLogo.png")
+            : require("../../assets/images/lightLogo.png")
+        }
+        style={styles.logo}
+      />
+      <View style={styles.iconsContainer}>
+        <Link asChild href={{ pathname: "/Search" }}>
+          <IconButton
+            icon={() => (
+              <Ionicons
+                name="search-outline"
+                size={24}
+                color={theme.colors.textColor}
+              />
+            )}
+            style={styles.searchBar}
+          />
+        </Link>
+        <Pressable
+          onPress={onCartPress}
+          android_ripple={{ color: theme.colors.ripple }}
+          style={styles.iconButton}
+        >
+          <IconButton
+            icon="cart"
+            size={24}
+            iconColor={theme.colors.textColor}
+          />
+          {cartItemCount > 0 && (
+            <Badge
+              style={[styles.badge, { backgroundColor: theme.colors.button }]}
+            >
+              {cartItemCount}
+            </Badge>
+          )}
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+// Main component
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
-  const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [categoriesWithSubCategories, setCategoriesWithSubCategories] =
-    useState([]);
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
+  const [state, dispatch] = useReducer(reducer, initialState);
   const { isDarkTheme } = useThemeStore();
-
   const { user, fetchMainPageData, cartItem } = useProductStore();
 
+  // Destructure state for readability
+  const {
+    loading,
+    refreshing,
+    categoriesWithSubCategories,
+    alertVisible,
+    isConnected,
+  } = state;
+
+  // Set navigation bar color
   useEffect(() => {
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
   }, [theme]);
 
+  // Hide header
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
+
+  // Fetch categories data
   const fetchCategories = useCallback(async () => {
-    setLoading(true);
-    setRefreshing(true);
+    dispatch({ type: "FETCH_START" });
     try {
-      setCategoriesWithSubCategories(await fetchMainPageData());
+      const data = await fetchMainPageData();
+      dispatch({ type: "FETCH_SUCCESS", payload: data });
     } catch (err) {
       console.error("Failed to fetch data:", err);
-      setCategoriesWithSubCategories([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      dispatch({ type: "FETCH_ERROR" });
     }
-  }, []);
+  }, [fetchMainPageData]);
 
-  // Monitor internet connectivity within Home
+  // Monitor internet connectivity
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      setIsConnected(state.isConnected);
+      const isConnectedNow = state.isConnected;
+      dispatch({ type: "SET_CONNECTED", payload: isConnectedNow });
 
-      // If internet reconnects, fetch data
-      if (state.isConnected) {
-        fetchCategories();
-      }
-    });
-
-    // Initial connectivity check
-    NetInfo.fetch().then((state) => {
-      setIsConnected(state.isConnected);
-      if (state.isConnected) {
+      // If internet reconnects and we don't have data, fetch data
+      if (isConnectedNow && categoriesWithSubCategories.length === 0) {
         fetchCategories();
       }
     });
 
     return () => unsubscribe();
-  }, [fetchCategories]);
+  }, [fetchCategories, categoriesWithSubCategories.length]);
 
-  useLayoutEffect(() => {
-    navigation.setOptions({ headerShown: false });
-  }, [navigation]);
-
-  const handleCartPress = () => {
+  // Handle cart press
+  const handleCartPress = useCallback(() => {
     if (!user?.consumer_id) {
-      setAlertVisible(true);
+      dispatch({ type: "SHOW_ALERT" });
     } else {
       router.navigate("/screens/Cart");
     }
-  };
+  }, [user, router]);
+
+  // Handle alert dismiss
+  const handleAlertDismiss = useCallback(() => {
+    dispatch({ type: "HIDE_ALERT" });
+  }, []);
+
+  // Handle alert confirm
+  const handleAlertConfirm = useCallback(() => {
+    dispatch({ type: "HIDE_ALERT" });
+    navigation.navigate("Login");
+  }, [navigation]);
+
+  // Memoize cart item count
+  const cartItemCount = useMemo(() => cartItem.length, [cartItem]);
+
+  // Optimize FlatList rendering
+  const keyExtractor = useCallback(
+    (item, index) => `category-${index}-${loading ? "skeleton" : "data"}`,
+    [loading]
+  );
+
+  const renderItem = useCallback(
+    ({ item }) =>
+      loading ? (
+        <CategoriesSkeleton />
+      ) : (
+        <CategoriesSectionList data={[item]} />
+      ),
+    [loading]
+  );
+
+  const getItemLayout = useCallback(
+    (data, index) => ({
+      length: loading ? 150 : 250, // Approximate height of each item
+      offset: (loading ? 150 : 250) * index,
+      index,
+    }),
+    [loading]
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Image
-          source={
-            !isDarkTheme
-              ? require("../../assets/images/darkLogo.png")
-              : require("../../assets/images/lightLogo.png")
-          }
-          style={styles.logo}
-        />
-        <View style={styles.iconsContainer}>
-          <Link asChild href={{ pathname: "/Search" }}>
-            <IconButton
-              icon={() => (
-                <Ionicons
-                  name="search-outline"
-                  size={24}
-                  color={theme.colors.textColor}
-                />
-              )}
-              style={styles.searchBar}
-            />
-          </Link>
-          <Pressable
-            onPress={handleCartPress}
-            android_ripple={{ color: theme.colors.ripple }}
-            style={styles.iconButton}
-          >
-            <IconButton
-              icon="cart"
-              size={24}
-              iconColor={theme.colors.textColor}
-            />
-            {cartItem.length > 0 && (
-              <Badge
-                style={[styles.badge, { backgroundColor: theme.colors.button }]}
-              >
-                {cartItem.length}
-              </Badge>
-            )}
-          </Pressable>
-        </View>
-      </View>
-
-      <FlatList
-        data={loading ? Array(6).fill(null) : categoriesWithSubCategories}
-        renderItem={({ item }) =>
-          loading ? (
-            <CategoriesSkeleton />
-          ) : (
-            <CategoriesSectionList data={[item]} />
-          )
-        }
-        keyExtractor={(item, index) => index.toString()}
-        numColumns={loading ? 2 : 1}
-        key={loading ? "skeleton" : "data"}
-        contentContainerStyle={
-          loading ? styles.skeletonContainer : styles.dataContainer
-        }
-        refreshing={refreshing}
-        onRefresh={fetchCategories}
+      {/* Header component */}
+      <Header
+        theme={theme}
+        isDarkTheme={isDarkTheme}
+        cartItemCount={cartItemCount}
+        onCartPress={handleCartPress}
       />
 
+      {/* Wrap everything in a ScrollView to allow scrolling through all content */}
+      <ScrollView>
+        {/* Categories list */}
+        <FlatList
+          data={
+            loading
+              ? Array(6).fill(null)
+              : categoriesWithSubCategories.slice(0, 4)
+          }
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          numColumns={loading ? 2 : 1}
+          key={loading ? "skeleton" : "data"}
+          contentContainerStyle={
+            loading ? styles.skeletonContainer : styles.dataContainer
+          }
+          refreshing={refreshing}
+          onRefresh={fetchCategories}
+          getItemLayout={getItemLayout}
+          initialNumToRender={4}
+          maxToRenderPerBatch={4}
+          windowSize={5}
+          removeClippedSubviews={true}
+          scrollEnabled={false} // Disable scrolling on FlatList since we're using ScrollView
+        />
+
+        <NewArrivals />
+      </ScrollView>
+
+      {/* Alert dialog */}
       <AlertDialog
         visible={alertVisible}
         title="Login Required"
         message="Please log in to access your cart."
-        onDismiss={() => setAlertVisible(false)}
-        onConfirm={() => {
-          setAlertVisible(false);
-          navigation.navigate("Login");
-        }}
+        onDismiss={handleAlertDismiss}
+        onConfirm={handleAlertConfirm}
         confirmText="Login"
         cancelText="Cancel"
       />
@@ -188,6 +306,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   dataContainer: {},
+  searchBar: {},
 });
 
-export default Home;
+export default memo(Home);

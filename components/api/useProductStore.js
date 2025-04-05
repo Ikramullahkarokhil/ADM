@@ -66,6 +66,7 @@ const useProductStore = create(
       fetchNewArrivals: async () => {
         const data = await get().apiRequest("/get-new-arrival-products");
         set({ newArrivals: data });
+        return data ?? [];
       },
 
       // Fetch Just For You
@@ -158,6 +159,13 @@ const useProductStore = create(
           params: { "categories[]": subCategoryIds },
         });
         return data;
+      },
+
+      fetchRelatedProducts: async (productId) => {
+        const response = await api.get(
+          `/get-related-products?product_id=${productId}`
+        );
+        return response.data.related_products;
       },
 
       addToFavorite: async ({ productID, consumerID }) => {
@@ -375,19 +383,8 @@ const useProductStore = create(
           console.log("API Response:", response.data);
           return response.data;
         } catch (error) {
-          console.log("Upload Error:", error);
-          let errorMessage = error.response?.data?.message || error.message;
-          if (error.response?.status === 413) {
-            errorMessage =
-              "Image file too large. Please upload a smaller file.";
-          } else if (error.response?.status === 400) {
-            errorMessage = "Invalid image data. Please try again.";
-          } else if (error.response?.status === 406) {
-            errorMessage =
-              "Server rejected the request format. Check API requirements.";
-          }
-          set({ error: errorMessage, loading: false });
-          throw new Error(errorMessage);
+          set({ error: error, loading: false });
+          throw new Error(error);
         } finally {
           set({ loading: false });
         }
@@ -515,6 +512,11 @@ const useProductStore = create(
           params: { consumer_id: consumerID },
         });
         return data;
+      },
+
+      getAppVersions: async () => {
+        const data = await api.get("/app/versions");
+        return data.data.versions;
       },
 
       logout: () => {

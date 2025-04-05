@@ -1,6 +1,4 @@
-"use client";
-
-import { useLayoutEffect, useState, useRef, useCallback } from "react";
+import { useLayoutEffect, useRef, useCallback, useReducer, memo } from "react";
 import {
   StyleSheet,
   Text,
@@ -13,10 +11,10 @@ import {
   TouchableOpacity,
   Platform,
   KeyboardAvoidingView,
-  StatusBar,
   ToastAndroid,
   RefreshControl,
   Pressable,
+  Animated,
 } from "react-native";
 import { Button, useTheme, Divider } from "react-native-paper";
 import useProductStore from "../../../components/api/useProductStore";
@@ -26,347 +24,129 @@ import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 import { useNavigation } from "expo-router";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Location from "expo-location";
 
-const BillingAddress = () => {
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const {
-    consumerBillingAddress,
-    deleteBillingAddress,
-    addBillingAddress,
-    user,
-    setBillingAddressStatus,
-    fetchBillingAddresses,
-    editBillingAddress,
-  } = useProductStore();
-  const [mode, setMode] = useState("view"); // 'view', 'add', 'edit'
-  const [selectedAddress, setSelectedAddress] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false); // State for pull-to-refresh
-  const [localAddresses, setLocalAddresses] = useState(
-    consumerBillingAddress || []
-  );
-  const [pinLocation, setPinLocation] = useState(null);
-  const [locationError, setLocationError] = useState(null);
-  const navigation = useNavigation();
-  const { showActionSheetWithOptions } = useActionSheet();
-  const scrollViewRef = useRef(null);
+// Define initial state and reducer for better state management
+const initialState = {
+  mode: "view", // 'view', 'add', 'edit'
+  selectedAddress: null,
+  isLoading: false,
+  refreshing: false,
+  localAddresses: [],
+  pinLocation: null,
+  locationError: null,
+  showLocationSuccess: false,
+};
 
-  // Update local addresses when store changes
-  if (consumerBillingAddress && consumerBillingAddress !== localAddresses) {
-    setLocalAddresses(consumerBillingAddress);
+function reducer(state, action) {
+  switch (action.type) {
+    case "SET_MODE":
+      return { ...state, mode: action.payload };
+    case "SET_SELECTED_ADDRESS":
+      return { ...state, selectedAddress: action.payload };
+    case "SET_LOADING":
+      return { ...state, isLoading: action.payload };
+    case "SET_REFRESHING":
+      return { ...state, refreshing: action.payload };
+    case "SET_LOCAL_ADDRESSES":
+      return { ...state, localAddresses: action.payload };
+    case "SET_PIN_LOCATION":
+      return { ...state, pinLocation: action.payload };
+    case "SET_LOCATION_ERROR":
+      return { ...state, locationError: action.payload };
+    case "SHOW_LOCATION_SUCCESS":
+      return { ...state, showLocationSuccess: action.payload };
+    case "RESET_FORM":
+      return {
+        ...state,
+        mode: "view",
+        selectedAddress: null,
+        pinLocation: null,
+        locationError: null,
+      };
+    default:
+      return state;
+  }
+}
+
+// Show toast message (Android) or fallback to Alert (iOS)
+const showToast = (message) => {
+  if (Platform.OS === "android") {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+  } else {
+    Alert.alert("", message, [{ text: "OK" }], { cancelable: true });
+  }
+};
+
+// Function to safely parse pin_location
+const parsePinLocation = (location) => {
+  if (!location) return null;
+
+  let parsedLocation;
+
+  if (typeof location === "string") {
+    try {
+      parsedLocation = JSON.parse(location);
+    } catch (e) {
+      console.log("Error parsing pin_location:", e);
+      return null;
+    }
+  } else {
+    parsedLocation = location;
   }
 
-  // Handle pull-to-refresh
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await fetchBillingAddresses(user.consumer_id);
-      showToast("Addresses refreshed");
-    } catch (error) {
-      console.log("Error refreshing addresses:", error);
-      showToast("Failed to refresh addresses");
-    } finally {
-      setRefreshing(false);
-    }
-  }, [user.consumer_id, fetchBillingAddresses]);
+  // Ensure the parsed location has the expected structure
+  if (
+    parsedLocation &&
+    typeof parsedLocation === "object" &&
+    typeof parsedLocation.latitude === "number" &&
+    typeof parsedLocation.longitude === "number"
+  ) {
+    return parsedLocation;
+  }
 
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Billing Addresses",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
-    });
-  }, [navigation, theme]);
-
-  const validationSchema = Yup.object().shape({
-    name: Yup.string().required("Full name is required"),
-    email: Yup.string().email("Invalid email").required("Email is required"),
-    phone: Yup.string().required("Phone number is required"),
-    address: Yup.string().required("Street address is required"),
-    // Pin location is not required but will be validated if present
-    pin_location: Yup.object().nullable(),
-  });
-
-  // Function to safely parse pin_location if it's a string and ensure it has the correct structure
-  const parsePinLocation = (location) => {
-    if (!location) return null;
-
-    let parsedLocation;
-
-    if (typeof location === "string") {
-      try {
-        parsedLocation = JSON.parse(location);
-      } catch (e) {
-        console.log("Error parsing pin_location:", e);
-        return null;
-      }
-    } else {
-      parsedLocation = location;
+  // Check for common alternative structures
+  if (parsedLocation) {
+    if (parsedLocation.lat && parsedLocation.lng) {
+      return {
+        latitude: parsedLocation.lat,
+        longitude: parsedLocation.lng,
+      };
     }
 
-    // Ensure the parsed location has the expected structure
-    if (
-      parsedLocation &&
-      typeof parsedLocation === "object" &&
-      typeof parsedLocation.latitude === "number" &&
-      typeof parsedLocation.longitude === "number"
-    ) {
-      return parsedLocation;
+    if (parsedLocation.coords) {
+      return {
+        latitude: parsedLocation.coords.latitude,
+        longitude: parsedLocation.coords.longitude,
+      };
     }
 
-    // If we have coordinates but in a different structure, try to normalize it
-    if (parsedLocation) {
-      // Check for common alternative structures
-      if (parsedLocation.lat && parsedLocation.lng) {
-        return {
-          latitude: parsedLocation.lat,
-          longitude: parsedLocation.lng,
-        };
-      }
-
-      if (parsedLocation.coords) {
-        return {
-          latitude: parsedLocation.coords.latitude,
-          longitude: parsedLocation.coords.longitude,
-        };
-      }
-
-      // If it's an array like [longitude, latitude] (GeoJSON format)
-      if (Array.isArray(parsedLocation) && parsedLocation.length === 2) {
-        return {
-          latitude: parsedLocation[1],
-          longitude: parsedLocation[0],
-        };
-      }
+    // If it's an array like [longitude, latitude] (GeoJSON format)
+    if (Array.isArray(parsedLocation) && parsedLocation.length === 2) {
+      return {
+        latitude: parsedLocation[1],
+        longitude: parsedLocation[0],
+      };
     }
+  }
 
-    return null;
-  };
+  return null;
+};
 
-  // Show toast message (Android) or fallback to Alert (iOS)
-  const showToast = (message) => {
-    if (Platform.OS === "android") {
-      ToastAndroid.show(message, ToastAndroid.SHORT);
-    } else {
-      Alert.alert("", message, [{ text: "OK" }], { cancelable: true });
-    }
-  };
+// Form validation schema
+const validationSchema = Yup.object().shape({
+  name: Yup.string().required("Full name is required"),
+  email: Yup.string().email("Invalid email").required("Email is required"),
+  phone: Yup.string().required("Phone number is required"),
+  address: Yup.string().required("Street address is required"),
+  // Pin location is not required but will be validated if present
+  pin_location: Yup.object().nullable(),
+});
 
-  const handleSave = async (values) => {
-    setIsLoading(true);
-
-    try {
-      // Create a copy of values to avoid modifying the original
-      const formattedValues = { ...values };
-
-      // Ensure pin_location has the correct structure before stringifying
-      if (formattedValues.pin_location) {
-        // Normalize to expected structure if needed
-        const normalizedLocation = {
-          latitude: formattedValues.pin_location.latitude,
-          longitude: formattedValues.pin_location.longitude,
-        };
-
-        // Only include if both values are valid numbers
-        if (
-          typeof normalizedLocation.latitude === "number" &&
-          !isNaN(normalizedLocation.latitude) &&
-          typeof normalizedLocation.longitude === "number" &&
-          !isNaN(normalizedLocation.longitude)
-        ) {
-          // Ensure it's properly stringified as JSON
-          formattedValues.pin_location = JSON.stringify(normalizedLocation);
-        } else {
-          formattedValues.pin_location = null;
-        }
-      }
-
-      if (mode === "edit" && selectedAddress) {
-        // For editing an existing address
-        const billingData = {
-          consumer_id: user.consumer_id,
-          billing_address_id: selectedAddress.consumer_billing_address_id,
-          name: formattedValues.name,
-          email: formattedValues.email,
-          phone: formattedValues.phone,
-          address: formattedValues.address,
-          pin_location: formattedValues.pin_location || null,
-        };
-
-        await editBillingAddress(billingData);
-      } else {
-        // For adding a new address
-        const billingData = {
-          ...formattedValues,
-          consumer_id: user.consumer_id,
-        };
-
-        await addBillingAddress(billingData);
-      }
-
-      // Refresh the billing addresses list
-      await fetchBillingAddresses(user.consumer_id);
-
-      setMode("view");
-      setSelectedAddress(null);
-      setPinLocation(null);
-      showToast(
-        mode === "add"
-          ? "Address added successfully"
-          : "Address updated successfully"
-      );
-    } catch (error) {
-      console.log(
-        "Error:",
-        error.response ? error.response.data : error.message
-      );
-      showToast("Failed to save address. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDelete = async (address) => {
-    Alert.alert(
-      "Confirm Deletion",
-      "Are you sure you want to delete this address?",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setIsLoading(true);
-            try {
-              // Optimistically update UI
-              const updatedAddresses = localAddresses.filter(
-                (a) =>
-                  a.consumer_billing_address_id !==
-                  address.consumer_billing_address_id
-              );
-              setLocalAddresses(updatedAddresses);
-
-              // Then perform the actual deletion
-              await deleteBillingAddress({
-                consumerID: user.consumer_id,
-                billingAddressID: address.consumer_billing_address_id,
-              });
-              showToast("Address deleted successfully");
-            } catch (error) {
-              console.log(error);
-              // Revert to original data on error
-              setLocalAddresses(consumerBillingAddress);
-              showToast("Failed to delete address. Please try again.");
-            } finally {
-              setIsLoading(false);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleSetDefault = async (address) => {
-    if (address.status === 1) {
-      return; // Already default, no need to do anything
-    }
-
-    // IMPORTANT: Immediately update UI to show this address as default
-    // This creates an optimistic UI update before the API call completes
-    const updatedAddresses = localAddresses.map((addr) => ({
-      ...addr,
-      status:
-        addr.consumer_billing_address_id === address.consumer_billing_address_id
-          ? 1
-          : 0,
-    }));
-
-    // Update local state immediately to reflect changes in UI
-    setLocalAddresses(updatedAddresses);
-
-    // Then perform the actual update
-    setIsLoading(true);
-    try {
-      await setBillingAddressStatus({
-        consumerId: user.consumer_id,
-        billingId: address.consumer_billing_address_id,
-      });
-      showToast("Default address updated successfully");
-    } catch (error) {
-      console.log(error);
-      // Revert to original data on error
-      setLocalAddresses(consumerBillingAddress);
-      showToast("Failed to set default address. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const showAddressOptions = (address) => {
-    const options = ["Edit", "Delete"];
-    const destructiveButtonIndex = 1;
-
-    if (address.status !== 1) {
-      options.push("Set as Default");
-    }
-
-    options.push("Cancel");
-    const cancelButtonIndex = options.length - 1;
-
-    showActionSheetWithOptions(
-      {
-        options,
-        cancelButtonIndex,
-        destructiveButtonIndex,
-        containerStyle: {
-          backgroundColor: theme.colors.primary,
-          borderTopLeftRadius: 20,
-          borderTopRightRadius: 20,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 5,
-        },
-        textStyle: {
-          color: theme.colors.textColor,
-          fontSize: 16,
-        },
-        titleTextStyle: {
-          color: theme.colors.textColor,
-          fontWeight: "bold",
-          fontSize: 18,
-        },
-        messageTextStyle: {
-          color: theme.colors.subInactiveColor,
-          marginBottom: 10,
-        },
-        separatorStyle: {
-          backgroundColor: theme.colors.subInactiveColor,
-          opacity: 0.2,
-        },
-      },
-      (buttonIndex) => {
-        if (buttonIndex === 0) {
-          // Edit
-          setSelectedAddress(address);
-          setMode("edit");
-        } else if (buttonIndex === 1) {
-          // Delete
-          handleDelete(address);
-        } else if (buttonIndex === 2 && address.status !== 1) {
-          // Set as Default (only if not already default)
-          handleSetDefault(address);
-        }
-      }
-    );
-  };
-
-  const renderFormField = (
+// Memoized FormField component
+const FormField = memo(
+  ({
     field,
     label,
     placeholder,
@@ -376,8 +156,9 @@ const BillingAddress = () => {
     errors,
     touched,
     keyboardType = "default",
-    icon
-  ) => (
+    icon,
+    theme,
+  }) => (
     <View style={styles.inputContainer} key={field}>
       <Text style={[styles.label, { color: theme.colors.textColor }]}>
         {label}
@@ -421,17 +202,144 @@ const BillingAddress = () => {
         <Text style={styles.errorText}>{errors[field]}</Text>
       )}
     </View>
-  );
+  )
+);
 
-  const renderAddressCard = (address) => {
-    const isDefault = address.status == 1;
+// Memoized LocationPicker component
+const LocationPicker = memo(
+  ({
+    values,
+    setFieldValue,
+    locationError,
+    getCurrentLocation,
+    theme,
+    showLocationSuccess,
+  }) => {
+    const locationSuccessOpacity = useRef(new Animated.Value(0)).current;
 
+    // Animate location success indicator
+    useLayoutEffect(() => {
+      if (showLocationSuccess) {
+        Animated.sequence([
+          Animated.timing(locationSuccessOpacity, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.delay(1500),
+          Animated.timing(locationSuccessOpacity, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
+    }, [showLocationSuccess, locationSuccessOpacity]);
+
+    return (
+      <View style={styles.locationContainer}>
+        <Text style={[styles.label, { color: theme.colors.textColor }]}>
+          LOCATION
+        </Text>
+        <View style={styles.locationSubContainer}>
+          <Pressable
+            style={[
+              styles.locationButton,
+              {
+                backgroundColor: theme.colors.primary,
+                borderColor: values.pin_location
+                  ? theme.colors.button
+                  : theme.colors.subInactiveColor,
+                borderWidth: values.pin_location ? 2 : 1,
+              },
+            ]}
+          >
+            <MaterialIcons
+              name="my-location"
+              size={20}
+              color={theme.colors.button}
+            />
+            {values.pin_location && (
+              <Text
+                style={[
+                  styles.locationButtonText,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                Location set
+              </Text>
+            )}
+            {!values.pin_location && (
+              <Text
+                style={[
+                  styles.locationButtonText,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                Get your location
+              </Text>
+            )}
+          </Pressable>
+
+          <TouchableOpacity
+            style={[
+              styles.getLocationButton,
+              { backgroundColor: theme.colors.button },
+            ]}
+            onPress={() => getCurrentLocation(setFieldValue)}
+            activeOpacity={0.7}
+          >
+            <MaterialIcons name="my-location" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+
+        {values.pin_location && (
+          <View style={styles.locationInfoContainer}>
+            <Text
+              style={[
+                styles.locationText,
+                { color: theme.colors.subInactiveColor },
+              ]}
+            >
+              Location set at{" "}
+              {typeof values.pin_location.latitude === "number"
+                ? values.pin_location.latitude.toFixed(6)
+                : "unknown"}
+              ,{" "}
+              {typeof values.pin_location.longitude === "number"
+                ? values.pin_location.longitude.toFixed(6)
+                : "unknown"}
+            </Text>
+
+            <Animated.View
+              style={[
+                styles.locationSuccessIndicator,
+                {
+                  backgroundColor: theme.colors.button,
+                  opacity: locationSuccessOpacity,
+                },
+              ]}
+            >
+              <MaterialIcons name="check" size={16} color="white" />
+              <Text style={styles.locationSuccessText}>Location updated</Text>
+            </Animated.View>
+          </View>
+        )}
+
+        {locationError && <Text style={styles.errorText}>{locationError}</Text>}
+      </View>
+    );
+  }
+);
+
+// Memoized AddressCard component
+const AddressCard = memo(
+  ({ address, theme, showAddressOptions, isDefault }) => {
     // Parse pin_location if it's a string
     const pinLocation = parsePinLocation(address.pin_location);
 
     return (
-      <View
-        key={address.consumer_billing_address_id}
+      <Animated.View
         style={[
           styles.addressCard,
           {
@@ -517,6 +425,24 @@ const BillingAddress = () => {
                 {address.address}
               </Text>
             </View>
+
+            {pinLocation && (
+              <View style={styles.pinLocationIndicator}>
+                <MaterialIcons
+                  name="pin-drop"
+                  size={14}
+                  color={theme.colors.button}
+                />
+                <Text
+                  style={[
+                    styles.pinLocationText,
+                    { color: theme.colors.subInactiveColor },
+                  ]}
+                >
+                  GPS location available
+                </Text>
+              </View>
+            )}
           </View>
         </TouchableOpacity>
         {isDefault && (
@@ -529,58 +455,553 @@ const BillingAddress = () => {
             <MaterialCommunityIcons name="check" size={16} color="white" />
           </View>
         )}
-      </View>
+      </Animated.View>
     );
-  };
+  }
+);
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <MaterialIcons
-        name="location-off"
-        size={64}
-        color={theme.colors.button}
-      />
-      <Text style={[styles.emptyStateText, { color: theme.colors.textColor }]}>
-        No billing addresses found
-      </Text>
-      <Text
+// Memoized EmptyState component
+const EmptyState = memo(({ setMode, theme }) => (
+  <View style={styles.emptyState}>
+    <MaterialIcons name="location-off" size={64} color={theme.colors.button} />
+    <Text style={[styles.emptyStateText, { color: theme.colors.textColor }]}>
+      No billing addresses found
+    </Text>
+    <Text
+      style={[
+        styles.emptyStateSubtext,
+        { color: theme.colors.subInactiveColor },
+      ]}
+    >
+      Add a new billing address to get started
+    </Text>
+    <Button
+      mode="contained"
+      onPress={() => setMode("add")}
+      icon={({ size, color }) => (
+        <MaterialIcons name="add" size={size} color={color} />
+      )}
+      buttonColor={theme.colors.button}
+      textColor="white"
+      style={[styles.addButton, { marginTop: 20 }]}
+      contentStyle={{ height: 48 }}
+      labelStyle={{ fontSize: 16, fontWeight: "600" }}
+    >
+      Add New Address
+    </Button>
+  </View>
+));
+
+// Memoized AddressForm component
+const AddressForm = memo(
+  ({
+    mode,
+    selectedAddress,
+    pinLocation,
+    handleSave,
+    resetForm,
+    getCurrentLocation,
+    locationError,
+    theme,
+    showLocationSuccess,
+  }) => {
+    return (
+      <View
         style={[
-          styles.emptyStateSubtext,
-          { color: theme.colors.subInactiveColor },
+          styles.formContainer,
+          { backgroundColor: theme.colors.primary },
         ]}
       >
-        Add a new billing address to get started
-      </Text>
-      <Button
-        mode="contained"
-        onPress={() => setMode("add")}
-        icon={({ size, color }) => (
-          <MaterialIcons name="add" size={size} color={color} />
-        )}
-        buttonColor={theme.colors.button}
-        textColor="white"
-        style={[styles.addButton, { marginTop: 20 }]}
-        contentStyle={{ height: 48 }}
-        labelStyle={{ fontSize: 16, fontWeight: "600" }}
-      >
-        Add New Address
-      </Button>
-    </View>
+        <View style={styles.formHeader}>
+          <Text style={[styles.formTitle, { color: theme.colors.textColor }]}>
+            {mode === "add" ? "Add New Address" : "Edit Address"}
+          </Text>
+          <TouchableOpacity
+            onPress={resetForm}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <MaterialIcons
+              name="close"
+              size={24}
+              color={theme.colors.textColor}
+            />
+          </TouchableOpacity>
+        </View>
+
+        <Formik
+          initialValues={{
+            name: selectedAddress?.name || "",
+            email: selectedAddress?.email || "",
+            phone: selectedAddress?.phone || "",
+            address: selectedAddress?.address || "",
+            pin_location:
+              parsePinLocation(selectedAddress?.pin_location) ||
+              pinLocation ||
+              null,
+          }}
+          validationSchema={validationSchema}
+          onSubmit={handleSave}
+          enableReinitialize
+        >
+          {({
+            handleChange,
+            handleBlur,
+            handleSubmit,
+            values,
+            errors,
+            touched,
+            isValid,
+            dirty,
+            setFieldValue,
+          }) => (
+            <>
+              <FormField
+                field="name"
+                label="FULL NAME"
+                placeholder="Enter your full name"
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                values={values}
+                errors={errors}
+                touched={touched}
+                keyboardType="default"
+                icon="person"
+                theme={theme}
+              />
+
+              <FormField
+                field="email"
+                label="EMAIL"
+                placeholder="Enter your email address"
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                values={values}
+                errors={errors}
+                touched={touched}
+                keyboardType="email-address"
+                icon="email"
+                theme={theme}
+              />
+
+              <FormField
+                field="phone"
+                label="PHONE"
+                placeholder="Enter your phone number"
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                values={values}
+                errors={errors}
+                touched={touched}
+                keyboardType="phone-pad"
+                icon="phone"
+                theme={theme}
+              />
+
+              <FormField
+                field="address"
+                label="STREET ADDRESS"
+                placeholder="Enter your street address"
+                handleChange={handleChange}
+                handleBlur={handleBlur}
+                values={values}
+                errors={errors}
+                touched={touched}
+                keyboardType="default"
+                icon="location-on"
+                theme={theme}
+              />
+
+              <LocationPicker
+                values={values}
+                setFieldValue={setFieldValue}
+                locationError={locationError}
+                getCurrentLocation={getCurrentLocation}
+                theme={theme}
+                showLocationSuccess={showLocationSuccess}
+              />
+
+              <View style={styles.formButtons}>
+                <Button
+                  mode="outlined"
+                  onPress={resetForm}
+                  style={[
+                    styles.cancelButton,
+                    { borderColor: theme.colors.button },
+                  ]}
+                  textColor={theme.colors.button}
+                  contentStyle={{ height: 48 }}
+                  labelStyle={{ fontSize: 16 }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  mode="contained"
+                  onPress={handleSubmit}
+                  style={styles.saveButton}
+                  buttonColor={theme.colors.button}
+                  textColor="white"
+                  disabled={!(isValid && dirty)}
+                  contentStyle={{ height: 48 }}
+                >
+                  Save Address
+                </Button>
+              </View>
+            </>
+          )}
+        </Formik>
+      </View>
+    );
+  }
+);
+
+// Main component
+const BillingAddress = () => {
+  const theme = useTheme();
+  const insets = useSafeAreaInsets();
+  const {
+    consumerBillingAddress,
+    deleteBillingAddress,
+    addBillingAddress,
+    user,
+    setBillingAddressStatus,
+    fetchBillingAddresses,
+    editBillingAddress,
+  } = useProductStore();
+
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const navigation = useNavigation();
+  const { showActionSheetWithOptions } = useActionSheet();
+  const scrollViewRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Destructure state for readability
+  const {
+    mode,
+    selectedAddress,
+    isLoading,
+    refreshing,
+    localAddresses,
+    pinLocation,
+    locationError,
+    showLocationSuccess,
+  } = state;
+
+  // Update local addresses when store changes
+  useLayoutEffect(() => {
+    if (consumerBillingAddress && consumerBillingAddress !== localAddresses) {
+      dispatch({
+        type: "SET_LOCAL_ADDRESSES",
+        payload: consumerBillingAddress,
+      });
+    }
+  }, [consumerBillingAddress]);
+
+  // Set up navigation options
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      title: "Billing Addresses",
+      headerStyle: {
+        backgroundColor: theme.colors.primary,
+      },
+      headerTintColor: theme.colors.textColor,
+    });
+  }, [navigation, theme]);
+
+  // Animate FAB when mode changes
+  useLayoutEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: mode === "view" && localAddresses?.length > 0 ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [mode, localAddresses, fadeAnim]);
+
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(async () => {
+    dispatch({ type: "SET_REFRESHING", payload: true });
+    try {
+      await fetchBillingAddresses(user.consumer_id);
+      showToast("Addresses refreshed");
+    } catch (error) {
+      console.log("Error refreshing addresses:", error);
+      showToast("Failed to refresh addresses");
+    } finally {
+      dispatch({ type: "SET_REFRESHING", payload: false });
+    }
+  }, [user.consumer_id, fetchBillingAddresses]);
+
+  // Handle form submission
+  const handleSave = useCallback(
+    async (values) => {
+      dispatch({ type: "SET_LOADING", payload: true });
+
+      try {
+        // Create a copy of values to avoid modifying the original
+        const formattedValues = { ...values };
+
+        // Ensure pin_location has the correct structure before stringifying
+        if (formattedValues.pin_location) {
+          // Normalize to expected structure if needed
+          const normalizedLocation = {
+            latitude: formattedValues.pin_location.latitude,
+            longitude: formattedValues.pin_location.longitude,
+          };
+
+          // Only include if both values are valid numbers
+          if (
+            typeof normalizedLocation.latitude === "number" &&
+            !isNaN(normalizedLocation.latitude) &&
+            typeof normalizedLocation.longitude === "number" &&
+            !isNaN(normalizedLocation.longitude)
+          ) {
+            // Ensure it's properly stringified as JSON
+            formattedValues.pin_location = JSON.stringify(normalizedLocation);
+          } else {
+            formattedValues.pin_location = null;
+          }
+        }
+
+        if (mode === "edit" && selectedAddress) {
+          // For editing an existing address
+          const billingData = {
+            consumer_id: user.consumer_id,
+            billing_address_id: selectedAddress.consumer_billing_address_id,
+            name: formattedValues.name,
+            email: formattedValues.email,
+            phone: formattedValues.phone,
+            address: formattedValues.address,
+            pin_location: formattedValues.pin_location || null,
+          };
+
+          await editBillingAddress(billingData);
+        } else {
+          // For adding a new address
+          const billingData = {
+            ...formattedValues,
+            consumer_id: user.consumer_id,
+          };
+
+          await addBillingAddress(billingData);
+        }
+
+        // Refresh the billing addresses list
+        await fetchBillingAddresses(user.consumer_id);
+
+        dispatch({ type: "RESET_FORM" });
+        showToast(
+          mode === "add"
+            ? "Address added successfully"
+            : "Address updated successfully"
+        );
+      } catch (error) {
+        console.log(
+          "Error:",
+          error.response ? error.response.data : error.message
+        );
+        showToast("Failed to save address. Please try again.");
+      } finally {
+        dispatch({ type: "SET_LOADING", payload: false });
+      }
+    },
+    [
+      mode,
+      selectedAddress,
+      user.consumer_id,
+      editBillingAddress,
+      addBillingAddress,
+      fetchBillingAddresses,
+    ]
   );
 
-  // Function to get current location
-  const getCurrentLocation = async (setFieldValue) => {
-    setIsLoading(true);
-    setLocationError(null);
+  // Handle address deletion
+  const handleDelete = useCallback(
+    async (address) => {
+      Alert.alert(
+        "Confirm Deletion",
+        "Are you sure you want to delete this address?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Delete",
+            style: "destructive",
+            onPress: async () => {
+              dispatch({ type: "SET_LOADING", payload: true });
+              try {
+                // Optimistically update UI
+                const updatedAddresses = localAddresses.filter(
+                  (a) =>
+                    a.consumer_billing_address_id !==
+                    address.consumer_billing_address_id
+                );
+                dispatch({
+                  type: "SET_LOCAL_ADDRESSES",
+                  payload: updatedAddresses,
+                });
+
+                // Then perform the actual deletion
+                await deleteBillingAddress({
+                  consumerID: user.consumer_id,
+                  billingAddressID: address.consumer_billing_address_id,
+                });
+                showToast("Address deleted successfully");
+              } catch (error) {
+                console.log(error);
+                // Revert to original data on error
+                dispatch({
+                  type: "SET_LOCAL_ADDRESSES",
+                  payload: consumerBillingAddress,
+                });
+                showToast("Failed to delete address. Please try again.");
+              } finally {
+                dispatch({ type: "SET_LOADING", payload: false });
+              }
+            },
+          },
+        ]
+      );
+    },
+    [
+      localAddresses,
+      user.consumer_id,
+      deleteBillingAddress,
+      consumerBillingAddress,
+    ]
+  );
+
+  // Handle setting default address
+  const handleSetDefault = useCallback(
+    async (address) => {
+      if (address.status === 1) {
+        return; // Already default, no need to do anything
+      }
+
+      // IMPORTANT: Immediately update UI to show this address as default
+      // This creates an optimistic UI update before the API call completes
+      const updatedAddresses = localAddresses.map((addr) => ({
+        ...addr,
+        status:
+          addr.consumer_billing_address_id ===
+          address.consumer_billing_address_id
+            ? 1
+            : 0,
+      }));
+
+      // Update local state immediately to reflect changes in UI
+      dispatch({ type: "SET_LOCAL_ADDRESSES", payload: updatedAddresses });
+
+      // Then perform the actual update
+      dispatch({ type: "SET_LOADING", payload: true });
+      try {
+        await setBillingAddressStatus({
+          consumerId: user.consumer_id,
+          billingId: address.consumer_billing_address_id,
+        });
+        showToast("Default address updated successfully");
+      } catch (error) {
+        console.log(error);
+        // Revert to original data on error
+        dispatch({
+          type: "SET_LOCAL_ADDRESSES",
+          payload: consumerBillingAddress,
+        });
+        showToast("Failed to set default address. Please try again.");
+      } finally {
+        dispatch({ type: "SET_LOADING", payload: false });
+      }
+    },
+    [
+      localAddresses,
+      user.consumer_id,
+      setBillingAddressStatus,
+      consumerBillingAddress,
+    ]
+  );
+
+  // Show address options action sheet
+  const showAddressOptions = useCallback(
+    (address) => {
+      const options = ["Edit", "Delete"];
+      const destructiveButtonIndex = 1;
+
+      if (address.status !== 1) {
+        options.push("Set as Default");
+      }
+
+      options.push("Cancel");
+      const cancelButtonIndex = options.length - 1;
+
+      showActionSheetWithOptions(
+        {
+          options,
+          cancelButtonIndex,
+          destructiveButtonIndex,
+          containerStyle: {
+            backgroundColor: theme.colors.primary,
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 5,
+          },
+          textStyle: {
+            color: theme.colors.textColor,
+            fontSize: 16,
+          },
+          titleTextStyle: {
+            color: theme.colors.textColor,
+            fontWeight: "bold",
+            fontSize: 18,
+          },
+          messageTextStyle: {
+            color: theme.colors.subInactiveColor,
+            marginBottom: 10,
+          },
+          separatorStyle: {
+            backgroundColor: theme.colors.subInactiveColor,
+            opacity: 0.2,
+          },
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) {
+            // Edit
+            dispatch({ type: "SET_SELECTED_ADDRESS", payload: address });
+            dispatch({ type: "SET_MODE", payload: "edit" });
+          } else if (buttonIndex === 1) {
+            // Delete
+            handleDelete(address);
+          } else if (buttonIndex === 2 && address.status !== 1) {
+            // Set as Default (only if not already default)
+            handleSetDefault(address);
+          }
+        }
+      );
+    },
+    [
+      showActionSheetWithOptions,
+      theme,
+      insets.bottom,
+      handleDelete,
+      handleSetDefault,
+    ]
+  );
+
+  // Get current location
+  const getCurrentLocation = useCallback(async (setFieldValue) => {
+    dispatch({ type: "SET_LOADING", payload: true });
+    dispatch({ type: "SET_LOCATION_ERROR", payload: null });
 
     try {
       // Request permission to access location
       const { status } = await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
-        setLocationError("Permission to access location was denied");
+        dispatch({
+          type: "SET_LOCATION_ERROR",
+          payload: "Permission to access location was denied",
+        });
         showToast("Location permission denied");
-        setIsLoading(false);
+        dispatch({ type: "SET_LOADING", payload: false });
         return;
       }
 
@@ -596,22 +1017,41 @@ const BillingAddress = () => {
       };
 
       // Set the pin location
-      setPinLocation(newLocation);
+      dispatch({ type: "SET_PIN_LOCATION", payload: newLocation });
 
       // Update formik value
       if (setFieldValue) {
         setFieldValue("pin_location", newLocation);
       }
 
+      // Show success animation
+      dispatch({ type: "SHOW_LOCATION_SUCCESS", payload: true });
+      setTimeout(() => {
+        dispatch({ type: "SHOW_LOCATION_SUCCESS", payload: false });
+      }, 2000);
+
       showToast("Current location obtained successfully");
     } catch (error) {
       console.log("Error getting location:", error);
-      setLocationError("Failed to get current location");
+      dispatch({
+        type: "SET_LOCATION_ERROR",
+        payload: "Failed to get current location",
+      });
       showToast("Failed to get current location");
     } finally {
-      setIsLoading(false);
+      dispatch({ type: "SET_LOADING", payload: false });
     }
-  };
+  }, []);
+
+  // Reset form state
+  const resetForm = useCallback(() => {
+    dispatch({ type: "RESET_FORM" });
+  }, []);
+
+  // Set mode to add new address
+  const setMode = useCallback((newMode) => {
+    dispatch({ type: "SET_MODE", payload: newMode });
+  }, []);
 
   return (
     <SafeAreaView
@@ -644,244 +1084,47 @@ const BillingAddress = () => {
             <>
               {localAddresses?.length > 0 ? (
                 <View style={styles.addressList}>
-                  {localAddresses.map((address) => renderAddressCard(address))}
+                  {localAddresses.map((address) => (
+                    <AddressCard
+                      key={address.consumer_billing_address_id}
+                      address={address}
+                      theme={theme}
+                      showAddressOptions={showAddressOptions}
+                      isDefault={address.status == 1}
+                    />
+                  ))}
                 </View>
               ) : (
-                renderEmptyState()
+                <EmptyState setMode={setMode} theme={theme} />
               )}
             </>
           ) : (
-            <View
-              style={[
-                styles.formContainer,
-                { backgroundColor: theme.colors.primary },
-              ]}
-            >
-              <View style={styles.formHeader}>
-                <Text
-                  style={[styles.formTitle, { color: theme.colors.textColor }]}
-                >
-                  {mode === "add" ? "Add New Address" : "Edit Address"}
-                </Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setMode("view");
-                    setSelectedAddress(null);
-                  }}
-                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                >
-                  <MaterialIcons
-                    name="close"
-                    size={24}
-                    color={theme.colors.textColor}
-                  />
-                </TouchableOpacity>
-              </View>
-
-              <Formik
-                initialValues={{
-                  name: selectedAddress?.name || "",
-                  email: selectedAddress?.email || "",
-                  phone: selectedAddress?.phone || "",
-                  address: selectedAddress?.address || "",
-                  pin_location:
-                    parsePinLocation(selectedAddress?.pin_location) ||
-                    pinLocation ||
-                    null,
-                }}
-                validationSchema={validationSchema}
-                onSubmit={handleSave}
-              >
-                {({
-                  handleChange,
-                  handleBlur,
-                  handleSubmit,
-                  values,
-                  errors,
-                  touched,
-                  isValid,
-                  dirty,
-                  setFieldValue,
-                }) => {
-                  // Store formikBag in ref for access from modal
-                  if (scrollViewRef.current) {
-                    scrollViewRef.current.formikBag = { setFieldValue };
-                  }
-
-                  return (
-                    <>
-                      {renderFormField(
-                        "name",
-                        "FULL NAME",
-                        "Enter your full name",
-                        handleChange,
-                        handleBlur,
-                        values,
-                        errors,
-                        touched,
-                        "default",
-                        "person"
-                      )}
-                      {renderFormField(
-                        "email",
-                        "EMAIL",
-                        "Enter your email address",
-                        handleChange,
-                        handleBlur,
-                        values,
-                        errors,
-                        touched,
-                        "email-address",
-                        "email"
-                      )}
-                      {renderFormField(
-                        "phone",
-                        "PHONE",
-                        "Enter your phone number",
-                        handleChange,
-                        handleBlur,
-                        values,
-                        errors,
-                        touched,
-                        "phone-pad",
-                        "phone"
-                      )}
-                      {renderFormField(
-                        "address",
-                        "STREET ADDRESS",
-                        "Enter your street address",
-                        handleChange,
-                        handleBlur,
-                        values,
-                        errors,
-                        touched,
-                        "default",
-                        "location-on"
-                      )}
-
-                      <View style={styles.locationContainer}>
-                        <Text
-                          style={[
-                            styles.label,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          LOCATION
-                        </Text>
-                        <View style={styles.locationSubContainer}>
-                          <Pressable
-                            style={[
-                              styles.locationButton,
-                              {
-                                backgroundColor: theme.colors.primary,
-                                borderColor: theme.colors.subInactiveColor,
-                                borderWidth: 1,
-                              },
-                            ]}
-                          >
-                            <MaterialIcons
-                              name="my-location"
-                              size={20}
-                              color={theme.colors.button}
-                            />
-                            {values.pin_location && (
-                              <Text
-                                style={[
-                                  styles.locationButtonText,
-                                  { color: theme.colors.textColor },
-                                ]}
-                              >
-                                Got your location
-                              </Text>
-                            )}
-                            {!values.pin_location && (
-                              <Text
-                                style={[
-                                  styles.locationButtonText,
-                                  { color: theme.colors.textColor },
-                                ]}
-                              >
-                                Get your location
-                              </Text>
-                            )}
-                          </Pressable>
-
-                          <TouchableOpacity
-                            style={[
-                              styles.getLocationButton,
-                              { backgroundColor: theme.colors.button },
-                            ]}
-                            onPress={() => getCurrentLocation(setFieldValue)}
-                          >
-                            <MaterialIcons
-                              name="my-location"
-                              size={20}
-                              color="white"
-                            />
-                          </TouchableOpacity>
-                        </View>
-                        {values.pin_location && (
-                          <Text
-                            style={[
-                              styles.locationText,
-                              { color: theme.colors.subInactiveColor },
-                            ]}
-                          >
-                            Location set at{" "}
-                            {typeof values.pin_location.latitude === "number"
-                              ? values.pin_location.latitude.toFixed(6)
-                              : "unknown"}
-                            ,{" "}
-                            {typeof values.pin_location.longitude === "number"
-                              ? values.pin_location.longitude.toFixed(6)
-                              : "unknown"}
-                          </Text>
-                        )}
-                        {locationError && (
-                          <Text style={styles.errorText}>{locationError}</Text>
-                        )}
-                      </View>
-
-                      <View style={styles.formButtons}>
-                        <Button
-                          mode="outlined"
-                          onPress={() => {
-                            setMode("view");
-                            setSelectedAddress(null);
-                          }}
-                          style={[
-                            styles.cancelButton,
-                            { borderColor: theme.colors.button },
-                          ]}
-                          textColor={theme.colors.button}
-                          contentStyle={{ height: 48 }}
-                          labelStyle={{ fontSize: 16 }}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          mode="contained"
-                          onPress={handleSubmit}
-                          style={styles.saveButton}
-                          buttonColor={theme.colors.button}
-                          textColor="white"
-                          disabled={!(isValid && dirty)}
-                          contentStyle={{ height: 48 }}
-                        >
-                          Save Address
-                        </Button>
-                      </View>
-                    </>
-                  );
-                }}
-              </Formik>
-            </View>
+            <AddressForm
+              mode={mode}
+              selectedAddress={selectedAddress}
+              pinLocation={pinLocation}
+              handleSave={handleSave}
+              resetForm={resetForm}
+              getCurrentLocation={getCurrentLocation}
+              locationError={locationError}
+              theme={theme}
+              showLocationSuccess={showLocationSuccess}
+            />
           )}
         </ScrollView>
       </KeyboardAvoidingView>
 
       {mode === "view" && localAddresses?.length > 0 && (
-        <View style={[styles.fabContainer, { bottom: insets.bottom + 20 }]}>
+        <Animated.View
+          style={[
+            styles.fabContainer,
+            {
+              bottom: insets.bottom + 20,
+              opacity: fadeAnim,
+              transform: [{ scale: fadeAnim }],
+            },
+          ]}
+        >
           <TouchableOpacity
             style={[styles.fab, { backgroundColor: theme.colors.button }]}
             onPress={() => {
@@ -895,7 +1138,7 @@ const BillingAddress = () => {
           >
             <MaterialIcons name="add" size={24} color="white" />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
       {/* Loading overlay */}
@@ -965,6 +1208,10 @@ const styles = StyleSheet.create({
     padding: 16,
     elevation: 3,
     marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
   },
   addressHeader: {
     flexDirection: "row",
@@ -1010,6 +1257,16 @@ const styles = StyleSheet.create({
     fontSize: 15,
     flex: 1,
     lineHeight: 20,
+  },
+  pinLocationIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 6,
+  },
+  pinLocationText: {
+    fontSize: 12,
+    fontStyle: "italic",
   },
   emptyState: {
     alignItems: "center",
@@ -1157,6 +1414,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderTopRightRadius: 12,
     borderBottomRightRadius: 12,
+  },
+  locationInfoContainer: {
+    marginTop: 8,
+  },
+  locationSuccessIndicator: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    marginTop: 8,
+    alignSelf: "flex-start",
+    gap: 6,
+  },
+  locationSuccessText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "500",
   },
 });
 

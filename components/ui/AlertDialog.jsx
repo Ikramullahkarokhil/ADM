@@ -12,8 +12,8 @@ const AlertDialog = ({
   onConfirm,
   confirmText = "OK",
   cancelText = "Cancel",
-  animationIn = "zoomIn",
-  animationOut = "zoomOut",
+  animationIn = "fadeIn",
+  animationOut = "fadeOut",
 }) => {
   const theme = useTheme();
 
@@ -24,7 +24,7 @@ const AlertDialog = ({
       onBackButtonPress={onDismiss}
       animationIn={animationIn}
       animationOut={animationOut}
-      backdropOpacity={0}
+      backdropOpacity={0.2}
     >
       <View style={[styles.dialog, { backgroundColor: theme.colors.primary }]}>
         <Text style={[styles.title, { color: theme.colors.textColor }]}>

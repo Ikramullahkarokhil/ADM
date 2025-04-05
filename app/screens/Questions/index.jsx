@@ -16,15 +16,16 @@ import {
   ToastAndroid,
   TextInput,
   TouchableOpacity,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
-import { IconButton, useTheme } from "react-native-paper";
+import { IconButton, useTheme, Button } from "react-native-paper";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useProductStore from "../../../components/api/useProductStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import debounce from "lodash.debounce";
 
 const Questions = () => {
   const { productId } = useLocalSearchParams();
@@ -37,6 +38,7 @@ const Questions = () => {
   const [questionPage, setQuestionPage] = useState(1);
   const [hasMoreQuestions, setHasMoreQuestions] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isAddingQuestion, setIsAddingQuestion] = useState(false);
   const [isAlertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({
@@ -45,6 +47,7 @@ const Questions = () => {
     onConfirm: () => {},
   });
   const [editingQuestionId, setEditingQuestionId] = useState(null);
+  const [totalQuestions, setTotalQuestions] = useState(0);
 
   const {
     user,
@@ -53,9 +56,11 @@ const Questions = () => {
     deleteProductQuestion,
     editQuestion,
   } = useProductStore();
+
+  // Use refs to prevent duplicate requests
   const isLoadingRef = useRef(false);
   const pendingQuestionsRef = useRef(new Set());
-  const initialLoadDoneRef = useRef(false);
+  const dataFetchedRef = useRef(false);
   const editInputRef = useRef(null);
 
   useLayoutEffect(() => {
@@ -67,20 +72,34 @@ const Questions = () => {
   }, [navigation, theme]);
 
   const loadQuestions = useCallback(
-    debounce(async (page = 1, isInitialLoad = false) => {
-      if (isInitialLoad && initialLoadDoneRef.current) {
+    async (page = 1, isInitialLoad = false) => {
+      // Fix for double data loading - check if initial data is already loaded
+      if (isInitialLoad && dataFetchedRef.current) {
         return;
       }
 
       if (isLoadingRef.current) return;
       isLoadingRef.current = true;
-      setIsLoading(true);
+
+      if (page === 1) {
+        setIsLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
 
       try {
         const data = await getProductQuestionList(productId, page);
 
         if (isInitialLoad) {
-          initialLoadDoneRef.current = true;
+          dataFetchedRef.current = true;
+        }
+
+        // Set total questions count if available in the API response
+        if (data.total) {
+          setTotalQuestions(data.total);
+        } else {
+          // If API doesn't provide total, estimate based on current page and items
+          setTotalQuestions(Math.max(totalQuestions, page * 10));
         }
 
         setQuestions((prev) => {
@@ -109,15 +128,17 @@ const Questions = () => {
       } finally {
         isLoadingRef.current = false;
         setIsLoading(false);
+        setIsLoadingMore(false);
       }
-    }, 300),
-    [productId, showAlert]
+    },
+    // Remove totalQuestions from dependencies to prevent reload cycles
+    [productId, getProductQuestionList]
   );
 
   useEffect(() => {
     loadQuestions(1, true);
     return () => {
-      initialLoadDoneRef.current = false;
+      dataFetchedRef.current = false;
     };
   }, [loadQuestions]);
 
@@ -130,72 +151,78 @@ const Questions = () => {
     setAlertVisible(true);
   }, []);
 
-  const handleAddQuestion = useCallback(
-    debounce(async () => {
-      const trimmed = newQuestion.trim();
-      if (!trimmed) {
-        showAlert("Empty Question", "Please enter a question.", () => {});
-        return;
-      }
-      if (!user) {
-        showAlert(
-          "Login Required",
-          "Please login to ask a question.",
-          () => {}
-        );
-        return;
-      }
+  const handleAddQuestion = useCallback(async () => {
+    const trimmed = newQuestion.trim();
+    if (!trimmed) {
+      showAlert("Empty Question", "Please enter a question.", () => {});
+      return;
+    }
+    if (!user) {
+      showAlert("Login Required", "Please login to ask a question.", () => {});
+      return;
+    }
 
-      if (pendingQuestionsRef.current.has(trimmed)) {
-        ToastAndroid.show(
-          "Question already being processed",
-          ToastAndroid.SHORT
-        );
-        return;
-      }
+    if (pendingQuestionsRef.current.has(trimmed)) {
+      ToastAndroid.show("Question already being processed", ToastAndroid.SHORT);
+      return;
+    }
 
-      setIsAddingQuestion(true);
-      pendingQuestionsRef.current.add(trimmed);
+    setIsAddingQuestion(true);
+    pendingQuestionsRef.current.add(trimmed);
 
-      try {
-        const tempId = Date.now();
-        const newQ = {
-          products_qna_id: tempId,
-          question: trimmed,
-          consumer_id: user.consumer_id,
-          consumer_name: user.name || "Anonymous",
-          date: new Date().toISOString().split("T")[0],
-          answers: [],
-          isTemporary: true,
-        };
+    try {
+      const tempId = Date.now();
+      const newQ = {
+        products_qna_id: tempId,
+        question: trimmed,
+        consumer_id: user.consumer_id,
+        consumer_name: user.name || "Anonymous",
+        date: new Date().toISOString().split("T")[0],
+        answers: [],
+        isTemporary: true,
+      };
 
-        setQuestions((prev) => [...prev, newQ]);
-        setNewQuestion("");
+      // Add optimistic update for better UX
+      setQuestions((prev) => [...prev, newQ]);
+      setNewQuestion("");
 
-        ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
+      ToastAndroid.show("Question posted successfully", ToastAndroid.SHORT);
 
-        await addProductQuestion({
-          productID: productId,
-          consumerID: user.consumer_id,
-          question: trimmed,
-        });
-        setQuestions((prev) =>
-          prev.filter((q) => q.products_qna_id !== tempId)
-        );
-        loadQuestions(1);
-      } catch (err) {
-        console.error("Error adding question:", err);
-        showAlert("Error", err.message || "Failed to add question", () => {});
-        pendingQuestionsRef.current.delete(trimmed);
-      } finally {
-        setIsAddingQuestion(false);
-      }
-    }, 300),
-    [newQuestion, user, addProductQuestion, productId, showAlert, loadQuestions]
-  );
+      await addProductQuestion({
+        productID: productId,
+        consumerID: user.consumer_id,
+        question: trimmed,
+      });
+
+      setQuestions((prev) =>
+        prev.map((q) =>
+          q.products_qna_id === tempId ? { ...q, isTemporary: false } : q
+        )
+      );
+    } catch (err) {
+      console.error("Error adding question:", err);
+      showAlert("Error", err.message || "Failed to add question", () => {});
+      pendingQuestionsRef.current.delete(trimmed);
+
+      // Remove the temporary question on error
+      setQuestions((prev) =>
+        prev.filter((q) => !(q.isTemporary && q.question === trimmed))
+      );
+    } finally {
+      setIsAddingQuestion(false);
+    }
+  }, [
+    newQuestion,
+    user,
+    addProductQuestion,
+    productId,
+    showAlert,
+    loadQuestions,
+  ]);
 
   const handleDeleteQuestion = useCallback(
-    debounce(async (questionId) => {
+    async (questionId) => {
+      // Optimistic update for better UX
       setQuestions((prev) =>
         prev.filter((q) => q.products_qna_id !== questionId)
       );
@@ -209,57 +236,93 @@ const Questions = () => {
       } catch (err) {
         console.error("Failed to delete question:", err);
         ToastAndroid.show("Failed to delete question", ToastAndroid.SHORT);
-        loadQuestions(1);
+        // Only reload on error to restore the deleted question
+        dataFetchedRef.current = false;
+        loadQuestions(1, true);
       }
-    }, 300),
+    },
     [user, deleteProductQuestion, loadQuestions]
   );
 
   const handleUpdateQuestion = useCallback(
-    debounce(async (questionId, newText) => {
+    async (questionId, newText) => {
       setEditingQuestionId(null);
+      setNewQuestion("");
 
+      const trimmedText = newText.trim();
       const originalQuestion = questions.find(
         (q) => q.products_qna_id === questionId
       );
+
       if (
         !originalQuestion ||
-        !newText.trim() ||
-        newText === originalQuestion.question
+        !trimmedText ||
+        trimmedText === originalQuestion.question
       ) {
         return;
       }
 
+      // Optimistic update
+      const tempId = Date.now(); // Temporary ID for optimistic update
+      const tempQuestion = {
+        ...originalQuestion,
+        question: trimmedText,
+        isTemporary: true,
+        products_qna_id: tempId,
+      };
+
       setQuestions((prev) =>
-        prev.map((q) =>
-          q.products_qna_id === questionId ? { ...q, question: newText } : q
-        )
+        prev.map((q) => (q.products_qna_id === questionId ? tempQuestion : q))
       );
 
       try {
         ToastAndroid.show("Question updated", ToastAndroid.SHORT);
+
         await editQuestion({
-          question: newText,
+          question: trimmedText,
           question_id: questionId,
           consumer_id: user.consumer_id,
         });
+
+        // Replace temporary question with the original question (updated)
+        setQuestions((prev) =>
+          prev.map((q) =>
+            q.products_qna_id === tempId
+              ? {
+                  ...originalQuestion,
+                  question: trimmedText,
+                  isTemporary: false,
+                }
+              : q
+          )
+        );
       } catch (err) {
         console.error("Failed to update question:", err);
         ToastAndroid.show("Failed to update question", ToastAndroid.SHORT);
 
+        // Revert on error
         setQuestions((prev) =>
-          prev.map((q) =>
-            q.products_qna_id === questionId ? originalQuestion : q
-          )
+          prev.map((q) => (q.products_qna_id === tempId ? originalQuestion : q))
         );
       }
-    }, 300),
+    },
     [user, editQuestion, questions]
   );
 
   const startEditingQuestion = useCallback((questionId, questionText) => {
     setEditingQuestionId(questionId);
     setNewQuestion(questionText);
+    // Focus the input when editing starts
+    setTimeout(() => {
+      if (editInputRef.current) {
+        editInputRef.current.focus();
+      }
+    }, 100);
+  }, []);
+
+  const cancelEditing = useCallback(() => {
+    setEditingQuestionId(null);
+    setNewQuestion("");
   }, []);
 
   const showQuestionOptions = useCallback(
@@ -267,8 +330,7 @@ const Questions = () => {
       event.stopPropagation();
 
       const isUserQuestion = user && question.consumer_id === user.consumer_id;
-      if (!isUserQuestion || (question.answers && question.answers.length > 0))
-        return;
+      if (!isUserQuestion) return;
 
       const options = ["Update Question", "Delete Question", "Cancel"];
       const destructiveButtonIndex = 1;
@@ -286,12 +348,16 @@ const Questions = () => {
           if (buttonIndex === 0) {
             startEditingQuestion(question.products_qna_id, question.question);
           } else if (buttonIndex === 1) {
-            handleDeleteQuestion(question.products_qna_id);
+            showAlert(
+              "Delete Question",
+              "Are you sure you want to delete this question?",
+              () => handleDeleteQuestion(question.products_qna_id)
+            );
           }
         }
       );
     },
-    [user, handleDeleteQuestion, startEditingQuestion, theme]
+    [user, handleDeleteQuestion, startEditingQuestion, theme, showAlert]
   );
 
   const renderQuestionItem = useCallback(
@@ -301,16 +367,21 @@ const Questions = () => {
         theme={theme}
         isEditing={editingQuestionId === item.products_qna_id}
         onOptionsPress={(e) => showQuestionOptions(item, e)}
+        isUserQuestion={
+          user &&
+          item.consumer_id === user.consumer_id &&
+          item.answers.length === 0
+        }
       />
     ),
-    [showQuestionOptions, theme, editingQuestionId]
+    [showQuestionOptions, theme, editingQuestionId, user]
   );
 
   const handleLoadMore = useCallback(() => {
-    if (!isLoading && hasMoreQuestions && questions.length > 0) {
+    if (!isLoading && !isLoadingMore && hasMoreQuestions) {
       loadQuestions(questionPage + 1);
     }
-  }, [isLoading, hasMoreQuestions, questionPage, loadQuestions, questions]);
+  }, [isLoading, isLoadingMore, hasMoreQuestions, questionPage, loadQuestions]);
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -339,186 +410,261 @@ const Questions = () => {
     </View>
   );
 
+  const renderFooter = () => {
+    // Only show the "Show More" button if:
+    // 1. We're not currently loading more questions
+    // 2. There are more questions to load (hasMoreQuestions is true)
+    // 3. We have at least 10 questions already loaded
+    if (isLoadingMore) {
+      return (
+        <View style={styles.footerIndicator}>
+          <ActivityIndicator size="small" color={theme.colors.textColor} />
+        </View>
+      );
+    }
+
+    if (hasMoreQuestions && questions.length >= 10) {
+      return (
+        <View style={styles.showMoreContainer}>
+          <Button
+            mode="contained"
+            onPress={handleLoadMore}
+            style={[
+              styles.showMoreButton,
+              { backgroundColor: theme.colors.accent },
+            ]}
+            labelStyle={{ color: theme.colors.button }}
+          >
+            Show More Questions
+          </Button>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   const ItemSeparator = () => <View style={styles.separator} />;
 
   return (
-    <GestureHandlerRootView
-      style={[styles.container, { backgroundColor: theme.colors.primary }]}
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 100 : 0}
     >
-      {isLoading && questionPage === 1 ? (
-        renderLoadingState()
-      ) : (
-        <FlatList
-          data={questions}
-          keyExtractor={(item) => item.products_qna_id.toString()}
-          renderItem={renderQuestionItem}
-          ItemSeparatorComponent={ItemSeparator}
-          ListEmptyComponent={renderEmptyState}
-          contentContainerStyle={[
-            styles.listContent,
-            questions.length === 0 && styles.emptyListContent,
-          ]}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.3}
-        />
-      )}
-      <View
-        style={[
-          styles.addQuestionContainer,
-          { backgroundColor: theme.colors.primary },
-        ]}
+      <GestureHandlerRootView
+        style={[styles.container, { backgroundColor: theme.colors.primary }]}
       >
-        <TextInput
-          ref={editInputRef}
-          value={newQuestion}
-          onChangeText={setNewQuestion}
-          placeholder="Ask a question..."
-          placeholderTextColor={theme.colors.inactiveColor}
+        {isLoading && questionPage === 1 ? (
+          renderLoadingState()
+        ) : (
+          <FlatList
+            data={questions}
+            keyExtractor={(item) => item.products_qna_id.toString()}
+            renderItem={renderQuestionItem}
+            ItemSeparatorComponent={ItemSeparator}
+            ListEmptyComponent={renderEmptyState}
+            ListFooterComponent={renderFooter}
+            contentContainerStyle={[
+              styles.listContent,
+              questions.length === 0 && styles.emptyListContent,
+            ]}
+            initialNumToRender={10}
+            maxToRenderPerBatch={10}
+            windowSize={10}
+            // Removed onEndReached for the "Show More" button approach
+          />
+        )}
+        <View
           style={[
-            styles.questionInput,
-            {
-              borderColor: theme.colors.subInactiveColor,
-              backgroundColor: theme.colors.primary,
-              color: theme.colors.textColor,
-            },
+            styles.addQuestionContainer,
+            { backgroundColor: theme.colors.primary },
           ]}
-          multiline
-          maxLength={200}
+        >
+          <TextInput
+            ref={editInputRef}
+            value={newQuestion}
+            onChangeText={setNewQuestion}
+            placeholder={
+              editingQuestionId ? "Edit your question..." : "Ask a question..."
+            }
+            placeholderTextColor={theme.colors.inactiveColor}
+            style={[
+              styles.questionInput,
+              {
+                borderColor: theme.colors.subInactiveColor,
+                backgroundColor: theme.colors.primary,
+                color: theme.colors.textColor,
+              },
+            ]}
+            multiline
+            maxLength={200}
+          />
+          <View style={styles.buttonContainer}>
+            {editingQuestionId && (
+              <IconButton
+                icon="close"
+                onPress={cancelEditing}
+                iconColor={theme.colors.error || "red"}
+                accessibilityLabel="Cancel"
+                size={24}
+                style={styles.cancelButton}
+              />
+            )}
+            <IconButton
+              icon={
+                isAddingQuestion
+                  ? "loading"
+                  : editingQuestionId
+                  ? "check"
+                  : "send"
+              }
+              onPress={
+                editingQuestionId
+                  ? () => handleUpdateQuestion(editingQuestionId, newQuestion)
+                  : handleAddQuestion
+              }
+              iconColor={theme.colors.button}
+              disabled={isAddingQuestion}
+              accessibilityLabel={
+                editingQuestionId ? "Update Question" : "Post Question"
+              }
+              containerColor={theme.colors.accent}
+              mode="contained"
+              size={24}
+            />
+          </View>
+        </View>
+        <AlertDialog
+          visible={isAlertVisible}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          onDismiss={() => setAlertVisible(false)}
+          onConfirm={(inputText) => {
+            alertConfig.onConfirm(inputText);
+            setAlertVisible(false);
+          }}
+          confirmText="OK"
+          cancelText="Cancel"
         />
-        <IconButton
-          icon={isAddingQuestion ? "loading" : "send"}
-          onPress={
-            editingQuestionId
-              ? () => handleUpdateQuestion(editingQuestionId, newQuestion)
-              : handleAddQuestion
-          }
-          iconColor={theme.colors.button}
-          disabled={isAddingQuestion}
-          accessibilityLabel="Post Question"
-          containerColor={theme.colors.accent}
-          mode="contained"
-        />
-      </View>
-      <AlertDialog
-        visible={isAlertVisible}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        onDismiss={() => setAlertVisible(false)}
-        onConfirm={(inputText) => {
-          alertConfig.onConfirm(inputText);
-          setAlertVisible(false);
-        }}
-        confirmText="OK"
-        cancelText="Cancel"
-      />
-    </GestureHandlerRootView>
+      </GestureHandlerRootView>
+    </KeyboardAvoidingView>
   );
 };
 
-const QuestionItem = memo(({ item, theme, isEditing, onOptionsPress }) => {
-  const { user } = useProductStore();
-  const isUserQuestion = user && item.consumer_id === user.consumer_id;
-  const isTemporary = item.isTemporary;
+const QuestionItem = memo(
+  ({ item, theme, isEditing, onOptionsPress, isUserQuestion }) => {
+    const isTemporary = item.isTemporary;
 
-  return (
-    <View
-      style={[
-        styles.questionItem,
-        {
-          backgroundColor: theme.colors.surface,
-          opacity: isTemporary ? 0.8 : 1,
-        },
-      ]}
-    >
-      <View style={styles.questionHeader}>
-        <Image
-          source={
-            item.online_image_url
-              ? { uri: item.online_image_url }
-              : require("../../../assets/images/imageSkeleton.jpg")
-          }
-          style={styles.questionUserPhoto}
-        />
-        <View style={styles.questionTitleContainer}>
-          <Text
-            style={[styles.questionAuthor, { color: theme.colors.textColor }]}
-          >
-            {item.consumer_name || "Anonymous"}
-            {isTemporary && " (Posting...)"}
-          </Text>
-          <Text
-            style={[
-              styles.questionDate,
-              { color: theme.colors.subInactiveColor },
-            ]}
-          >
-            {item.date}
-          </Text>
+    return (
+      <View
+        style={[
+          styles.questionItem,
+          {
+            backgroundColor: theme.colors.surface,
+            opacity: isTemporary ? 0.8 : 1,
+            borderLeftWidth: isUserQuestion ? 3 : 0,
+            borderLeftColor: isUserQuestion
+              ? theme.colors.accent
+              : "transparent",
+          },
+        ]}
+      >
+        <View style={styles.questionHeader}>
+          <Image
+            source={
+              item.online_image_url
+                ? { uri: item.online_image_url }
+                : require("../../../assets/images/imageSkeleton.jpg")
+            }
+            style={styles.questionUserPhoto}
+          />
+          <View style={styles.questionTitleContainer}>
+            <Text
+              style={[styles.questionAuthor, { color: theme.colors.textColor }]}
+            >
+              {item.consumer_name || "Anonymous"}
+              {isTemporary && " (Posting...)"}
+            </Text>
+            <Text
+              style={[
+                styles.questionDate,
+                { color: theme.colors.subInactiveColor },
+              ]}
+            >
+              {item.date}
+            </Text>
+          </View>
+          {isUserQuestion && (
+            <TouchableOpacity
+              style={styles.optionsButton}
+              onPress={onOptionsPress}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <MaterialCommunityIcons
+                name="dots-vertical"
+                size={20}
+                color={theme.colors.textColor + "80"}
+              />
+            </TouchableOpacity>
+          )}
         </View>
-        {isUserQuestion && (
-          <TouchableOpacity
-            style={styles.optionsButton}
-            onPress={onOptionsPress}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <MaterialCommunityIcons
-              name="dots-vertical"
-              size={20}
-              color={theme.colors.textColor + "80"}
-            />
-          </TouchableOpacity>
+
+        <Text
+          style={[styles.questionContent, { color: theme.colors.textColor }]}
+        >
+          {item.question}
+        </Text>
+
+        {item.answers && item.answers.length > 0 && (
+          <View style={styles.answersContainer}>
+            {item.answers.map((ans) => (
+              <View
+                key={`${item.products_qna_id}_${ans.products_ana_id}`}
+                style={styles.answerItem}
+              >
+                <Image
+                  source={
+                    ans.seller_image_url
+                      ? { uri: ans.seller_image_url }
+                      : require("../../../assets/images/imageSkeleton.jpg")
+                  }
+                  style={styles.answerSellerPhoto}
+                />
+                <View style={styles.answerContent}>
+                  <Text
+                    style={[
+                      styles.answerSellerName,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {ans.seller_name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.answerDate,
+                      { color: theme.colors.inactiveColor },
+                    ]}
+                  >
+                    {ans.date}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.answerText,
+                      { color: theme.colors.textColor },
+                    ]}
+                  >
+                    {ans.answer}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
         )}
       </View>
-
-      <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
-        {item.question}
-      </Text>
-
-      {item.answers && item.answers.length > 0 && (
-        <View style={styles.answersContainer}>
-          {item.answers.map((ans) => (
-            <View
-              key={`${item.products_qna_id}_${ans.products_ana_id}`}
-              style={styles.answerItem}
-            >
-              <Image
-                source={
-                  ans.seller_image_url
-                    ? { uri: ans.seller_image_url }
-                    : require("../../../assets/images/imageSkeleton.jpg")
-                }
-                style={styles.answerSellerPhoto}
-              />
-              <View>
-                <Text
-                  style={[
-                    styles.answerSellerName,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  {ans.seller_name}
-                </Text>
-                <Text
-                  style={[
-                    styles.answerDate,
-                    { color: theme.colors.inactiveColor },
-                  ]}
-                >
-                  {ans.date}
-                </Text>
-                <Text
-                  style={[styles.answerText, { color: theme.colors.textColor }]}
-                >
-                  {ans.answer}
-                </Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-});
+    );
+  }
+);
 
 const styles = StyleSheet.create({
   container: {
@@ -526,6 +672,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#f5f5f5",
   },
   listContent: {
+    padding: 10,
     paddingBottom: 100, // Increased to ensure scrolling doesn't hide content behind input
   },
   emptyListContent: {
@@ -585,6 +732,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginRight: 10,
   },
+  answerContent: {
+    flex: 1,
+  },
   answerSellerName: {
     fontSize: 14,
     fontWeight: "600",
@@ -603,9 +753,11 @@ const styles = StyleSheet.create({
     padding: 10,
     position: "absolute",
     bottom: 0,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === "ios" ? 30 : 30,
     elevation: 10,
     width: "100%",
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
   },
   questionInput: {
     flex: 1,
@@ -616,6 +768,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     fontSize: 15,
     maxHeight: 100,
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  cancelButton: {
+    marginRight: 4,
   },
   emptyContainer: {
     flex: 1,
@@ -641,32 +800,20 @@ const styles = StyleSheet.create({
   },
   footerIndicator: {
     padding: 20,
+    alignItems: "center",
   },
   optionsButton: {
     padding: 5,
   },
-  // New styles for inline editing
-  editContainer: {
-    marginLeft: 50,
+  showMoreContainer: {
+    padding: 16,
+    alignItems: "center",
   },
-  editInput: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    fontSize: 15,
-    lineHeight: 22,
-    minHeight: 80,
-  },
-  editButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 8,
-  },
-  editButton: {
-    paddingHorizontal: 16,
+  showMoreButton: {
+    borderRadius: 25,
     paddingVertical: 8,
-    borderRadius: 4,
-    marginLeft: 8,
+    paddingHorizontal: 16,
+    elevation: 2,
   },
 });
 

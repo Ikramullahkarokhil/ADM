@@ -1,5 +1,9 @@
-import React, {
-  useState,
+"use client";
+
+// Optimized Search.tsx
+
+import {
+  useReducer,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -21,335 +25,247 @@ import {
 } from "react-native";
 import { useNavigation, useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Button, useTheme, Chip } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 import { Feather } from "@expo/vector-icons";
 import Modal from "react-native-modal";
 import useProductStore from "../../components/api/useProductStore";
 import MultiSlider from "@ptomasroos/react-native-multi-slider";
 import useThemeStore from "../../components/store/useThemeStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import AlertDialog from "../../components/ui/AlertDialog"; // Import the AlertDialog component
+import AlertDialog from "../../components/ui/AlertDialog";
 
-// Custom debounce function to replace lodash
+// 1. Create a more efficient debounce function
 const debounce = (func, wait) => {
   let timeout;
-  return function executedFunction(...args) {
-    const later = () => {
-      clearTimeout(timeout);
-      func(...args);
-    };
+  return (...args) => {
     clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
+    timeout = setTimeout(() => func(...args), wait);
   };
 };
 
-const Search = () => {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isFilterVisible, setIsFilterVisible] = useState(false);
-  const [filters, setFilters] = useState({
+// 2. Define initial state and reducer for state management
+const initialState = {
+  searchQuery: "",
+  isFilterVisible: false,
+  filters: {
     minRating: 0,
     selectedBrands: [],
     selectedCategories: [],
     priceRange: [0, 10000],
-  });
-  const [searchHistory, setSearchHistory] = useState([]);
-  const [showClearHistoryDialog, setShowClearHistoryDialog] = useState(false); // State for AlertDialog
-  const { isDarkTheme } = useThemeStore();
-  const [page, setPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
-  const navigation = useNavigation();
-  const router = useRouter();
+  },
+  searchHistory: [],
+  showClearHistoryDialog: false,
+  page: 1,
+  isLoading: false,
+  refreshing: false,
+};
 
-  const theme = useTheme();
-
-  const {
-    searchProductData,
-    productData = [],
-    error,
-    subcategories,
-    isSearching,
-  } = useProductStore();
-
-  // Load search history on component mount
-  useEffect(() => {
-    const loadSearchHistory = async () => {
-      try {
-        const history = await AsyncStorage.getItem("searchHistory");
-        if (history !== null) {
-          setSearchHistory(JSON.parse(history));
-        }
-      } catch (error) {
-        console.error("Failed to load search history:", error);
-      }
-    };
-
-    loadSearchHistory();
-  }, []);
-
-  // Save search history to AsyncStorage
-  const saveSearchHistory = async (history) => {
-    try {
-      await AsyncStorage.setItem("searchHistory", JSON.stringify(history));
-    } catch (error) {
-      console.error("Failed to save search history:", error);
-    }
-  };
-
-  // Update search history state and save to AsyncStorage
-  const handleSearchHistoryUpdate = async (newHistory) => {
-    setSearchHistory(newHistory);
-    await saveSearchHistory(newHistory);
-  };
-
-  // Clear search history
-  const clearSearchHistory = useCallback(() => {
-    setShowClearHistoryDialog(true); // Show the AlertDialog
-  }, []);
-
-  // Reset state when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      setSearchQuery("");
-      setFilters({
-        minRating: 0,
-        selectedBrands: [],
-        selectedCategories: [],
-        priceRange: [0, 10000],
-      });
-      setPage(1);
-      setIsFilterVisible(false);
-    }, [])
-  );
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
-
-  // Debounced search function
-  const debouncedSearch = useCallback(
-    debounce((query) => {
-      if (query) {
-        setIsLoading(true);
-        searchProductData(query).finally(() => setIsLoading(false));
-      }
-    }, 300),
-    [searchProductData]
-  );
-
-  useEffect(() => {
-    debouncedSearch(searchQuery);
-  }, [searchQuery, debouncedSearch]);
-
-  const brands = useMemo(() => {
-    const uniqueBrands = [
-      ...new Set(productData.map((item) => item.brand_title)),
-    ];
-    return uniqueBrands.length > 0 ? uniqueBrands : ["No brands available"];
-  }, [productData]);
-
-  const categoriesFromData = useMemo(() => {
-    const uniqueCategories = [
-      ...new Set(productData.map((item) => item.categories_id)),
-    ];
-    return uniqueCategories;
-  }, [productData]);
-
-  const categoryOptions = useMemo(() => {
-    if (!subcategories || !categoriesFromData)
-      return [{ id: 0, name: "No categories available" }];
-    return Object.values(subcategories)
-      .flat()
-      .filter((subcat) => subcat && categoriesFromData.includes(subcat.id));
-  }, [subcategories, categoriesFromData]);
-
-  const priceBounds = useMemo(() => {
-    if (productData.length === 0) return [0, 10000];
-    const prices = productData
-      .map((item) => Number.parseFloat(item.spu))
-      .filter(
-        (price) => !isNaN(price) && price !== null && price !== undefined
-      );
-    return prices.length > 0
-      ? [Math.min(...prices), Math.max(...prices)]
-      : [0, 10000];
-  }, [productData]);
-
-  // Empty product list when no search query
-  const filteredProducts = useMemo(() => {
-    if (!searchQuery) return [];
-    return productData.filter((product) => {
-      if (filters.minRating > 0) {
-        const rating = product.average_rating || 0;
-        if (rating < filters.minRating) return false;
-      }
-      if (
-        filters.selectedBrands.length > 0 &&
-        !filters.selectedBrands.includes(product.brand_title)
-      ) {
-        return false;
-      }
-      if (
-        filters.selectedCategories.length > 0 &&
-        (!product.categories_id ||
-          !filters.selectedCategories.includes(product.categories_id))
-      ) {
-        return false;
-      }
-      const price = Number.parseFloat(product.spu);
-      if (price < filters.priceRange[0] || price > filters.priceRange[1])
-        return false;
-      return true;
-    });
-  }, [productData, filters, searchQuery]);
-
-  const loadMoreProducts = useCallback(() => {
-    setPage((prevPage) => prevPage + 1);
-  }, []);
-
-  const handleChipPress = useCallback((filterType, value) => {
-    setFilters((prev) => {
-      const currentValues = prev[filterType];
+function reducer(state, action) {
+  switch (action.type) {
+    case "SET_SEARCH_QUERY":
+      return { ...state, searchQuery: action.payload };
+    case "TOGGLE_FILTER_MODAL":
+      return { ...state, isFilterVisible: action.payload };
+    case "UPDATE_FILTERS":
       return {
-        ...prev,
-        [filterType]: currentValues.includes(value)
-          ? currentValues.filter((item) => item !== value)
-          : [...currentValues, value],
+        ...state,
+        filters: { ...state.filters, ...action.payload },
       };
-    });
-  }, []);
+    case "UPDATE_FILTER_ITEM": {
+      const { filterType, value } = action.payload;
+      const currentValues = state.filters[filterType];
+      return {
+        ...state,
+        filters: {
+          ...state.filters,
+          [filterType]: currentValues.includes(value)
+            ? currentValues.filter((item) => item !== value)
+            : [...currentValues, value],
+        },
+      };
+    }
+    case "RESET_FILTERS":
+      return {
+        ...state,
+        filters: {
+          ...state.filters,
+          minRating: 0,
+          selectedBrands: [],
+          selectedCategories: [],
+          priceRange: action.payload || [0, 10000],
+        },
+      };
+    case "SET_SEARCH_HISTORY":
+      return { ...state, searchHistory: action.payload };
+    case "TOGGLE_CLEAR_HISTORY_DIALOG":
+      return { ...state, showClearHistoryDialog: action.payload };
+    case "SET_PAGE":
+      return { ...state, page: action.payload };
+    case "SET_LOADING":
+      return { ...state, isLoading: action.payload };
+    case "RESET_STATE":
+      return {
+        ...state,
+        searchQuery: "",
+        filters: {
+          minRating: 0,
+          selectedBrands: [],
+          selectedCategories: [],
+          priceRange: [0, 10000],
+        },
+        page: 1,
+        isFilterVisible: false,
+      };
+    default:
+      return state;
+  }
+}
 
-  const RatingStars = memo(({ rating }) => {
-    const renderStars = (rating) => {
-      const stars = [];
-      for (let i = 0; i < Math.floor(rating); i++) {
-        stars.push(<Feather key={i} name="star" size={16} color="#FFD700" />);
+// 3. Extract and memoize RatingStars component
+const RatingStars = memo(({ rating, theme }) => {
+  const renderStars = (rating) => {
+    const stars = [];
+    for (let i = 0; i < Math.floor(rating); i++) {
+      stars.push(<Feather key={i} name="star" size={16} color="#FFD700" />);
+    }
+    return stars;
+  };
+
+  return (
+    <View style={styles.ratingContainer}>
+      {renderStars(rating)}
+      <Text style={[styles.ratingText, { color: theme.colors.inactiveColor }]}>
+        {rating || 0}
+      </Text>
+    </View>
+  );
+});
+
+// 4. Extract and memoize ProductItem component
+const ProductItem = memo(
+  ({
+    item,
+    searchQuery,
+    searchHistory,
+    onUpdateSearchHistory,
+    theme,
+    isDarkTheme,
+    router,
+  }) => {
+    const handleProductPress = useCallback(async () => {
+      if (searchQuery && searchQuery.trim()) {
+        // Create new history array with current query at the beginning
+        const newHistory = [
+          searchQuery,
+          ...searchHistory.filter((q) => q !== searchQuery),
+        ].slice(0, 10);
+
+        // Call the passed function to update search history
+        await onUpdateSearchHistory(newHistory);
       }
-      return stars;
-    };
+
+      // Navigate to product detail
+      router.push({
+        pathname: `/screens/ProductDetail`,
+        params: { id: item.products_id },
+      });
+    }, [
+      item.products_id,
+      searchQuery,
+      searchHistory,
+      onUpdateSearchHistory,
+      router,
+    ]);
+
+    const placeholderImage = isDarkTheme
+      ? require("../../assets/images/darkImagePlaceholder.jpg")
+      : require("../../assets/images/imageSkeleton.jpg");
 
     return (
-      <View style={styles.ratingContainer}>
-        {renderStars(rating)}
-        <Text
-          style={[styles.ratingText, { color: theme.colors.inactiveColor }]}
-        >
-          {rating || 0}
-        </Text>
-      </View>
-    );
-  });
+      <Pressable
+        onPress={handleProductPress}
+        style={({ pressed }) => [
+          styles.productCard,
+          {
+            backgroundColor: theme.colors.primary,
+            opacity: pressed ? 0.9 : 1,
+          },
+        ]}
+        accessibilityLabel={`Product: ${item.title}`}
+        accessibilityHint="Tap to view product details"
+      >
+        <View style={styles.productCardContent}>
+          <Image
+            source={
+              item.product_images && item.product_images.length > 0
+                ? { uri: item.product_images[0] }
+                : placeholderImage
+            }
+            style={styles.productImage}
+            resizeMode="cover"
+            accessibilityLabel={`Image of ${item.title}`}
+          />
+          <View style={styles.productInfo}>
+            <Text
+              style={[styles.productName, { color: theme.colors.textColor }]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+            <Text style={[styles.productPrice, { color: theme.colors.button }]}>
+              AF {item.spu}
+            </Text>
 
-  const placeholderImage = isDarkTheme
-    ? require("../../assets/images/darkImagePlaceholder.jpg")
-    : require("../../assets/images/imageSkeleton.jpg");
-
-  const ProductItem = memo(
-    ({ item, searchQuery, searchHistory, onUpdateSearchHistory }) => {
-      const handleProductPress = async () => {
-        if (searchQuery && searchQuery.trim()) {
-          // Create new history array with current query at the beginning
-          const newHistory = [
-            searchQuery,
-            ...searchHistory.filter((q) => q !== searchQuery),
-          ].slice(0, 10);
-
-          // Call the passed function to update search history
-          await onUpdateSearchHistory(newHistory);
-        }
-
-        // Navigate to product detail
-        router.push({
-          pathname: `/screens/ProductDetail`,
-          params: { id: item.products_id },
-        });
-      };
-
-      return (
-        <Pressable
-          onPress={handleProductPress}
-          style={({ pressed }) => [
-            styles.productCard,
-            {
-              backgroundColor: theme.colors.primary,
-              opacity: pressed ? 0.9 : 1,
-            },
-          ]}
-          accessibilityLabel={`Product: ${item.title}`}
-          accessibilityHint="Tap to view product details"
-        >
-          <View style={styles.productCardContent}>
-            <Image
-              source={
-                item.product_images && item.product_images.length > 0
-                  ? { uri: item.product_images[0] }
-                  : placeholderImage
-              }
-              style={styles.productImage}
-              resizeMode="cover"
-              accessibilityLabel={`Image of ${item.title}`}
-            />
-            <View style={styles.productInfo}>
-              <Text
-                style={[styles.productName, { color: theme.colors.textColor }]}
-                numberOfLines={2}
-              >
-                {item.title}
-              </Text>
-              <Text
-                style={[styles.productPrice, { color: theme.colors.button }]}
-              >
-                AF {item.spu}
-              </Text>
-
-              {item.brand_title !== "none" && (
-                <View style={styles.categoryContainer}>
-                  <Text
-                    style={[
-                      styles.productCategory,
-                      {
-                        color: theme.colors.textColor,
-                        backgroundColor: theme.colors.subInactiveColor,
-                      },
-                    ]}
-                  >
-                    {item.brand_title}
-                  </Text>
-                </View>
-              )}
-              {!item.average_rating == 0 && (
-                <RatingStars rating={item.average_rating} />
-              )}
-            </View>
+            {item.brand_title !== "none" && (
+              <View style={styles.categoryContainer}>
+                <Text
+                  style={[
+                    styles.productCategory,
+                    {
+                      color: theme.colors.textColor,
+                      backgroundColor: theme.colors.subInactiveColor,
+                    },
+                  ]}
+                >
+                  {item.brand_title}
+                </Text>
+              </View>
+            )}
+            {!item.average_rating == 0 && (
+              <RatingStars rating={item.average_rating} theme={theme} />
+            )}
           </View>
-        </Pressable>
-      );
-    }
-  );
+        </View>
+      </Pressable>
+    );
+  }
+);
 
-  const renderProductItem = useCallback(
-    ({ item }) => (
-      <ProductItem
-        item={item}
-        searchQuery={searchQuery}
-        searchHistory={searchHistory}
-        onUpdateSearchHistory={handleSearchHistoryUpdate}
-      />
-    ),
-    [searchQuery, searchHistory, handleSearchHistoryUpdate]
-  );
-
-  const renderFilterModal = useCallback(
-    () => (
+// 5. Extract and memoize FilterModal component
+const FilterModal = memo(
+  ({
+    isVisible,
+    onClose,
+    filters,
+    onUpdateFilters,
+    onUpdateFilterItem,
+    onResetFilters,
+    theme,
+    brands,
+    categoryOptions,
+    priceBounds,
+  }) => {
+    return (
       <Modal
-        isVisible={isFilterVisible}
-        onBackdropPress={() => setIsFilterVisible(false)}
+        isVisible={isVisible}
+        onBackdropPress={onClose}
         style={styles.bottomModal}
         statusBarTranslucent
         backdropOpacity={0.5}
         animationIn="slideInUp"
         animationOut="slideOutDown"
+        useNativeDriver={true}
+        useNativeDriverForBackdrop={true}
       >
         <View
           style={[
@@ -364,7 +280,7 @@ const Search = () => {
               Filters
             </Text>
             <TouchableOpacity
-              onPress={() => setIsFilterVisible(false)}
+              onPress={onClose}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               accessibilityLabel="Close filters"
             >
@@ -395,9 +311,7 @@ const Search = () => {
                             : theme.colors.chip,
                       },
                     ]}
-                    onPress={() =>
-                      setFilters((prev) => ({ ...prev, minRating: rating }))
-                    }
+                    onPress={() => onUpdateFilters({ minRating: rating })}
                     accessibilityLabel={`${
                       rating === 0 ? "Any" : rating + "+"
                     } star rating`}
@@ -446,7 +360,9 @@ const Search = () => {
                           borderWidth: 1,
                         },
                       ]}
-                      onPress={() => handleChipPress("selectedBrands", brand)}
+                      onPress={() =>
+                        onUpdateFilterItem("selectedBrands", brand)
+                      }
                     >
                       <Text
                         style={[
@@ -492,7 +408,7 @@ const Search = () => {
                         },
                       ]}
                       onPress={() =>
-                        handleChipPress(
+                        onUpdateFilterItem(
                           "selectedCategories",
                           category.categorie_id || category.id
                         )
@@ -530,7 +446,7 @@ const Search = () => {
                 max={priceBounds[1]}
                 values={filters.priceRange}
                 onValuesChange={(values) =>
-                  setFilters((prev) => ({ ...prev, priceRange: values }))
+                  onUpdateFilters({ priceRange: values })
                 }
                 step={10}
                 snapped
@@ -570,14 +486,7 @@ const Search = () => {
                   { borderColor: theme.colors.subInactiveColor },
                 ]}
                 labelStyle={{ color: theme.colors.textColor }}
-                onPress={() =>
-                  setFilters({
-                    minRating: 0,
-                    selectedBrands: [],
-                    selectedCategories: [],
-                    priceRange: priceBounds,
-                  })
-                }
+                onPress={() => onResetFilters(priceBounds)}
                 accessibilityLabel="Reset filters"
               >
                 Reset
@@ -588,7 +497,7 @@ const Search = () => {
                   styles.actionButton,
                   { backgroundColor: theme.colors.button },
                 ]}
-                onPress={() => setIsFilterVisible(false)}
+                onPress={onClose}
                 textColor="#FFFFFF"
                 accessibilityLabel="Apply filters"
               >
@@ -598,19 +507,22 @@ const Search = () => {
           </ScrollView>
         </View>
       </Modal>
-    ),
-    [
-      isFilterVisible,
-      theme.colors,
-      filters,
-      brands,
-      categoryOptions,
-      priceBounds,
-      handleChipPress,
-    ]
-  );
+    );
+  }
+);
 
-  const renderActiveFilters = useCallback(() => {
+// 6. Extract and memoize ActiveFilters component
+const ActiveFilters = memo(
+  ({
+    filters,
+    searchQuery,
+    priceBounds,
+    theme,
+    categoryOptions,
+    onUpdateFilters,
+    onUpdateFilterItem,
+    onResetFilters,
+  }) => {
     const hasActiveFilters =
       filters.minRating > 0 ||
       filters.selectedBrands.length > 0 ||
@@ -638,9 +550,7 @@ const Search = () => {
                 {filters.minRating}+ Stars
               </Text>
               <TouchableOpacity
-                onPress={() =>
-                  setFilters((prev) => ({ ...prev, minRating: 0 }))
-                }
+                onPress={() => onUpdateFilters({ minRating: 0 })}
                 hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
               >
                 <Feather name="x" size={14} color="#FFFFFF" />
@@ -658,7 +568,7 @@ const Search = () => {
             >
               <Text style={[styles.activeFilterText]}>{brand}</Text>
               <TouchableOpacity
-                onPress={() => handleChipPress("selectedBrands", brand)}
+                onPress={() => onUpdateFilterItem("selectedBrands", brand)}
                 hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
               >
                 <Feather name="x" size={14} color="#FFFFFF" />
@@ -680,7 +590,9 @@ const Search = () => {
               >
                 <Text style={[styles.activeFilterText]}>{category.name}</Text>
                 <TouchableOpacity
-                  onPress={() => handleChipPress("selectedCategories", catId)}
+                  onPress={() =>
+                    onUpdateFilterItem("selectedCategories", catId)
+                  }
                   hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
                 >
                   <Feather name="x" size={14} color="#FFFFFF" />
@@ -701,9 +613,7 @@ const Search = () => {
                 AF {filters.priceRange[0]} - AF {filters.priceRange[1]}
               </Text>
               <TouchableOpacity
-                onPress={() =>
-                  setFilters((prev) => ({ ...prev, priceRange: priceBounds }))
-                }
+                onPress={() => onUpdateFilters({ priceRange: priceBounds })}
                 hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
               >
                 <Feather name="x" size={14} color="#FFFFFF" />
@@ -717,14 +627,7 @@ const Search = () => {
                 styles.clearAllButton,
                 { borderColor: theme.colors.subInactiveColor },
               ]}
-              onPress={() =>
-                setFilters({
-                  minRating: 0,
-                  selectedBrands: [],
-                  selectedCategories: [],
-                  priceRange: priceBounds,
-                })
-              }
+              onPress={() => onResetFilters(priceBounds)}
             >
               <Text style={{ color: theme.colors.textColor }}>Clear All</Text>
             </TouchableOpacity>
@@ -732,16 +635,51 @@ const Search = () => {
         </ScrollView>
       </View>
     );
-  }, [
-    filters,
-    searchQuery,
-    priceBounds,
-    theme.colors,
-    categoryOptions,
-    handleChipPress,
-  ]);
+  }
+);
 
-  const renderSearchResults = useCallback(() => {
+// 8. Extract and memoize HistoryItem component
+const HistoryItem = memo(({ query, index, theme, onPress }) => {
+  return (
+    <TouchableOpacity
+      onPress={() => onPress(query)}
+      style={[
+        styles.historyItemContainer,
+        { borderBottomColor: theme.colors.subInactiveColor },
+      ]}
+      accessibilityLabel={`Search for ${query}`}
+      accessibilityHint="Tap to search for this term"
+    >
+      <Feather
+        name="clock"
+        size={16}
+        color={theme.colors.inactiveColor}
+        style={styles.historyIcon}
+      />
+      <Text style={[styles.historyItem, { color: theme.colors.textColor }]}>
+        {query}
+      </Text>
+    </TouchableOpacity>
+  );
+});
+
+// 7. Extract and memoize SearchResults component
+const SearchResults = memo(
+  ({
+    isLoading,
+    isSearching,
+    searchQuery,
+    filteredProducts,
+    filters,
+    priceBounds,
+    theme,
+    renderProductItem,
+    loadMoreProducts,
+    onResetFilters,
+    searchHistory,
+    clearSearchHistory,
+    onHistoryItemPress,
+  }) => {
     if (isLoading || isSearching) {
       return (
         <View style={styles.loadingContainer}>
@@ -774,14 +712,7 @@ const Search = () => {
               mode="outlined"
               style={{ marginTop: 16, borderColor: theme.colors.button }}
               labelStyle={{ color: theme.colors.button }}
-              onPress={() =>
-                setFilters({
-                  minRating: 0,
-                  selectedBrands: [],
-                  selectedCategories: [],
-                  priceRange: priceBounds,
-                })
-              }
+              onPress={() => onResetFilters(priceBounds)}
             >
               Clear Filters
             </Button>
@@ -814,6 +745,11 @@ const Search = () => {
             maxToRenderPerBatch={10}
             windowSize={10}
             initialNumToRender={8}
+            getItemLayout={(data, index) => ({
+              length: 144, // height of item + margin
+              offset: 144 * index,
+              index,
+            })}
           />
         </View>
       );
@@ -841,33 +777,17 @@ const Search = () => {
           )}
         </View>
         {searchHistory.length > 0 ? (
-          searchHistory.slice(0, 5).map((query, index) => (
-            <TouchableOpacity
-              key={index}
-              onPress={() => {
-                setSearchQuery(query);
-                searchProductData(query); // Trigger search immediately
-              }}
-              style={[
-                styles.historyItemContainer,
-                { borderBottomColor: theme.colors.subInactiveColor },
-              ]}
-              accessibilityLabel={`Search for ${query}`}
-              accessibilityHint="Tap to search for this term"
-            >
-              <Feather
-                name="clock"
-                size={16}
-                color={theme.colors.inactiveColor}
-                style={styles.historyIcon}
+          searchHistory
+            .slice(0, 5)
+            .map((query, index) => (
+              <HistoryItem
+                key={index}
+                query={query}
+                index={index}
+                theme={theme}
+                onPress={onHistoryItemPress}
               />
-              <Text
-                style={[styles.historyItem, { color: theme.colors.textColor }]}
-              >
-                {query}
-              </Text>
-            </TouchableOpacity>
-          ))
+            ))
         ) : (
           <View style={styles.emptyStateContainer}>
             <Feather name="clock" size={50} color={theme.colors.textColor} />
@@ -886,19 +806,236 @@ const Search = () => {
         )}
       </View>
     );
-  }, [
-    isLoading,
-    isSearching,
+  }
+);
+
+// Main component
+const Search = () => {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  const { isDarkTheme } = useThemeStore();
+  const navigation = useNavigation();
+  const router = useRouter();
+  const theme = useTheme();
+
+  // Destructure state for readability
+  const {
     searchQuery,
-    filteredProducts,
+    isFilterVisible,
     filters,
-    priceBounds,
     searchHistory,
-    theme.colors,
-    renderProductItem,
-    loadMoreProducts,
-    clearSearchHistory,
-  ]);
+    showClearHistoryDialog,
+    page,
+    isLoading,
+  } = state;
+
+  const {
+    searchProductData,
+    productData = [],
+    error,
+    subcategories,
+    isSearching,
+  } = useProductStore();
+
+  // Load search history on component mount
+  useEffect(() => {
+    const loadSearchHistory = async () => {
+      try {
+        const history = await AsyncStorage.getItem("searchHistory");
+        if (history !== null) {
+          dispatch({
+            type: "SET_SEARCH_HISTORY",
+            payload: JSON.parse(history),
+          });
+        }
+      } catch (error) {
+        console.error("Failed to load search history:", error);
+      }
+    };
+
+    loadSearchHistory();
+  }, []);
+
+  // Save search history to AsyncStorage
+  const saveSearchHistory = useCallback(async (history) => {
+    try {
+      await AsyncStorage.setItem("searchHistory", JSON.stringify(history));
+    } catch (error) {
+      console.error("Failed to save search history:", error);
+    }
+  }, []);
+
+  // Update search history state and save to AsyncStorage
+  const handleSearchHistoryUpdate = useCallback(
+    async (newHistory) => {
+      dispatch({ type: "SET_SEARCH_HISTORY", payload: newHistory });
+      await saveSearchHistory(newHistory);
+    },
+    [saveSearchHistory]
+  );
+
+  // Clear search history
+  const clearSearchHistory = useCallback(() => {
+    dispatch({ type: "TOGGLE_CLEAR_HISTORY_DIALOG", payload: true });
+  }, []);
+
+  // Reset state when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      dispatch({ type: "RESET_STATE" });
+    }, [])
+  );
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerShown: false,
+    });
+  }, [navigation]);
+
+  // Memoize the debounced search function
+  const debouncedSearch = useMemo(
+    () =>
+      debounce((query) => {
+        if (query) {
+          dispatch({ type: "SET_LOADING", payload: true });
+          searchProductData(query).finally(() =>
+            dispatch({ type: "SET_LOADING", payload: false })
+          );
+        }
+      }, 300),
+    [searchProductData]
+  );
+
+  // Trigger search when query changes
+  useEffect(() => {
+    debouncedSearch(searchQuery);
+  }, [searchQuery, debouncedSearch]);
+
+  // Memoize derived values
+  const brands = useMemo(() => {
+    const uniqueBrands = [
+      ...new Set(productData.map((item) => item.brand_title)),
+    ];
+    return uniqueBrands.length > 0 ? uniqueBrands : ["No brands available"];
+  }, [productData]);
+
+  const categoriesFromData = useMemo(() => {
+    const uniqueCategories = [
+      ...new Set(productData.map((item) => item.categories_id)),
+    ];
+    return uniqueCategories;
+  }, [productData]);
+
+  const categoryOptions = useMemo(() => {
+    if (!subcategories || !categoriesFromData)
+      return [{ id: 0, name: "No categories available" }];
+    return Object.values(subcategories)
+      .flat()
+      .filter((subcat) => subcat && categoriesFromData.includes(subcat.id));
+  }, [subcategories, categoriesFromData]);
+
+  const priceBounds = useMemo(() => {
+    if (productData.length === 0) return [0, 10000];
+    const prices = productData
+      .map((item) => Number.parseFloat(item.spu))
+      .filter(
+        (price) => !isNaN(price) && price !== null && price !== undefined
+      );
+    return prices.length > 0
+      ? [Math.min(...prices), Math.max(...prices)]
+      : [0, 10000];
+  }, [productData]);
+
+  // Memoize filtered products
+  const filteredProducts = useMemo(() => {
+    if (!searchQuery) return [];
+    return productData.filter((product) => {
+      if (filters.minRating > 0) {
+        const rating = product.average_rating || 0;
+        if (rating < filters.minRating) return false;
+      }
+      if (
+        filters.selectedBrands.length > 0 &&
+        !filters.selectedBrands.includes(product.brand_title)
+      ) {
+        return false;
+      }
+      if (
+        filters.selectedCategories.length > 0 &&
+        (!product.categories_id ||
+          !filters.selectedCategories.includes(product.categories_id))
+      ) {
+        return false;
+      }
+      const price = Number.parseFloat(product.spu);
+      if (price < filters.priceRange[0] || price > filters.priceRange[1])
+        return false;
+      return true;
+    });
+  }, [productData, filters, searchQuery]);
+
+  // Handle loading more products
+  const loadMoreProducts = useCallback(() => {
+    dispatch({ type: "SET_PAGE", payload: page + 1 });
+  }, [page]);
+
+  // Handle filter item updates
+  const handleUpdateFilterItem = useCallback((filterType, value) => {
+    dispatch({
+      type: "UPDATE_FILTER_ITEM",
+      payload: { filterType, value },
+    });
+  }, []);
+
+  // Handle filter updates
+  const handleUpdateFilters = useCallback((filterUpdates) => {
+    dispatch({ type: "UPDATE_FILTERS", payload: filterUpdates });
+  }, []);
+
+  // Handle filter reset
+  const handleResetFilters = useCallback((priceBounds) => {
+    dispatch({ type: "RESET_FILTERS", payload: priceBounds });
+  }, []);
+
+  // Handle search query update
+  const handleSearchQueryChange = useCallback((query) => {
+    dispatch({ type: "SET_SEARCH_QUERY", payload: query });
+  }, []);
+
+  // Handle history item press - Fixed to properly trigger search
+  const handleHistoryItemPress = useCallback(
+    (query) => {
+      dispatch({ type: "SET_SEARCH_QUERY", payload: query });
+      // Directly call searchProductData instead of relying on the effect
+      dispatch({ type: "SET_LOADING", payload: true });
+      searchProductData(query).finally(() =>
+        dispatch({ type: "SET_LOADING", payload: false })
+      );
+    },
+    [searchProductData]
+  );
+
+  // Memoize renderProductItem function
+  const renderProductItem = useCallback(
+    ({ item }) => (
+      <ProductItem
+        item={item}
+        searchQuery={searchQuery}
+        searchHistory={searchHistory}
+        onUpdateSearchHistory={handleSearchHistoryUpdate}
+        theme={theme}
+        isDarkTheme={isDarkTheme}
+        router={router}
+      />
+    ),
+    [
+      searchQuery,
+      searchHistory,
+      handleSearchHistoryUpdate,
+      theme,
+      isDarkTheme,
+      router,
+    ]
+  );
 
   return (
     <SafeAreaView
@@ -951,13 +1088,13 @@ const Search = () => {
             placeholder="Search products..."
             placeholderTextColor={theme.colors.inactiveColor}
             value={searchQuery}
-            onChangeText={setSearchQuery}
+            onChangeText={handleSearchQueryChange}
             autoCorrect={false}
             returnKeyType="search"
           />
           {searchQuery ? (
             <TouchableOpacity
-              onPress={() => setSearchQuery("")}
+              onPress={() => handleSearchQueryChange("")}
               accessibilityLabel="Clear search"
             >
               <Feather name="x" size={20} color={theme.colors.textColor} />
@@ -975,7 +1112,9 @@ const Search = () => {
               borderColor: theme.colors.subInactiveColor,
             },
           ]}
-          onPress={() => setIsFilterVisible(true)}
+          onPress={() =>
+            dispatch({ type: "TOGGLE_FILTER_MODAL", payload: true })
+          }
           accessibilityLabel="Filter products"
         >
           <Feather
@@ -986,25 +1125,63 @@ const Search = () => {
         </TouchableOpacity>
       </View>
 
-      {renderActiveFilters()}
+      <ActiveFilters
+        filters={filters}
+        searchQuery={searchQuery}
+        priceBounds={priceBounds}
+        theme={theme}
+        categoryOptions={categoryOptions}
+        onUpdateFilters={handleUpdateFilters}
+        onUpdateFilterItem={handleUpdateFilterItem}
+        onResetFilters={handleResetFilters}
+      />
 
       <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
-        {renderSearchResults()}
+        <SearchResults
+          isLoading={isLoading}
+          isSearching={isSearching}
+          searchQuery={searchQuery}
+          filteredProducts={filteredProducts}
+          filters={filters}
+          priceBounds={priceBounds}
+          theme={theme}
+          renderProductItem={renderProductItem}
+          loadMoreProducts={loadMoreProducts}
+          onResetFilters={handleResetFilters}
+          searchHistory={searchHistory}
+          clearSearchHistory={clearSearchHistory}
+          onHistoryItemPress={handleHistoryItemPress}
+        />
       </View>
 
-      {renderFilterModal()}
+      <FilterModal
+        isVisible={isFilterVisible}
+        onClose={() =>
+          dispatch({ type: "TOGGLE_FILTER_MODAL", payload: false })
+        }
+        filters={filters}
+        onUpdateFilters={handleUpdateFilters}
+        onUpdateFilterItem={handleUpdateFilterItem}
+        onResetFilters={handleResetFilters}
+        theme={theme}
+        brands={brands}
+        categoryOptions={categoryOptions}
+        priceBounds={priceBounds}
+      />
 
       {/* AlertDialog for clearing search history */}
       <AlertDialog
         visible={showClearHistoryDialog}
         title="Clear Search History"
         message="Are you sure you want to clear your search history?"
-        onDismiss={() => setShowClearHistoryDialog(false)}
+        onDismiss={() =>
+          dispatch({ type: "TOGGLE_CLEAR_HISTORY_DIALOG", payload: false })
+        }
         onConfirm={async () => {
           try {
             await AsyncStorage.removeItem("searchHistory");
-            setSearchHistory([]);
-            setShowClearHistoryDialog(false);
+            dispatch({ type: "SET_SEARCH_HISTORY", payload: [] });
+            dispatch({ type: "TOGGLE_CLEAR_HISTORY_DIALOG", payload: false });
           } catch (error) {
             console.error("Failed to clear search history:", error);
           }
@@ -1041,12 +1218,8 @@ const Search = () => {
   );
 };
 
-export default Search;
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   headerContainer: {
     height: 50,
     width: "100%",
@@ -1367,3 +1540,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
+
+export default memo(Search);

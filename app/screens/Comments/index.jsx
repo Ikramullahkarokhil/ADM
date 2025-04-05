@@ -101,6 +101,8 @@ const Comments = () => {
   const [retryCount, setRetryCount] = useState(0);
   const [retryAfter, setRetryAfter] = useState(0);
   const [isRetrying, setIsRetrying] = useState(false);
+  // Track pending comments that are being added/edited/deleted
+  const [pendingOperations, setPendingOperations] = useState({});
 
   const { user, fetchComments, addComment, deleteComment, editComment } =
     useProductStore();
@@ -194,7 +196,11 @@ const Comments = () => {
 
         if (isMounted.current) {
           if (page === 1) {
-            setComments(data || []);
+            // Preserve pending comments when refreshing
+            const pendingComments = comments.filter(
+              (comment) => comment.isPending || comment.isTemp
+            );
+            setComments([...(data || []), ...pendingComments]);
           } else {
             setComments((prev) => [...prev, ...(data || [])]);
           }
@@ -243,6 +249,7 @@ const Comments = () => {
       isLoadingMore,
       isRetrying,
       numOfComments,
+      comments,
     ]
   );
 
@@ -289,47 +296,82 @@ const Comments = () => {
       }
 
       // Create a local ID for the new comment
+      const localId = `local_${Date.now()}`;
 
-      // Send to server
+      // Set adding state
+      setIsAddingComment(true);
+
+      // Create the local comment object
+      const newLocalComment = {
+        product_comments_id: localId,
+        product_id: productId,
+        comment: trimmedComment,
+        consumer_id: user.consumer_id,
+        date: new Date().toISOString(),
+        consumer_name: user.name || "Anonymous",
+        consumer_photo: user.photo || null,
+        isPending: true, // Mark as pending
+      };
+
+      // Update UI immediately
+      setComments((prev) => [...prev, newLocalComment]);
+      setNewComment("");
+      Keyboard.dismiss();
+
+      // Track this operation
+      setPendingOperations((prev) => ({
+        ...prev,
+        [localId]: "add",
+      }));
+
       try {
-        const localId = `local_${Date.now()}`;
-
-        // Create the local comment object
-        const newLocalComment = {
-          product_comments_id: localId,
-          product_id: productId,
-          comment: trimmedComment,
-          consumer_id: user.consumer_id,
-          date: new Date().toISOString(),
-          consumer_name: user.name || "Anonymous",
-          consumer_photo: user.photo || null,
-        };
-
-        // Update UI immediately
-        setComments((prev) => [...prev, newLocalComment]);
-        setNewComment("");
-        Keyboard.dismiss();
-
-        ToastAndroid.show("Comment added", ToastAndroid.SHORT);
-        console.log(comments);
-
-        await addComment({
+        // Send to server
+        const response = await addComment({
           product_id: productId,
           comment: trimmedComment,
           consumer_id: user.consumer_id,
         });
 
+        // Update the comment with the server response data
         setComments((prev) =>
-          prev.filter((comment) => comment.product_comments_id !== localId)
+          prev.map((comment) =>
+            comment.product_comments_id === localId
+              ? {
+                  ...comment,
+                  product_comments_id:
+                    response?.comment_id || comment.product_comments_id,
+                  isPending: false,
+                }
+              : comment
+          )
         );
+
+        // Remove from pending operations
+        setPendingOperations((prev) => {
+          const newOps = { ...prev };
+          delete newOps[localId];
+          return newOps;
+        });
+
+        ToastAndroid.show("Comment added successfully", ToastAndroid.SHORT);
       } catch (err) {
-        console.error(
-          "Error adding comment to server (will sync on refresh):",
-          err
+        console.error("Error adding comment:", err);
+
+        // Keep the comment but mark it as failed
+        setComments((prev) =>
+          prev.map((comment) =>
+            comment.product_comments_id === localId
+              ? { ...comment, isPending: false, isFailed: true }
+              : comment
+          )
         );
+
+        ToastAndroid.show("Failed to add comment", ToastAndroid.SHORT);
       }
     } catch (err) {
       console.error("An unexpected error occurred:", err);
+    } finally {
+      setIsAddingComment(false);
     }
   }, [newComment, user, addComment, productId, showAlert]);
 
@@ -352,7 +394,7 @@ const Comments = () => {
                   const updatedComment = {
                     ...comment,
                     comment: newText.trim(),
-                    isEditing: true,
+                    isPending: true,
                   };
 
                   setComments((prev) =>
@@ -363,6 +405,12 @@ const Comments = () => {
                     )
                   );
 
+                  // Track this operation
+                  setPendingOperations((prev) => ({
+                    ...prev,
+                    [comment.product_comments_id]: "edit",
+                  }));
+
                   // Use editComment from useProductStore
                   editComment({
                     comment_id: comment.product_comments_id,
@@ -370,17 +418,26 @@ const Comments = () => {
                     comment: newText.trim(),
                   })
                     .then(() => {
-                      // Update succeeded, remove the editing flag
+                      // Update succeeded, remove the pending flag
                       setComments((prev) =>
                         prev.map((c) =>
                           c.product_comments_id === comment.product_comments_id
-                            ? { ...updatedComment, isEditing: false }
+                            ? { ...updatedComment, isPending: false }
                             : c
                         )
                       );
 
+                      // Remove from pending operations
+                      setPendingOperations((prev) => {
+                        const newOps = { ...prev };
+                        delete newOps[comment.product_comments_id];
+                        return newOps;
+                      });
+
                       // Invalidate cache after editing
                       commentsCache.current = {};
+
+                      ToastAndroid.show("Comment updated", ToastAndroid.SHORT);
                     })
                     .catch((err) => {
                       console.error("Error updating comment:", err);
@@ -388,10 +445,18 @@ const Comments = () => {
                       setComments((prev) =>
                         prev.map((c) =>
                           c.product_comments_id === comment.product_comments_id
-                            ? originalComment
+                            ? { ...originalComment, isFailed: true }
                             : c
                         )
                       );
+
+                      // Remove from pending operations
+                      setPendingOperations((prev) => {
+                        const newOps = { ...prev };
+                        delete newOps[comment.product_comments_id];
+                        return newOps;
+                      });
+
                       ToastAndroid.show(
                         "Failed to update comment",
                         ToastAndroid.SHORT
@@ -423,16 +488,26 @@ const Comments = () => {
 
     // Store original comment for potential rollback
     const originalComment = { ...editingComment };
-    const updatedComment = { ...editingComment, comment: trimmedComment };
+    const updatedComment = {
+      ...editingComment,
+      comment: trimmedComment,
+      isPending: true,
+    };
 
     // Update UI immediately
     setComments((prev) =>
       prev.map((c) =>
         c.product_comments_id === editingComment.product_comments_id
-          ? { ...updatedComment, isEditing: true }
+          ? updatedComment
           : c
       )
     );
+
+    // Track this operation
+    setPendingOperations((prev) => ({
+      ...prev,
+      [editingComment.product_comments_id]: "edit",
+    }));
 
     setNewComment("");
     setEditingComment(null);
@@ -445,17 +520,26 @@ const Comments = () => {
       comment: trimmedComment,
     })
       .then(() => {
-        // Update succeeded, remove the editing flag
+        // Update succeeded, remove the pending flag
         setComments((prev) =>
           prev.map((c) =>
             c.product_comments_id === updatedComment.product_comments_id
-              ? { ...c, isEditing: false }
+              ? { ...c, isPending: false }
               : c
           )
         );
 
+        // Remove from pending operations
+        setPendingOperations((prev) => {
+          const newOps = { ...prev };
+          delete newOps[editingComment.product_comments_id];
+          return newOps;
+        });
+
         // Invalidate cache after updating
         commentsCache.current = {};
+
+        ToastAndroid.show("Comment updated", ToastAndroid.SHORT);
       })
       .catch((err) => {
         console.error("Error updating comment:", err);
@@ -463,10 +547,18 @@ const Comments = () => {
         setComments((prev) =>
           prev.map((c) =>
             c.product_comments_id === originalComment.product_comments_id
-              ? originalComment
+              ? { ...originalComment, isFailed: true }
               : c
           )
         );
+
+        // Remove from pending operations
+        setPendingOperations((prev) => {
+          const newOps = { ...prev };
+          delete newOps[editingComment.product_comments_id];
+          return newOps;
+        });
+
         ToastAndroid.show("Failed to update comment", ToastAndroid.SHORT);
       });
   }, [editingComment, newComment, editComment, user, handleAddComment]);
@@ -482,43 +574,212 @@ const Comments = () => {
             (c) => c.product_comments_id === comment.product_comments_id
           );
 
-          // Update UI immediately
+          // Mark as pending deletion but keep in the list with visual indication
           setComments((prev) =>
-            prev.filter(
-              (c) => c.product_comments_id !== comment.product_comments_id
+            prev.map((c) =>
+              c.product_comments_id === comment.product_comments_id
+                ? { ...c, isPending: true, isDeleting: true }
+                : c
             )
           );
 
-          ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+          // Track this operation
+          setPendingOperations((prev) => ({
+            ...prev,
+            [comment.product_comments_id]: "delete",
+          }));
 
           deleteComment({
             commentId: comment.product_comments_id,
             consumerID: user.consumer_id,
-            productId: comment.products_id,
+            productId: comment.products_id || productId,
           })
             .then(() => {
+              // Now actually remove from the list
+              setComments((prev) =>
+                prev.filter(
+                  (c) => c.product_comments_id !== comment.product_comments_id
+                )
+              );
+
+              // Remove from pending operations
+              setPendingOperations((prev) => {
+                const newOps = { ...prev };
+                delete newOps[comment.product_comments_id];
+                return newOps;
+              });
+
               // Invalidate cache after deleting
               commentsCache.current = {};
+
+              ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
             })
             .catch((err) => {
               console.error("Error deleting comment from server:", err);
               // Restore the comment if deletion fails
               if (commentToDelete) {
-                setComments((prev) => [...prev, commentToDelete]);
+                setComments((prev) =>
+                  prev.map((c) =>
+                    c.product_comments_id === comment.product_comments_id
+                      ? {
+                          ...commentToDelete,
+                          isPending: false,
+                          isDeleting: false,
+                          isFailed: true,
+                        }
+                      : c
+                  )
+                );
               }
+
+              // Remove from pending operations
+              setPendingOperations((prev) => {
+                const newOps = { ...prev };
+                delete newOps[comment.product_comments_id];
+                return newOps;
+              });
+
               ToastAndroid.show("Failed to delete comment", ToastAndroid.SHORT);
             });
         }
       );
     },
-    [deleteComment, user, showAlert, comments]
+    [deleteComment, user, showAlert, comments, productId]
+  );
+
+  const handleRetryOperation = useCallback(
+    (comment) => {
+      const operationType =
+        pendingOperations[comment.product_comments_id] ||
+        (comment.isTemp || comment.isPending
+          ? "add"
+          : comment.isDeleting
+          ? "delete"
+          : "edit");
+
+      // Remove failed flag
+      setComments((prev) =>
+        prev.map((c) =>
+          c.product_comments_id === comment.product_comments_id
+            ? { ...c, isFailed: false, isPending: true }
+            : c
+        )
+      );
+
+      if (operationType === "add") {
+        // For new comments that failed to add
+        addComment({
+          product_id: productId,
+          comment: comment.comment,
+          consumer_id: user.consumer_id,
+        })
+          .then((response) => {
+            setComments((prev) =>
+              prev.map((c) =>
+                c.product_comments_id === comment.product_comments_id
+                  ? {
+                      ...c,
+                      product_comments_id:
+                        response?.comment_id || c.product_comments_id,
+                      isPending: false,
+                      isTemp: false,
+                    }
+                  : c
+              )
+            );
+            ToastAndroid.show("Comment added successfully", ToastAndroid.SHORT);
+          })
+          .catch(() => {
+            setComments((prev) =>
+              prev.map((c) =>
+                c.product_comments_id === comment.product_comments_id
+                  ? { ...c, isPending: false, isFailed: true }
+                  : c
+              )
+            );
+            ToastAndroid.show("Failed to add comment", ToastAndroid.SHORT);
+          });
+      } else if (operationType === "edit") {
+        // For edits that failed
+        editComment({
+          comment_id: comment.product_comments_id,
+          consumer_id: user.consumer_id,
+          comment: comment.comment,
+        })
+          .then(() => {
+            setComments((prev) =>
+              prev.map((c) =>
+                c.product_comments_id === comment.product_comments_id
+                  ? { ...c, isPending: false }
+                  : c
+              )
+            );
+            ToastAndroid.show("Comment updated", ToastAndroid.SHORT);
+          })
+          .catch(() => {
+            setComments((prev) =>
+              prev.map((c) =>
+                c.product_comments_id === comment.product_comments_id
+                  ? { ...c, isPending: false, isFailed: true }
+                  : c
+              )
+            );
+            ToastAndroid.show("Failed to update comment", ToastAndroid.SHORT);
+          });
+      } else if (operationType === "delete") {
+        // For deletes that failed
+        deleteComment({
+          commentId: comment.product_comments_id,
+          consumerID: user.consumer_id,
+          productId: comment.products_id || productId,
+        })
+          .then(() => {
+            setComments((prev) =>
+              prev.filter(
+                (c) => c.product_comments_id !== comment.product_comments_id
+              )
+            );
+            ToastAndroid.show("Comment deleted", ToastAndroid.SHORT);
+          })
+          .catch(() => {
+            setComments((prev) =>
+              prev.map((c) =>
+                c.product_comments_id === comment.product_comments_id
+                  ? {
+                      ...c,
+                      isPending: false,
+                      isDeleting: false,
+                      isFailed: true,
+                    }
+                  : c
+              )
+            );
+            ToastAndroid.show("Failed to delete comment", ToastAndroid.SHORT);
+          });
+      }
+    },
+    [pendingOperations, addComment, editComment, deleteComment, productId, user]
   );
 
   const showCommentOptions = useCallback(
     (comment) => {
-      const options = ["Edit", "Delete", "Cancel"];
-      const cancelButtonIndex = 2;
-      const destructiveButtonIndex = 1;
+      // Different options based on comment state
+      let options = [];
+
+      if (comment.isFailed) {
+        options = ["Retry", "Delete", "Cancel"];
+      } else if (comment.isPending) {
+        options = ["Cancel Operation", "Cancel"];
+      } else {
+        options = ["Edit", "Delete", "Cancel"];
+      }
+
+      const cancelButtonIndex = options.length - 1;
+      const destructiveButtonIndex = options.includes("Delete")
+        ? options.indexOf("Delete")
+        : options.includes("Cancel Operation")
+        ? options.indexOf("Cancel Operation")
+        : -1;
 
       showActionSheetWithOptions(
         {
@@ -534,8 +795,52 @@ const Comments = () => {
           textStyle: { fontSize: 16 },
         },
         (buttonIndex) => {
-          if (buttonIndex === 0) handleEditComment(comment);
-          else if (buttonIndex === 1) handleDeleteComment(comment);
+          if (options[buttonIndex] === "Edit") {
+            handleEditComment(comment);
+          } else if (options[buttonIndex] === "Delete") {
+            handleDeleteComment(comment);
+          } else if (options[buttonIndex] === "Retry") {
+            handleRetryOperation(comment);
+          } else if (options[buttonIndex] === "Cancel Operation") {
+            // Cancel the pending operation
+            if (comment.isDeleting) {
+              // For delete operations, just remove the pending state
+              setComments((prev) =>
+                prev.map((c) =>
+                  c.product_comments_id === comment.product_comments_id
+                    ? { ...c, isPending: false, isDeleting: false }
+                    : c
+                )
+              );
+            } else if (
+              comment.isTemp ||
+              pendingOperations[comment.product_comments_id] === "add"
+            ) {
+              // For add operations, remove the comment
+              setComments((prev) =>
+                prev.filter(
+                  (c) => c.product_comments_id !== comment.product_comments_id
+                )
+              );
+            } else {
+              // For edit operations, we'd need the original comment
+              // This is simplified - ideally you'd store the original state
+              setComments((prev) =>
+                prev.map((c) =>
+                  c.product_comments_id === comment.product_comments_id
+                    ? { ...c, isPending: false }
+                    : c
+                )
+              );
+            }
+
+            // Remove from pending operations
+            setPendingOperations((prev) => {
+              const newOps = { ...prev };
+              delete newOps[comment.product_comments_id];
+              return newOps;
+            });
+          }
         }
       );
     },
@@ -543,7 +848,9 @@ const Comments = () => {
       showActionSheetWithOptions,
       handleEditComment,
       handleDeleteComment,
+      handleRetryOperation,
       theme.colors,
+      pendingOperations,
     ]
   );
 
@@ -551,7 +858,9 @@ const Comments = () => {
   const renderCommentItem = useCallback(
     ({ item }) => {
       const isUserComment = user && item.consumer_id === user.consumer_id;
-      const isTemporary = item.isTemp || item.isEditing;
+      const isPending = item.isPending || item.isTemp;
+      const isFailed = item.isFailed;
+      const isDeleting = item.isDeleting;
 
       return (
         <View style={styles.commentItemContainer}>
@@ -562,7 +871,12 @@ const Comments = () => {
               styles.commentItem,
               {
                 backgroundColor: theme.colors.primary + "20",
-                opacity: isTemporary ? 0.8 : 1,
+                opacity: isPending ? 0.8 : 1,
+                borderColor: isFailed
+                  ? "#ff6b6b"
+                  : isDeleting
+                  ? "#ff9f43"
+                  : "transparent",
               },
             ]}
           >
@@ -585,31 +899,39 @@ const Comments = () => {
                   numberOfLines={1}
                 >
                   {item.consumer_name || "Anonymous"}
-                  {isTemporary && " (Syncing...)"}
+                  {isPending && " (Syncing...)"}
+                  {isFailed && " (Failed)"}
+                  {isDeleting && " (Deleting...)"}
                 </Text>
                 <Text style={styles.commentDate} numberOfLines={1}>
                   {formatDateString(item.date)}
                 </Text>
               </View>
-              {isUserComment && !isTemporary && (
+              {isUserComment && (
                 <TouchableOpacity
                   onPress={() => showCommentOptions(item)}
                   style={styles.optionsButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <MaterialCommunityIcons
-                    name="dots-vertical"
-                    size={20}
-                    color={theme.colors.textColor + "80"}
-                  />
+                  {isPending ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={theme.colors.textColor + "80"}
+                    />
+                  ) : isFailed ? (
+                    <MaterialCommunityIcons
+                      name="alert-circle"
+                      size={20}
+                      color="#ff6b6b"
+                    />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="dots-vertical"
+                      size={20}
+                      color={theme.colors.textColor + "80"}
+                    />
+                  )}
                 </TouchableOpacity>
-              )}
-              {isTemporary && (
-                <ActivityIndicator
-                  size="small"
-                  color={theme.colors.textColor + "80"}
-                  style={styles.optionsButton}
-                />
               )}
             </View>
             <Text
@@ -617,11 +939,24 @@ const Comments = () => {
             >
               {item.comment}
             </Text>
+
+            {isFailed && (
+              <TouchableOpacity
+                onPress={() => handleRetryOperation(item)}
+                style={[
+                  styles.retryButton,
+                  { backgroundColor: theme.colors.button },
+                ]}
+              >
+                <MaterialCommunityIcons name="refresh" size={14} color="#fff" />
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            )}
           </TouchableOpacity>
         </View>
       );
     },
-    [user, theme.colors, showCommentOptions]
+    [user, theme.colors, showCommentOptions, handleRetryOperation]
   );
 
   // Debounced load more handler
@@ -637,6 +972,7 @@ const Comments = () => {
     commentPage,
     loadComments,
   ]);
+
   // Retry timer display
   const retryTimerDisplay = useMemo(() => {
     if (!isRetrying || retryAfter <= 0) return null;
@@ -1060,6 +1396,23 @@ const styles = StyleSheet.create({
   },
   retryText: {
     fontSize: 14,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginTop: 8,
+    marginLeft: 48,
+    alignSelf: "flex-start",
+    gap: 4,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
   },
 });
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, memo, useCallback } from "react";
 import { TouchableOpacity } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -12,38 +12,44 @@ const Layout = () => {
   const router = useRouter();
   const [alertVisible, setAlertVisible] = useState(false);
 
-  // When the user taps the Login button in the alert, navigate to the login screen.
-  const handleLogin = () => {
+  // Navigate to the Login screen when the user taps Login in the alert.
+  const handleLogin = useCallback(() => {
     setAlertVisible(false);
     router.push("/Login");
-  };
+  }, [router]);
 
   // Renders the icon for a tab.
-  const renderIcon = ({ name, focused, color, size }) => (
-    <Ionicons
-      name={`${name}${focused ? "" : "-outline"}`}
-      size={size}
-      color={color}
-    />
+  const renderIcon = useCallback(
+    ({ name, focused, color, size }) => (
+      <Ionicons
+        name={`${name}${focused ? "" : "-outline"}`}
+        size={size}
+        color={color}
+      />
+    ),
+    []
   );
 
-  // Custom tab button that shows the AlertDialog when the user isn't logged in.
-  const CustomTabButton = (props) => {
-    const { onPress, style } = props;
+  const CustomTabButton = memo((props) => {
+    const { onPress, style, requireAuth } = props;
+    const handlePress = useCallback(
+      (e) => {
+        if (requireAuth && !user) {
+          setAlertVisible(true);
+        } else {
+          onPress(e);
+        }
+      },
+      [user, onPress, requireAuth]
+    );
     return (
       <TouchableOpacity
         {...props}
-        onPress={(e) => {
-          if (!user) {
-            setAlertVisible(true);
-          } else {
-            onPress(e);
-          }
-        }}
-        style={[style, !user && { opacity: 0.5 }]}
+        onPress={handlePress}
+        style={[style, requireAuth && !user && { opacity: 0.5 }]}
       />
     );
-  };
+  });
 
   return (
     <>
@@ -65,6 +71,8 @@ const Layout = () => {
           options={{
             tabBarIcon: (props) => renderIcon({ name: "home", ...props }),
             tabBarLabel: "Home",
+            // No requireAuth prop here – accessible without login.
+            tabBarButton: (props) => <CustomTabButton {...props} />,
           }}
         />
         <Tabs.Screen
@@ -72,21 +80,31 @@ const Layout = () => {
           options={{
             tabBarIcon: (props) =>
               renderIcon({ name: "search-circle", ...props }),
+            // No requireAuth prop here – accessible without login.
+            tabBarButton: (props) => <CustomTabButton {...props} />,
           }}
         />
         <Tabs.Screen
           name="Orders"
           options={{
+            lazy: false,
             tabBarIcon: (props) => renderIcon({ name: "bag-check", ...props }),
-            tabBarButton: (props) => <CustomTabButton {...props} />,
+            // Require authentication for Orders.
+            tabBarButton: (props) => (
+              <CustomTabButton {...props} requireAuth={true} />
+            ),
           }}
         />
         <Tabs.Screen
           name="Profile"
           options={{
+            lazy: false,
             tabBarIcon: (props) =>
               renderIcon({ name: "person-circle", ...props }),
-            tabBarButton: (props) => <CustomTabButton {...props} />,
+            // Require authentication for Profile.
+            tabBarButton: (props) => (
+              <CustomTabButton {...props} requireAuth={true} />
+            ),
           }}
         />
       </Tabs>

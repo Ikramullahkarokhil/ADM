@@ -1,5 +1,5 @@
 import { BackHandler, useColorScheme } from "react-native";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo, version } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -18,13 +18,19 @@ import useProductStore from "../components/api/useProductStore";
 import TermsModal from "./screens/ConsentScreen/index";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import { registerBackgroundNotifications } from "../notification-services";
+import UpdateModal from "../components/ui/UpdateModal";
+import Constants from "expo-constants";
+import { checkForUpdate } from "../utils/VersionUtils";
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 const Layout = () => {
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
-  const theme = isDarkTheme ? darkTheme : lightTheme;
+  const theme = useMemo(
+    () => (isDarkTheme ? darkTheme : lightTheme),
+    [isDarkTheme]
+  );
   const {
     fetchProfile,
     logout,
@@ -32,13 +38,37 @@ const Layout = () => {
     listCart,
     fetchBillingAddresses,
     listOrders,
+    getAppVersions,
   } = useProductStore();
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
+  const [versionData, setVersionData] = useState([]);
   const router = useRouter();
+  const [updateModalVisible, setUpdateModalVisible] = useState(false);
+  const [latestVersion, setLatestVersion] = useState(null);
 
+  const currentVersion = Constants.expoConfig?.version || "1.0.0";
+  // Memoize these values BEFORE any conditional returns
+  const loadingView = useMemo(
+    () => (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    ),
+    [theme.colors.primary]
+  );
+
+  const screenOptions = useMemo(
+    () => ({
+      headerTitleAlign: "center",
+      headerStyle: { backgroundColor: theme.colors.primary },
+    }),
+    [theme.colors.primary]
+  );
+
+  // Initialize background tasks only once
   useEffect(() => {
     const initBackgroundTasks = async () => {
       try {
@@ -62,6 +92,30 @@ const Layout = () => {
   }, []);
 
   useEffect(() => {
+    const getData = async () => {
+      try {
+        const netState = await NetInfo.fetch();
+        if (netState.isConnected) {
+          const versions = await getAppVersions();
+          setVersionData(versions);
+          if (versions && versions.length > 0) {
+            const updateNeeded = checkForUpdate(currentVersion, versions);
+            if (updateNeeded) {
+              setLatestVersion(updateNeeded);
+              setUpdateModalVisible(true);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+
+    getData();
+  }, []);
+
+  // Check terms acceptance from AsyncStorage
+  useEffect(() => {
     SplashScreen.preventAutoHideAsync();
     const checkTerms = async () => {
       try {
@@ -73,14 +127,17 @@ const Layout = () => {
         setIsLoading(false);
       }
     };
+
     checkTerms();
   }, []);
 
+  // Theme initialization
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
   }, [colorScheme, initializeTheme, theme.colors.primary]);
 
+  // Optimize data fetching with memoized callback
   const fetchUserData = useCallback(async () => {
     if (user?.consumer_id) {
       const { consumer_id } = user;
@@ -100,41 +157,54 @@ const Layout = () => {
         console.error("Error fetching user data:", error);
       }
     }
-  }, [user?.consumer_id, fetchProfile, listCart, fetchBillingAddresses]);
+  }, [
+    user?.consumer_id,
+    fetchProfile,
+    listCart,
+    fetchBillingAddresses,
+    listOrders,
+  ]);
 
+  // Authentication check and routing - no early returns inside useEffect
   useEffect(() => {
     const checkAuthentication = async () => {
-      if (!hasAcceptedTerms || user === null) return;
+      // Only proceed if not loading and terms are accepted
+      if (!isLoading && hasAcceptedTerms !== null) {
+        if (hasAcceptedTerms) {
+          const isLoggedIn = user?.timestamp
+            ? Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000
+            : false;
 
-      const isLoggedIn = user?.timestamp
-        ? Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000
-        : false;
+          if (!isLoggedIn && user) await logout();
 
-      if (!isLoggedIn && user) await logout();
-
-      if (!isLoading) {
-        SplashScreen.hideAsync();
-        router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+          SplashScreen.hideAsync();
+          router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+        } else {
+          SplashScreen.hideAsync();
+        }
       }
     };
 
     checkAuthentication();
   }, [hasAcceptedTerms, user, logout, isLoading, router]);
 
+  // Network connectivity monitoring
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = state.isInternetReachable;
+      const connected = !!state.isInternetReachable;
+
+      // Update state regardless to ensure consistent behavior
       setIsConnected(connected);
       setShowAlert(!connected);
 
-      if (connected && hasAcceptedTerms) {
+      if (connected && hasAcceptedTerms && !isLoading) {
         router.replace(user ? "/(tabs)" : "/Login");
         fetchUserData();
       }
     });
 
     return () => unsubscribe();
-  }, [user, router, fetchUserData, hasAcceptedTerms]);
+  }, [user, router, fetchUserData, hasAcceptedTerms, isLoading]);
 
   const handleAcceptTerms = useCallback(async () => {
     try {
@@ -147,17 +217,14 @@ const Layout = () => {
 
   const handleRefresh = useCallback(() => {
     NetInfo.fetch().then((state) => {
-      setIsConnected(state.isConnected);
+      setIsConnected(!!state.isConnected);
       setShowAlert(!state.isConnected);
     });
   }, []);
 
+  // Conditional rendering AFTER all hooks are called
   if (hasAcceptedTerms === null || isLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
+    return loadingView;
   }
 
   return (
@@ -173,12 +240,7 @@ const Layout = () => {
               onDecline={() => BackHandler.exitApp()}
             />
           ) : (
-            <Stack
-              screenOptions={{
-                headerTitleAlign: "center",
-                headerStyle: { backgroundColor: theme.colors.primary },
-              }}
-            >
+            <Stack screenOptions={screenOptions}>
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
@@ -190,6 +252,16 @@ const Layout = () => {
               message="Please check your internet connection and try again."
               onConfirm={handleRefresh}
               confirmText="Try again"
+            />
+          )}
+
+          {latestVersion && (
+            <UpdateModal
+              visible={updateModalVisible}
+              onClose={() => setUpdateModalVisible(false)}
+              latestVersion={latestVersion.version}
+              currentVersion={currentVersion}
+              versionData={versionData}
             />
           )}
         </PaperProvider>

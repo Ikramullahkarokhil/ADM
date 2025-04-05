@@ -1,4 +1,6 @@
-import React, { useLayoutEffect, useState, useEffect } from "react";
+"use client";
+
+import { useLayoutEffect, useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -10,6 +12,7 @@ import {
   Platform,
   KeyboardAvoidingView,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation } from "expo-router";
@@ -19,29 +22,26 @@ import DatePicker from "react-native-date-picker";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system";
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
   phone: Yup.string().required("Phone number is required"),
   dob: Yup.date()
-    .test(
-      "is-at-least-10",
-      "You must be at least 10 years old",
-      function (value) {
-        if (!value) return false;
-        const today = new Date();
-        const birthDate = new Date(value);
-        let age = today.getFullYear() - birthDate.getFullYear();
-        const monthDiff = today.getMonth() - birthDate.getMonth();
-        if (
-          monthDiff < 0 ||
-          (monthDiff === 0 && today.getDate() < birthDate.getDate())
-        ) {
-          age--;
-        }
-        return age >= 10;
+    .test("is-at-least-10", "You must be at least 10 years old", (value) => {
+      if (!value) return false;
+      const today = new Date();
+      const birthDate = new Date(value);
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (
+        monthDiff < 0 ||
+        (monthDiff === 0 && today.getDate() < birthDate.getDate())
+      ) {
+        age--;
       }
-    )
+      return age >= 10;
+    })
     .required("Date of birth is required"),
   gender: Yup.string().required("Gender is required"),
 });
@@ -51,6 +51,7 @@ const UpdateProfile = () => {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [activeField, setActiveField] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const navigation = useNavigation();
   const theme = useTheme();
@@ -133,7 +134,7 @@ const UpdateProfile = () => {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: "images",
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
@@ -164,15 +165,54 @@ const UpdateProfile = () => {
       .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
   };
 
+  const prepareImageForUpload = async (uri) => {
+    try {
+      // Get file info
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+
+      // Get file name from URI
+      const uriParts = uri.split("/");
+      const fileName = uriParts[uriParts.length - 1];
+
+      // Get file extension
+      const fileNameParts = fileName.split(".");
+      const fileType =
+        fileNameParts.length > 1
+          ? `image/${fileNameParts[fileNameParts.length - 1]}`
+          : "image/jpeg";
+
+      // Create form data
+      const formData = new FormData();
+
+      formData.append("image", {
+        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
+        name: fileName,
+        type: fileType,
+      });
+
+      if (profileData?.consumer_id) {
+        formData.append("consumer_id", profileData.consumer_id.toString());
+      }
+
+      return formData;
+    } catch (error) {
+      console.error("Error preparing image:", error);
+      throw new Error("Failed to prepare image for upload");
+    }
+  };
+
   const handleSubmit = async (values) => {
     if (timeLeft) {
       Alert.alert(
         "Update Restricted",
-        "You can only update your profile once every 24 hours"
+        "You can only update your profile once every hour"
       );
       return;
     }
+
     try {
+      setIsUploading(true);
+
       let genderValue;
       if (values.gender === "Male") genderValue = 1;
       else if (values.gender === "Female") genderValue = 0;
@@ -184,19 +224,29 @@ const UpdateProfile = () => {
         consumer_id: profileData.consumer_id,
       };
 
+      // Handle image upload first if there's a new image
       if (profileImage && profileData.consumer_id) {
-        await uploadConsumerImage({
-          consumer_id: profileData.consumer_id,
-          image: profileImage,
-        });
+        try {
+          const imageFormData = await prepareImageForUpload(profileImage);
+          await uploadConsumerImage(imageFormData);
+        } catch (error) {
+          console.error("Image upload error:", error);
+          Alert.alert(
+            "Image Upload Failed",
+            "Profile details will be updated, but image upload failed."
+          );
+        }
       }
 
+      // Update consumer profile
       await updateConsumer(updatedValues);
       await fetchProfile(profileData.consumer_id);
       Alert.alert("Success", "Profile updated successfully");
     } catch (error) {
       console.error("Error updating profile:", error);
       Alert.alert("Error", "Failed to update profile");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -251,6 +301,9 @@ const UpdateProfile = () => {
               <Ionicons name="pencil" size={16} color="white" />
             </TouchableOpacity>
           </View>
+          {profileImage && (
+            <Text style={styles.imageSelectedText}>New image selected</Text>
+          )}
         </View>
 
         {timeLeft && (
@@ -525,17 +578,32 @@ const UpdateProfile = () => {
                 style={[
                   styles.updateButton,
                   {
-                    backgroundColor: timeLeft
-                      ? theme.colors.inactiveColor
-                      : theme.colors.button,
+                    backgroundColor:
+                      timeLeft || isUploading
+                        ? theme.colors.inactiveColor
+                        : theme.colors.button,
                   },
                 ]}
                 onPress={handleSubmit}
-                disabled={!!timeLeft}
+                disabled={!!timeLeft || isUploading}
               >
-                <Text style={[styles.updateButtonText, { color: "white" }]}>
-                  Update Profile
-                </Text>
+                {isUploading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="small" color="white" />
+                    <Text
+                      style={[
+                        styles.updateButtonText,
+                        { color: "white", marginLeft: 10 },
+                      ]}
+                    >
+                      Updating...
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.updateButtonText, { color: "white" }]}>
+                    Update Profile
+                  </Text>
+                )}
               </TouchableOpacity>
             </>
           )}
@@ -585,6 +653,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
+  },
+  imageSelectedText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: "#4CAF50",
+    fontWeight: "500",
   },
   timerContainer: {
     alignItems: "center",
@@ -680,6 +754,11 @@ const styles = StyleSheet.create({
   updateButtonText: {
     fontSize: 18,
     fontWeight: "700",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
