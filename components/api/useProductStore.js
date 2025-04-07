@@ -12,8 +12,6 @@ const api = axios.create({
 
 const initialState = {
   mostSaleProducts: [],
-  newArrivals: [],
-  justForYou: [],
   topSellers: [],
   mainCategories: [],
   subcategories: {},
@@ -63,22 +61,46 @@ const useProductStore = create(
       },
 
       // Fetch New Arrivals
-      fetchNewArrivals: async () => {
-        const data = await get().apiRequest("/get-new-arrival-products");
-        set({ newArrivals: data });
+      fetchNewArrivals: async (page) => {
+        const data = await get().apiRequest(
+          `/get-new-arrival-products?page=${page}`
+        );
         return data ?? [];
       },
 
       // Fetch Just For You
-      fetchJustForYou: async () => {
-        const data = await get().apiRequest("/get-just-foryou-products");
-        set({ justForYou: data });
+      fetchJustForYou: async (page) => {
+        const data = await get().apiRequest(
+          `/get-just-foryou-products?page=${page}`
+        );
+        return data ?? [];
       },
 
       // Fetch Top Sellers
       fetchTopSellers: async () => {
         const data = await get().apiRequest("/get-top-sellers");
         set({ topSellers: data });
+        return data ?? [];
+      },
+
+      fetchSellerProfile: async ({ sellerId, consumerId }) => {
+        return (
+          (await get().apiRequest(
+            `/seller/details?seller_id=${sellerId}&consumer_id=${consumerId}`
+          )) ?? []
+        );
+      },
+
+      followSeller: async ({ sellerId, consumerId }) => {
+        return await api.post(
+          `/seller/follow-request?seller_id=${sellerId}&consumer_id=${consumerId}`
+        );
+      },
+
+      rateProduct: async ({ productId, consumerId, rating }) => {
+        return await api.post(
+          `/consumer/setProduct-ratings?consumer_id=${consumerId}&products_id=${productId}&ratings=${rating}`
+        );
       },
 
       // Fetch Main Categories

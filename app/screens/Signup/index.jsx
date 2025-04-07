@@ -1,29 +1,31 @@
+"use client";
+
 import {
   StyleSheet,
   Text,
   View,
   TextInput,
   TouchableOpacity,
-  ActivityIndicator,
   ScrollView,
+  Pressable,
 } from "react-native";
-import { Formik, useField } from "formik";
+import { Formik, useField, useFormikContext } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../../../components/api/useProductStore";
 import { useState, useLayoutEffect } from "react";
 import { Link, useNavigation, useRouter } from "expo-router";
 import { Button, ProgressBar, useTheme } from "react-native-paper";
 import CountryCodeDropdownPicker from "react-native-dropdown-country-picker";
-import { LinearGradient } from "expo-linear-gradient";
 import DatePicker from "react-native-date-picker";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
-import { Pressable } from "react-native";
 
 // Validation schemas
 const step1Schema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
-  phoneNumber: Yup.string().required("Phone number is required").min(10),
+  phoneNumber: Yup.string()
+    .required("Phone number is required")
+    .min(10, "Phone number must be at least 10 digits"),
   email: Yup.string().email("Invalid email").required("Email is required"),
 });
 
@@ -52,13 +54,25 @@ const steps = [step1Schema, step2Schema, step3Schema];
 const FormikInput = ({ fieldName, ...props }) => {
   const [field, meta, helpers] = useField(fieldName);
   const theme = useTheme();
+  const { validateField } = useFormikContext();
+
+  const handleChange = (text) => {
+    helpers.setValue(text);
+    helpers.setTouched(true);
+    validateField(fieldName);
+  };
+
+  const handleBlur = () => {
+    helpers.setTouched(true);
+    validateField(fieldName);
+  };
 
   return (
     <>
       <TextInput
         value={field.value}
-        onChangeText={helpers.setValue}
-        onBlur={() => helpers.setTouched(true)}
+        onChangeText={handleChange}
+        onBlur={handleBlur}
         style={[
           styles.input,
           {
@@ -81,19 +95,25 @@ const FormikInput = ({ fieldName, ...props }) => {
   );
 };
 
-const PhoneInputWithCountryCode = ({ fieldName }) => {
+export const PhoneInputWithCountryCode = ({ fieldName }) => {
   const [field, meta, helpers] = useField(fieldName);
   const [selected, setSelected] = useState("+93");
   const theme = useTheme();
+  const { validateField } = useFormikContext();
 
   const handlePhoneChange = (text) => {
-    // Combine country code and phone number
     const fullPhone = `${selected}${text}`;
     helpers.setValue(fullPhone);
+    helpers.setTouched(true);
+    validateField(fieldName);
   };
 
-  // Ensure field.value is a string before calling replace
-  const phoneValue = field.value || ""; // Fallback to empty string if undefined
+  const handleBlur = () => {
+    helpers.setTouched(true);
+    validateField(fieldName);
+  };
+
+  const phoneValue = field.value || "";
   const displayPhone = phoneValue.replace(selected, "") || "";
 
   return (
@@ -104,11 +124,13 @@ const PhoneInputWithCountryCode = ({ fieldName }) => {
           setSelected(code);
           const currentPhone = phoneValue.replace(selected, "") || "";
           helpers.setValue(`${code}${currentPhone}`);
+          validateField(fieldName);
         }}
         setCountryDetails={() => {}}
         countryCodeTextStyles={{ color: theme.colors.textColor }}
         phone={displayPhone}
         setPhone={handlePhoneChange}
+        onBlur={handleBlur}
         phoneStyles={[
           styles.countryCodePhone,
           {
@@ -140,6 +162,7 @@ const FormikPicker = ({ fieldName }) => {
   const [field, meta, helpers] = useField(fieldName);
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
+  const { validateField } = useFormikContext();
 
   const genderOptions = [
     { label: "Male", value: 1 },
@@ -153,6 +176,14 @@ const FormikPicker = ({ fieldName }) => {
     genderOptions.find((opt) => opt.value === field.value)?.label ||
     "Select Gender";
 
+  const handleSelection = (buttonIndex) => {
+    if (buttonIndex < genderOptions.length) {
+      helpers.setValue(genderOptions[buttonIndex].value);
+      helpers.setTouched(true);
+      validateField(fieldName);
+    }
+  };
+
   return (
     <>
       <TouchableOpacity
@@ -164,12 +195,7 @@ const FormikPicker = ({ fieldName }) => {
               tintColor: theme.colors.textColor,
               containerStyle: { backgroundColor: theme.colors.primary },
             },
-            (buttonIndex) => {
-              if (buttonIndex < genderOptions.length) {
-                helpers.setValue(genderOptions[buttonIndex].value);
-                helpers.setTouched(true);
-              }
-            }
+            handleSelection
           );
         }}
         style={[
@@ -207,14 +233,21 @@ const FormikDatePicker = ({ fieldName }) => {
   const [show, setShow] = useState(false);
   const theme = useTheme();
   const { isDarkTheme } = useThemeStore();
+  const { validateField } = useFormikContext();
 
   const minimumDate = new Date(
     new Date().setFullYear(new Date().getFullYear() - 100)
   );
-  // Maximum date for "at least 10 years old" rule
   const maximumDate = new Date(
     new Date().setFullYear(new Date().getFullYear() - 10)
   );
+
+  const handleDateConfirm = (date) => {
+    helpers.setValue(date);
+    helpers.setTouched(true);
+    validateField(fieldName);
+    setShow(false);
+  };
 
   return (
     <>
@@ -250,16 +283,12 @@ const FormikDatePicker = ({ fieldName }) => {
         minimumDate={minimumDate}
         title="Select Date of Birth"
         maximumDate={maximumDate}
-        onConfirm={(date) => {
-          helpers.setValue(date);
-          helpers.setTouched(true);
-          setShow(false);
-        }}
+        onConfirm={handleDateConfirm}
         onCancel={() => setShow(false)}
-        textColor={theme.colors.textColor} // Theme text color
-        androidVariant="nativeAndroid" // Native Android style
+        textColor={theme.colors.textColor}
+        androidVariant="nativeAndroid"
         style={{
-          backgroundColor: theme.colors.primary, // Picker background
+          backgroundColor: theme.colors.primary,
         }}
       />
       {meta.touched && meta.error && (
@@ -344,15 +373,17 @@ const Signup = () => {
     }
   };
 
-  const handleNext = async (values, setErrors) => {
-    try {
-      await steps[currentStep].validate(values, { abortEarly: false });
+  const handleNext = async (values, setErrors, validateForm, setTouched) => {
+    const errors = await validateForm(values);
+    if (Object.keys(errors).length === 0) {
       setCurrentStep((prev) => prev + 1);
-    } catch (error) {
-      const errors = error.inner.reduce((acc, curr) => {
-        acc[curr.path] = curr.message;
+    } else {
+      const currentStepFields = Object.keys(steps[currentStep].fields);
+      const touched = currentStepFields.reduce((acc, field) => {
+        acc[field] = true;
         return acc;
       }, {});
+      setTouched(touched);
       setErrors(errors);
     }
   };
@@ -372,7 +403,7 @@ const Signup = () => {
       <Formik
         initialValues={{
           name: "",
-          phone: "",
+          phoneNumber: "",
           email: "",
           dob: null,
           gender: "",
@@ -381,15 +412,21 @@ const Signup = () => {
           code: "4337",
         }}
         onSubmit={handleSignup}
+        validationSchema={steps[currentStep]} // Set validation schema based on current step
+        validateOnChange={true}
+        validateOnBlur={true}
       >
         {({
           handleSubmit,
           values,
           setErrors,
-          setFieldValue,
-          setFieldTouched,
+          validateForm,
+          isValid,
+          dirty,
+          setTouched,
         }) => (
           <View style={styles.form}>
+            {/* Step content remains the same */}
             {currentStep === 0 && (
               <>
                 <Text
@@ -500,7 +537,9 @@ const Signup = () => {
               {currentStep < 2 ? (
                 <TouchableOpacity
                   style={[styles.button, styles.nextButton]}
-                  onPress={() => handleNext(values, setErrors)}
+                  onPress={() =>
+                    handleNext(values, setErrors, validateForm, setTouched)
+                  }
                 >
                   <Button
                     style={styles.button}
@@ -634,4 +673,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default { Signup, PhoneInputWithCountryCode };
+export default Signup;

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
 import {
   View,
   Text,
+  FlatList,
   StyleSheet,
   TouchableOpacity,
   Image,
@@ -13,21 +14,23 @@ import { useTheme } from "react-native-paper";
 import { useRouter } from "expo-router";
 import useProductStore from "../api/useProductStore";
 import useThemeStore from "../store/useThemeStore";
-import { Feather } from "@expo/vector-icons";
-import { FlashList } from "@shopify/flash-list";
+import {
+  Feather,
+  MaterialCommunityIcons,
+  FontAwesome5,
+  MaterialIcons,
+} from "@expo/vector-icons";
+import NetInfo from "@react-native-community/netinfo";
 
-// Optimized ProductImage component with memo and proper image handling
+// Create a reusable image component with proper placeholder handling
 const ProductImage = memo(({ source, isDarkTheme, style }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
-  const placeholderImage = useMemo(
-    () =>
-      isDarkTheme
-        ? require("../../assets/images/darkImagePlaceholder.jpg")
-        : require("../../assets/images/imageSkeleton.jpg"),
-    [isDarkTheme]
-  );
+  // Determine which placeholder to use
+  const placeholderImage = isDarkTheme
+    ? require("../../assets/images/darkImagePlaceholder.jpg")
+    : require("../../assets/images/imageSkeleton.jpg");
 
   return (
     <View style={[style, styles.imageWrapper]}>
@@ -38,7 +41,7 @@ const ProductImage = memo(({ source, isDarkTheme, style }) => {
           resizeMode="cover"
         />
       )}
-      {source?.uri && (
+      {source && source.uri && (
         <Image
           source={source}
           style={StyleSheet.absoluteFill}
@@ -55,14 +58,25 @@ const ProductImage = memo(({ source, isDarkTheme, style }) => {
   );
 });
 
-// Memoized ViewAllCard component
+const getBadgeIcon = (index) => {
+  if (index === 0 || index === 1 || index === 2) {
+    return {
+      icon: <FontAwesome5 name="crown" size={16} color="#FFFFFF" />,
+      backgroundColor: "#FFD700",
+    };
+  }
+  return null;
+};
+
 const ViewAllCard = memo(({ onPress, isDarkTheme, colors }) => {
   return (
     <Pressable
       style={[
         styles.productCard,
         styles.viewAllCard,
-        { backgroundColor: colors.primary },
+        {
+          backgroundColor: colors.primary,
+        },
       ]}
       onPress={onPress}
     >
@@ -76,83 +90,82 @@ const ViewAllCard = memo(({ onPress, isDarkTheme, colors }) => {
   );
 });
 
-// Optimized ProductItem component with memo and stable props
-const ProductItem = memo(
-  ({ item, onPress, isDarkTheme, colors }) => {
-    const handlePress = useCallback(() => {
-      onPress(item.id);
-    }, [onPress, item.id]);
+const SellerItem = memo(({ item, index, onPress, isDarkTheme }) => {
+  const { colors } = useTheme();
+  const badgeInfo = getBadgeIcon(index);
 
-    const overlayStyle = useMemo(
-      () => [
-        styles.titleOverlay,
-        {
-          backgroundColor: isDarkTheme
-            ? "rgba(0, 0, 0, 0.7)"
-            : "rgba(255, 255, 255, 0.7)",
-        },
-      ],
-      [isDarkTheme]
-    );
+  return (
+    <Pressable style={styles.productCard} onPress={() => onPress(item)}>
+      <View style={styles.imageContainer}>
+        <ProductImage
+          source={
+            item.image || item.profile_image
+              ? { uri: item.image || item.profile_image }
+              : null
+          }
+          isDarkTheme={isDarkTheme}
+          style={styles.productImage}
+        />
 
-    return (
-      <Pressable style={styles.productCard} onPress={handlePress}>
-        <View style={styles.imageContainer}>
-          <ProductImage
-            source={item.image ? { uri: item.image } : null}
-            isDarkTheme={isDarkTheme}
-            style={styles.productImage}
-          />
-          <View style={overlayStyle}>
-            <Text
-              style={[styles.productName, { color: colors.textColor }]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
-            <Text style={[styles.productPrice, { color: colors.button }]}>
-              AF {item.price}
-            </Text>
+        {/* Rank Badge */}
+
+        {badgeInfo && (
+          <View
+            style={[
+              styles.badge,
+              { backgroundColor: badgeInfo.backgroundColor },
+            ]}
+          >
+            {badgeInfo.icon}
           </View>
-        </View>
-      </Pressable>
-    );
-  },
-  (prevProps, nextProps) => {
-    // Custom comparison to prevent unnecessary re-renders
-    return (
-      prevProps.item.id === nextProps.item.id &&
-      prevProps.item.image === nextProps.item.image &&
-      prevProps.item.name === nextProps.item.name &&
-      prevProps.item.price === nextProps.item.price &&
-      prevProps.isDarkTheme === nextProps.isDarkTheme &&
-      prevProps.colors.textColor === nextProps.colors.textColor &&
-      prevProps.colors.button === nextProps.colors.button
-    );
-  }
-);
+        )}
 
-const NewArrivals = () => {
+        <View
+          style={[
+            styles.titleOverlay,
+            {
+              backgroundColor: isDarkTheme
+                ? "rgba(0, 0, 0, 0.7)"
+                : "rgba(255, 255, 255, 0.7)",
+            },
+          ]}
+        >
+          <Text
+            style={[styles.productName, { color: colors.textColor }]}
+            numberOfLines={1}
+          >
+            {item.seller_title}
+          </Text>
+          <Text style={[styles.productPrice, { color: colors.textColor }]}>
+            {item.business_firm_title}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+});
+
+const TopSellers = () => {
   const router = useRouter();
   const { colors } = useTheme();
-  const { fetchNewArrivals } = useProductStore();
+  const { fetchTopSellers } = useProductStore();
   const { isDarkTheme } = useThemeStore();
   const { width } = useWindowDimensions();
-  const [newArrivalProducts, setNewArrivalProducts] = useState([]);
+  const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const itemWidth = useMemo(
-    () => (width > 550 ? width / 3 - 24 : width / 2 - 24),
-    [width]
-  );
+  const itemWidth = width > 550 ? width / 3 - 24 : width / 2 - 24;
 
-  const handleProductPress = useCallback(
-    (productId) => {
+  const handleSellerPress = useCallback(
+    (seller) => {
       router.navigate({
-        pathname: "/screens/ProductDetail",
-        params: { idFromFavorite: productId },
+        pathname: "/screens/SellerProfile",
+        params: {
+          sellerId: seller.accounts_id,
+          sellerTitle: seller.seller_title,
+        },
       });
     },
     [router]
@@ -160,12 +173,11 @@ const NewArrivals = () => {
 
   const handleViewAllPress = useCallback(() => {
     router.navigate({
-      pathname: "/screens/AllNewArrivals",
-      params: { category: "new-arrivals" },
+      pathname: "/screens/AllTopSellers",
     });
   }, [router]);
 
-  const loadProducts = useCallback(
+  const loadSellers = useCallback(
     async (isRefreshing = false) => {
       if (!isRefreshing) {
         setLoading(true);
@@ -173,48 +185,39 @@ const NewArrivals = () => {
       setError(null);
 
       try {
-        const page = 1;
-        const response = await fetchNewArrivals(page);
-        if (response?.data) {
-          const formattedProducts = response.data.map((product) => ({
-            id: product.products_id.toString(),
-            name: product.title,
-            price: product.spu,
-            image: product.product_images?.[0] || null,
-          }));
-
-          // Only update state if products actually changed
-          setNewArrivalProducts((prev) => {
-            const prevIds = prev.map((p) => p.id);
-            const newIds = formattedProducts.map((p) => p.id);
-            if (JSON.stringify(prevIds) === JSON.stringify(newIds)) {
-              return prev;
-            }
-            return formattedProducts;
-          });
+        const response = await fetchTopSellers();
+        if (response && response.data) {
+          setSellers(response.data);
         }
       } catch (err) {
-        console.error("Error fetching new arrival products:", err);
-        setError("Failed to load products");
+        console.error("Error fetching top sellers:", err);
+        setError("Failed to load top sellers");
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
-    [fetchNewArrivals]
+    [fetchTopSellers]
   );
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    loadProducts(true);
-  }, [loadProducts]);
+    loadSellers(true);
+  }, [loadSellers]);
 
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    const fetchData = async () => {
+      const netState = await NetInfo.fetch();
+      if (netState.isConnected) {
+        loadSellers();
+      }
+    };
+    fetchData();
+  }, []);
 
   const renderItem = useCallback(
-    ({ item }) => {
+    ({ item, index }) => {
+      // Check if this is the last item (View All card)
       if (item === "viewAll") {
         return (
           <ViewAllCard
@@ -225,41 +228,47 @@ const NewArrivals = () => {
         );
       }
 
+      // Regular seller item
       return (
-        <ProductItem
+        <SellerItem
+          key={`seller-${item.accounts_id}`}
           item={item}
-          onPress={handleProductPress}
+          index={index}
+          onPress={handleSellerPress}
           isDarkTheme={isDarkTheme}
-          colors={colors}
         />
       );
     },
-    [handleProductPress, handleViewAllPress, isDarkTheme, colors]
+    [handleSellerPress, handleViewAllPress, isDarkTheme, colors]
   );
 
   const renderEmptyComponent = useCallback(
     () => (
       <View style={styles.emptyContainer}>
         <Text style={[styles.emptyText, { color: colors.textColor }]}>
-          No new arrivals found
+          No top sellers found
         </Text>
       </View>
     ),
     [colors.textColor]
   );
 
+  // Prepare data with View All card at the end
   const dataWithViewAll = useMemo(() => {
-    if (newArrivalProducts.length === 0) return [];
-    return [...newArrivalProducts, "viewAll"];
-  }, [newArrivalProducts]);
+    if (sellers.length === 0) return [];
+    // Limit to 5 sellers + view all card
+    return [...sellers, "viewAll"];
+  }, [sellers]);
 
   if (loading && !refreshing) {
     return (
       <View style={[styles.container, { backgroundColor: colors.primary }]}>
         <View style={styles.headerContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-            New Arrivals
-          </Text>
+          <View style={styles.titleContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+              Top Sellers
+            </Text>
+          </View>
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.button} />
@@ -272,9 +281,11 @@ const NewArrivals = () => {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
         <View style={styles.headerContainer}>
-          <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-            New Arrivals
-          </Text>
+          <View style={styles.titleContainer}>
+            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+              Top Sellers
+            </Text>
+          </View>
         </View>
         <View style={styles.errorContainer}>
           <Text style={[styles.errorText, { color: colors.deleteButton }]}>
@@ -282,7 +293,7 @@ const NewArrivals = () => {
           </Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={loadProducts}
+            onPress={() => loadSellers()}
           >
             <Text style={[styles.retryText, { color: colors.background }]}>
               Retry
@@ -294,11 +305,13 @@ const NewArrivals = () => {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.primary }]}>
       <View style={styles.headerContainer}>
-        <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-          New Arrivals
-        </Text>
+        <View style={styles.titleContainer}>
+          <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+            Top Sellers
+          </Text>
+        </View>
         <TouchableOpacity
           style={styles.viewAllButton}
           onPress={handleViewAllPress}
@@ -309,23 +322,22 @@ const NewArrivals = () => {
           <Feather name="chevron-right" size={16} color={colors.button} />
         </TouchableOpacity>
       </View>
-      <FlashList
+      <FlatList
         horizontal
         data={dataWithViewAll}
         renderItem={renderItem}
         keyExtractor={(item) =>
-          typeof item === "string" ? "view-all" : `product-${item.id}`
+          typeof item === "string" ? "view-all" : `seller-${item.accounts_id}`
         }
         showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{
-          paddingVertical: 20,
-          paddingHorizontal: 16,
-        }}
+        contentContainerStyle={[
+          styles.productsList,
+          sellers.length === 0 && styles.emptyList,
+        ]}
         initialNumToRender={4}
         maxToRenderPerBatch={5}
         windowSize={3}
         removeClippedSubviews={true}
-        estimatedItemSize={itemWidth + 12}
         getItemLayout={(data, index) => ({
           length: itemWidth + 12,
           offset: (itemWidth + 12) * index,
@@ -334,7 +346,6 @@ const NewArrivals = () => {
         refreshing={refreshing}
         onRefresh={handleRefresh}
         ListEmptyComponent={renderEmptyComponent}
-        extraData={isDarkTheme} // Ensure re-render when theme changes
       />
     </View>
   );
@@ -343,14 +354,19 @@ const NewArrivals = () => {
 const styles = StyleSheet.create({
   container: {
     borderRadius: 16,
-    paddingBottom: 8,
   },
   headerContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: 8,
+  },
+  titleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  titleIcon: {
+    marginLeft: 8,
   },
   sectionTitle: {
     fontSize: 22,
@@ -379,7 +395,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    minHeight: 210,
   },
   productCard: {
     width: 170,
@@ -427,6 +442,24 @@ const styles = StyleSheet.create({
     width: "100%",
     borderRadius: 16,
     height: "100%",
+  },
+  badge: {
+    position: "absolute",
+    top: 12,
+    left: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 2,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.5)",
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   titleOverlay: {
     position: "absolute",
@@ -487,4 +520,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default memo(NewArrivals);
+export default TopSellers;

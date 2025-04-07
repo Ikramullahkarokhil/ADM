@@ -34,14 +34,16 @@ const AlertDialog = ({
           {message}
         </Text>
         <View style={styles.buttonsContainer}>
-          <Button
-            mode="outlined"
-            onPress={onDismiss}
-            style={[styles.button, { borderColor: theme.colors.button }]}
-            labelStyle={{ color: theme.colors.button }}
-          >
-            {cancelText}
-          </Button>
+          {cancelText && (
+            <Button
+              mode="outlined"
+              onPress={onDismiss}
+              style={[styles.button, { borderColor: theme.colors.button }]}
+              labelStyle={{ color: theme.colors.button }}
+            >
+              {cancelText}
+            </Button>
+          )}
           <Button
             mode="contained"
             onPress={onConfirm}
@@ -82,7 +84,7 @@ const styles = StyleSheet.create({
   },
   button: {
     marginLeft: 10,
-    width: "45%",
+    flex: 1,
   },
 });
 

@@ -984,25 +984,6 @@ const Comments = () => {
       <View style={styles.emptyCommentContainer}>
         {isLoading ? (
           <ActivityIndicator size="large" color={theme.colors.textColor} />
-        ) : isRetrying ? (
-          <>
-            <MaterialCommunityIcons
-              name="timer-sand"
-              size={48}
-              color={theme.colors.textColor + "70"}
-            />
-            <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
-              Rate limit exceeded
-            </Text>
-            <Text
-              style={[
-                styles.emptySubtext,
-                { color: theme.colors.textColor + "80" },
-              ]}
-            >
-              {retryTimerDisplay || "Retrying soon..."}
-            </Text>
-          </>
         ) : (
           <>
             <MaterialCommunityIcons
@@ -1013,23 +994,6 @@ const Comments = () => {
             <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
               No comments yet
             </Text>
-            <Text
-              style={[
-                styles.emptySubtext,
-                { color: theme.colors.textColor + "80" },
-              ]}
-            >
-              Be the first to share your thoughts on this product
-            </Text>
-            <TouchableOpacity
-              style={[
-                styles.emptyButton,
-                { backgroundColor: theme.colors.button },
-              ]}
-              onPress={() => inputRef.current?.focus()}
-            >
-              <Text style={styles.emptyButtonText}>Write a comment</Text>
-            </TouchableOpacity>
           </>
         )}
       </View>
@@ -1077,17 +1041,6 @@ const Comments = () => {
             </View>
           )}
         </TouchableOpacity>
-      );
-    } else if (comments.length > 0) {
-      return (
-        <Text
-          style={[
-            styles.noMoreCommentsText,
-            { color: theme.colors.textColor + "80" },
-          ]}
-        >
-          No more comments to load
-        </Text>
       );
     }
 
@@ -1358,7 +1311,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 32,
-    paddingVertical: 80,
+    paddingTop: 240,
   },
   emptyText: {
     fontSize: 20,

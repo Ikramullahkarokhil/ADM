@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,11 +13,11 @@ import { useRouter } from "expo-router";
 import useProductStore from "../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 
-// Remove the "In-process" tab
+// Status types definition
 const statusTypes = [
   { key: "all", title: "All Orders" },
   { key: "Delivered", title: "Delivered" },
-  { key: "Cancelled", title: "Canceled" },
+  { key: "Cancelled", title: "Cancelled" },
 ];
 
 const Orders = () => {
@@ -27,18 +27,20 @@ const Orders = () => {
   const { orders, listOrders, user } = useProductStore();
   const { colors } = useTheme();
 
+  // Memoize the onRefresh callback to prevent unnecessary re-renders
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await listOrders(user.consumer_id);
+      await listOrders(user?.consumer_id);
     } catch (error) {
       console.error("Error refreshing orders:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [user, listOrders]);
+  }, [user?.consumer_id, listOrders]);
 
-  const getFilteredOrders = () => {
+  // Memoize filtered orders to prevent recalculation on every render
+  const filteredOrders = useMemo(() => {
     if (index === 0) return orders; // All orders
     const statusKey = statusTypes[index].key;
 
@@ -51,171 +53,202 @@ const Orders = () => {
 
     // For other tabs, filter as usual
     return orders.filter((order) => order.status === statusKey);
-  };
+  }, [orders, index]);
 
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <MaterialIcons
-        name="remove-shopping-cart"
-        size={80}
-        color={colors.subInactiveColor}
-      />
-      <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
-        No {index === 0 ? "Orders" : statusTypes[index].title}
-      </Text>
-      <Text style={[styles.emptySubtitle, { color: colors.inactiveColor }]}>
-        {index === 0
-          ? "Your placed orders will appear here"
-          : `Orders with ${statusTypes[
-              index
-            ].title.toLowerCase()} status will appear here`}
-      </Text>
-    </View>
+  // Memoize the empty state component
+  const EmptyState = useCallback(
+    () => (
+      <View style={styles.emptyState}>
+        <MaterialIcons
+          name="remove-shopping-cart"
+          size={80}
+          color={colors.subInactiveColor}
+        />
+        <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
+          No {index === 0 ? "Orders" : statusTypes[index].title}
+        </Text>
+      </View>
+    ),
+    [index, colors.subInactiveColor, colors.textColor, colors.inactiveColor]
   );
 
-  const getStatusColor = (status) => {
-    const lowerStatus = status.toLowerCase();
-    switch (lowerStatus) {
-      case "in-process":
-        return "#FF9800"; // Orange
-      case "delivered":
-        return "#4CAF50"; // Green
-      case "cancelled":
-      case "rejected": // Add color for rejected status (same as cancelled)
-        return "#F44336"; // Red
-      default:
-        return colors.inactiveColor;
-    }
-  };
-
-  const getTabTitleColor = (tabIndex) => {
-    if (tabIndex === index) {
-      // Active tab
-      if (statusTypes[tabIndex].key === "Cancelled") {
-        return "#F44336"; // Red for Canceled tab
+  // Helper function to get status color
+  const getStatusColor = useCallback(
+    (status) => {
+      const lowerStatus = (status || "").toLowerCase();
+      switch (lowerStatus) {
+        case "in-process":
+          return "#2563eb"; // Blue
+        case "delivered":
+          return colors.button;
+        case "cancelled":
+        case "rejected":
+          return colors.deleteButton;
+        default:
+          return colors.inactiveColor;
       }
-      return colors.button; // Default active color for other tabs
-    }
-    return colors.inactiveColor; // Inactive tab color
-  };
+    },
+    [colors.button, colors.deleteButton, colors.inactiveColor]
+  );
 
-  const renderItem = ({ item }) => {
-    return (
-      <TouchableOpacity
-        style={[
-          styles.card,
-          {
-            backgroundColor: colors.primary,
-            borderWidth: 2,
-            borderColor:
-              item.status === "Cancelled" || item.status === "Rejected"
-                ? colors.deleteButton
-                : item.status === "Delivered"
-                ? colors.button
-                : "transparent",
-          },
-        ]}
-        onPress={() =>
-          router.navigate({
-            pathname: "/screens/OrderDetails",
-            params: { orderId: item.consumer_orders_id },
-          })
+  // Helper function to get tab title color
+  const getTabTitleColor = useCallback(
+    (tabIndex) => {
+      if (tabIndex === index) {
+        // Active tab
+        if (statusTypes[tabIndex].key === "Cancelled") {
+          return colors.deleteButton; // Red for Canceled tab
         }
-        activeOpacity={0.7}
-      >
-        <View
+        return colors.button; // Default active color for other tabs
+      }
+      return colors.inactiveColor; // Inactive tab color
+    },
+    [index, colors.deleteButton, colors.button, colors.inactiveColor]
+  );
+
+  // Memoize the item renderer for better FlatList performance
+  const renderItem = useCallback(
+    ({ item }) => {
+      return (
+        <TouchableOpacity
           style={[
-            styles.cardHeader,
-            { borderBottomColor: colors.activeIndicatorStyle },
+            styles.card,
+            {
+              backgroundColor: colors.primary,
+              borderWidth: 1,
+              borderColor:
+                item.status === "Cancelled" || item.status === "Rejected"
+                  ? colors.deleteButton
+                  : item.status === "Delivered"
+                  ? colors.button
+                  : "transparent",
+            },
           ]}
+          onPress={() =>
+            router.navigate({
+              pathname: "/screens/OrderDetails",
+              params: { orderId: item.consumer_orders_id },
+            })
+          }
+          activeOpacity={0.7}
         >
-          <Text
+          <View
             style={[
-              styles.orderNumber,
-              {
-                color:
-                  item.status === "Cancelled" || item.status === "Rejected"
-                    ? colors.deleteButton
-                    : item.status === "Delivered"
-                    ? colors.button
-                    : colors.textColor,
-              },
+              styles.cardHeader,
+              { borderBottomColor: colors.activeIndicatorStyle },
             ]}
           >
-            Order #{item.order_no}
-          </Text>
-        </View>
-
-        <View style={styles.cardBody}>
-          <View style={styles.infoRow}>
-            <MaterialIcons
-              name="payment"
-              size={20}
-              color={colors.inactiveColor}
-            />
-            <Text style={[styles.infoText, { color: colors.textColor }]}>
-              Payment Type: {item.payment_type}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialIcons
-              name="calendar-today"
-              size={20}
-              color={colors.inactiveColor}
-            />
-            <Text style={[styles.infoText, { color: colors.textColor }]}>
-              Ordered On: {item.date}
+            <Text
+              style={[
+                styles.orderNumber,
+                {
+                  color:
+                    item.status === "Cancelled" || item.status === "Rejected"
+                      ? colors.deleteButton
+                      : item.status === "Delivered"
+                      ? colors.button
+                      : colors.textColor,
+                },
+              ]}
+            >
+              Order #{item.order_no}
             </Text>
           </View>
 
-          {item.status !== "Cancelled" &&
-            item.status !== "Rejected" &&
-            item.status !== "Delivered" &&
-            item.product_statuses && (
-              <View style={styles.productsContainer}>
-                {item.product_statuses.map((product) => (
-                  <View
-                    key={`${product.product_id}_${product.status}`}
-                    style={styles.productRow}
-                  >
-                    <Text
-                      style={[styles.productName, { color: colors.textColor }]}
-                    >
-                      {product.product_name}
-                    </Text>
+          <View style={styles.cardBody}>
+            <View style={styles.infoRow}>
+              <MaterialIcons
+                name="payment"
+                size={20}
+                color={colors.inactiveColor}
+              />
+              <Text style={[styles.infoText, { color: colors.textColor }]}>
+                Payment Type: {item.payment_type || "N/A"}
+              </Text>
+            </View>
+            <View style={styles.infoRow}>
+              <MaterialIcons
+                name="calendar-today"
+                size={20}
+                color={colors.inactiveColor}
+              />
+              <Text style={[styles.infoText, { color: colors.textColor }]}>
+                Ordered On: {item.date || "N/A"}
+              </Text>
+            </View>
+
+            {item.status !== "Cancelled" &&
+              item.status !== "Rejected" &&
+              item.status !== "Delivered" &&
+              item.product_statuses &&
+              item.product_statuses.length > 0 && (
+                <View style={styles.productsContainer}>
+                  {item.product_statuses.map((product, index) => (
                     <View
-                      style={[
-                        styles.productStatusBadge,
-                        { backgroundColor: getStatusColor(product.status) },
-                      ]}
+                      // Fix for duplicate keys - use index as fallback if product_id is undefined
+                      key={`${product.product_id || `item-${index}`}_${
+                        product.status || "unknown"
+                      }`}
+                      style={styles.productRow}
                     >
-                      <Text style={styles.productStatusText}>
-                        {product.status}
+                      <Text
+                        style={[
+                          styles.productName,
+                          { color: colors.textColor },
+                        ]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                      >
+                        {product.product_name || "Unknown Product"}
                       </Text>
+                      <View
+                        style={[
+                          styles.productStatusBadge,
+                          { backgroundColor: getStatusColor(product.status) },
+                        ]}
+                      >
+                        <Text style={styles.productStatusText}>
+                          {product.status || "Unknown"}
+                        </Text>
+                      </View>
                     </View>
-                  </View>
-                ))}
-              </View>
-            )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
+                  ))}
+                </View>
+              )}
+          </View>
+        </TouchableOpacity>
+      );
+    },
+    [colors, router, getStatusColor]
+  );
+
+  // Optimize keyExtractor with useCallback
+  const keyExtractor = useCallback(
+    (item) => item.consumer_orders_id?.toString() || Math.random().toString(),
+    []
+  );
+
+  // Memoize the tab indicator style
+  const tabIndicatorStyle = useMemo(
+    () => ({
+      backgroundColor:
+        statusTypes[index].key === "Cancelled"
+          ? colors.deleteButton
+          : colors.button,
+    }),
+    [index, colors.deleteButton, colors.button]
+  );
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.primary }]}>
       <View style={styles.tabContainer}>
         <Tab
           value={index}
           onChange={setIndex}
-          indicatorStyle={{
-            backgroundColor:
-              statusTypes[index].key === "Cancelled"
-                ? colors.deleteButton
-                : colors.button,
-          }}
+          indicatorStyle={tabIndicatorStyle}
           variant="default"
           scrollable={true}
+          style={{ backgroundColor: colors.primary }}
         >
           {statusTypes.map((status, i) => (
             <Tab.Item
@@ -229,10 +262,10 @@ const Orders = () => {
         </Tab>
       </View>
       <FlatList
-        data={getFilteredOrders()}
+        data={filteredOrders}
         renderItem={renderItem}
-        keyExtractor={(item) => item.consumer_orders_id.toString()}
-        ListEmptyComponent={renderEmptyState}
+        keyExtractor={keyExtractor}
+        ListEmptyComponent={EmptyState}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -241,6 +274,14 @@ const Orders = () => {
             tintColor={colors.button}
           />
         }
+        contentContainerStyle={[
+          styles.listContentContainer,
+          filteredOrders.length === 0 && { flex: 1 },
+        ]}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        windowSize={10}
+        initialNumToRender={8}
       />
     </View>
   );
@@ -249,32 +290,13 @@ const Orders = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   tabContainer: {
     paddingHorizontal: 16,
   },
-  cardContainer: {
-    margin: 10,
-    borderRadius: 8,
-    elevation: 3,
-  },
-  cardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  item: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  status: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  date: {
-    fontSize: 14,
+  listContentContainer: {
+    paddingBottom: 20,
+    flexGrow: 1,
   },
   emptyState: {
     flex: 1,
@@ -293,13 +315,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     textAlign: "center",
   },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
   card: {
-    backgroundColor: "#FFFFFF",
     borderRadius: 12,
     marginHorizontal: 16,
     marginTop: 12,
@@ -337,21 +353,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 8,
   },
-  statusBadge: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
   productsContainer: {
     marginTop: 12,
     borderTopWidth: 1,
     borderTopColor: "rgba(0,0,0,0.1)",
     paddingTop: 12,
-  },
-  productsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
   },
   productRow: {
     flexDirection: "row",

@@ -474,6 +474,7 @@ const UpdateProfile = () => {
                     <TouchableOpacity
                       style={[
                         styles.genderOption,
+
                         values.gender === "Male" && [
                           styles.selectedGender,
                           {
@@ -724,6 +725,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginHorizontal: 5,
     borderWidth: 1,
+    borderColor: "#ccc",
   },
   selectedGender: {
     backgroundColor: "#6c63ff",
@@ -731,6 +733,7 @@ const styles = StyleSheet.create({
   },
   genderText: {
     fontSize: 16,
+    color: "#ccc",
   },
   selectedGenderText: {
     color: "white",

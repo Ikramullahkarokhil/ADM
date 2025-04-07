@@ -297,10 +297,7 @@ const OrderDetails = () => {
   if (loading) {
     return (
       <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: colors.background },
-        ]}
+        style={[styles.loadingContainer, { backgroundColor: colors.primary }]}
       >
         <ActivityIndicator size="large" color={colors.button} />
         <Text style={[styles.loadingText, { color: colors.textColor }]}>
@@ -557,7 +554,7 @@ const OrderDetails = () => {
                               },
                             ]}
                           >
-                            ${Number.parseFloat(product.spu || 0)}
+                            AF {Number.parseFloat(product.spu || 0)}
                           </Text>
                           <View
                             style={[
@@ -675,7 +672,7 @@ const OrderDetails = () => {
                 Subtotal
               </Text>
               <Text style={[styles.summaryValue, { color: colors.textColor }]}>
-                ${total}
+                AF {total}
               </Text>
             </View>
             <View style={styles.summaryRow}>
@@ -699,7 +696,7 @@ const OrderDetails = () => {
                 Total
               </Text>
               <Text style={[styles.totalValue, { color: colors.button }]}>
-                ${total}
+                AF {total}
               </Text>
             </View>
           </Card.Content>

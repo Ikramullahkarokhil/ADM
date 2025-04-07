@@ -459,11 +459,7 @@ const Cart = () => {
       <Text style={[styles.emptyCartText, { color: theme.colors.textColor }]}>
         Your cart is empty
       </Text>
-      <Text
-        style={[styles.emptyCartSubtext, { color: theme.colors.inactiveColor }]}
-      >
-        Browse products and add items to your cart
-      </Text>
+
       <Button
         mode="contained"
         style={[styles.browseButton, { marginTop: 20 }]}

@@ -13,6 +13,7 @@ import {
   View,
   Image,
   ScrollView,
+  RefreshControl,
 } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
@@ -25,6 +26,8 @@ import * as NavigationBar from "expo-navigation-bar";
 import NetInfo from "@react-native-community/netinfo";
 import useThemeStore from "../../components/store/useThemeStore";
 import NewArrivals from "../../components/ui/NewArrivals";
+import JustForYou from "../../components/ui/JustForYou";
+import TopSellers from "../../components/ui/TopSellers";
 
 // 1. Create a reducer for state management
 const initialState = {
@@ -227,9 +230,9 @@ const Home = () => {
     [loading]
   );
 
+  // In your Home component's return statement:
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      {/* Header component */}
       <Header
         theme={theme}
         isDarkTheme={isDarkTheme}
@@ -237,15 +240,18 @@ const Home = () => {
         onCartPress={handleCartPress}
       />
 
-      {/* Wrap everything in a ScrollView to allow scrolling through all content */}
-      <ScrollView>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={fetchCategories}
+            colors={[theme.colors.button]}
+          />
+        }
+      >
         {/* Categories list */}
         <FlatList
-          data={
-            loading
-              ? Array(6).fill(null)
-              : categoriesWithSubCategories.slice(0, 4)
-          }
+          data={loading ? Array(6).fill(null) : categoriesWithSubCategories}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           numColumns={loading ? 2 : 1}
@@ -253,20 +259,19 @@ const Home = () => {
           contentContainerStyle={
             loading ? styles.skeletonContainer : styles.dataContainer
           }
-          refreshing={refreshing}
-          onRefresh={fetchCategories}
           getItemLayout={getItemLayout}
           initialNumToRender={4}
           maxToRenderPerBatch={4}
           windowSize={5}
           removeClippedSubviews={true}
-          scrollEnabled={false} // Disable scrolling on FlatList since we're using ScrollView
+          scrollEnabled={false} // This is fine here as the parent ScrollView handles scrolling.
         />
 
         <NewArrivals />
+        <JustForYou />
+        <TopSellers />
       </ScrollView>
 
-      {/* Alert dialog */}
       <AlertDialog
         visible={alertVisible}
         title="Login Required"

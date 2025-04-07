@@ -264,8 +264,12 @@ const FilterModal = memo(
         backdropOpacity={0.5}
         animationIn="slideInUp"
         animationOut="slideOutDown"
+        animationOutTiming={500}
+        animationInTiming={500}
         useNativeDriver={true}
         useNativeDriverForBackdrop={true}
+        backdropTransitionOutTiming={10}
+        backdropTransitionInTiming={500}
       >
         <View
           style={[

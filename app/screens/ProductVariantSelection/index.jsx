@@ -1,6 +1,11 @@
-"use client";
-
-import { useLayoutEffect, useState, useEffect } from "react";
+import {
+  useLayoutEffect,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  memo,
+} from "react";
 import {
   View,
   Text,
@@ -126,7 +131,7 @@ const ProductVariantSelection = () => {
     setAlertVisible(true);
   };
 
-  const handleVariantSelect = (itemId, variantTitle, value) => {
+  const handleVariantSelect = useCallback((itemId, variantTitle, value) => {
     setSelections((prev) =>
       prev.map((sel) =>
         sel.id === itemId
@@ -140,9 +145,9 @@ const ProductVariantSelection = () => {
           : sel
       )
     );
-  };
+  }, []);
 
-  const handleQuantityChange = (itemId, delta) => {
+  const handleQuantityChange = useCallback((itemId, delta) => {
     setSelections((prev) =>
       prev.map((sel) =>
         sel.id === itemId
@@ -150,61 +155,71 @@ const ProductVariantSelection = () => {
           : sel
       )
     );
-  };
+  }, []);
 
-  const toggleExpandItem = (itemId) => {
-    setExpandedItem(expandedItem === itemId ? null : itemId);
-  };
-
-  const isItemComplete = (itemId) => {
-    const currentItem = selectedItems.find(
-      (i) => i.consumer_cart_items_id === itemId
+  const toggleExpandItem = useCallback((itemId) => {
+    setExpandedItem((prevExpandedItem) =>
+      prevExpandedItem === itemId ? null : itemId
     );
-    const selection = selections.find((sel) => sel.id === itemId);
+  }, []);
 
-    if (!currentItem || !selection) return false;
+  const isItemComplete = useCallback(
+    (itemId) => {
+      const currentItem = selectedItems.find(
+        (i) => i.consumer_cart_items_id === itemId
+      );
+      const selection = selections.find((sel) => sel.id === itemId);
 
-    if (!currentItem.variants || currentItem.variants.length === 0) return true;
+      if (!currentItem || !selection) return false;
 
-    if (
-      currentItem.variants.length === 1 &&
-      (currentItem.variants[0].variants_id === null ||
-        currentItem.variants[0].variant_values === null ||
-        currentItem.variants[0].variant_title === null)
-    ) {
-      return true;
-    }
+      if (!currentItem.variants || currentItem.variants.length === 0)
+        return true;
 
-    return (
-      currentItem.variants.length ===
-      Object.keys(selection.selectedVariants).length
-    );
-  };
+      if (
+        currentItem.variants.length === 1 &&
+        (currentItem.variants[0].variants_id === null ||
+          currentItem.variants[0].variant_values === null ||
+          currentItem.variants[0].variant_title === null)
+      ) {
+        return true;
+      }
 
-  const getCompletionPercentage = (itemId) => {
-    const currentItem = selectedItems.find(
-      (i) => i.consumer_cart_items_id === itemId
-    );
-    const selection = selections.find((sel) => sel.id === itemId);
+      return (
+        currentItem.variants.length ===
+        Object.keys(selection.selectedVariants).length
+      );
+    },
+    [selectedItems, selections]
+  );
 
-    if (!currentItem || !selection) return 0;
+  const getCompletionPercentage = useCallback(
+    (itemId) => {
+      const currentItem = selectedItems.find(
+        (i) => i.consumer_cart_items_id === itemId
+      );
+      const selection = selections.find((sel) => sel.id === itemId);
 
-    if (!currentItem.variants || currentItem.variants.length === 0) return 100;
+      if (!currentItem || !selection) return 0;
 
-    if (
-      currentItem.variants.length === 1 &&
-      (currentItem.variants[0].variants_id === null ||
-        currentItem.variants[0].variant_values === null ||
-        currentItem.variants[0].variant_title === null)
-    ) {
-      return 100;
-    }
+      if (!currentItem.variants || currentItem.variants.length === 0)
+        return 100;
 
-    const totalVariants = currentItem.variants.length;
-    const selectedVariants = Object.keys(selection.selectedVariants).length;
+      if (
+        currentItem.variants.length === 1 &&
+        (currentItem.variants[0].variants_id === null ||
+          currentItem.variants[0].variant_values === null ||
+          currentItem.variants[0].variant_title === null)
+      ) {
+        return 100;
+      }
 
-    return (selectedVariants / totalVariants) * 100;
-  };
+      const totalVariants = currentItem.variants.length;
+      const selectedVariants = Object.keys(selection.selectedVariants).length;
+
+      return (selectedVariants / totalVariants) * 100;
+    },
+    [selectedItems, selections]
+  );
 
   const checkBillingAddresses = () => {
     if (!consumerBillingAddress || consumerBillingAddress.length === 0) {
@@ -347,11 +362,11 @@ const ProductVariantSelection = () => {
     setSelectedBillingAddress(address);
   };
 
-  const BillingAddressModal = () => (
+  const BillingAddressModal = memo(() => (
     <Modal
       visible={showBillingModal}
       transparent={true}
-      animationType="fade" // Changed from "slide" for better performance
+      animationType="fade"
       onRequestClose={() => setShowBillingModal(false)}
     >
       <View style={styles.modalOverlay}>
@@ -553,9 +568,9 @@ const ProductVariantSelection = () => {
         </Surface>
       </View>
     </Modal>
-  );
+  ));
 
-  const SelectedBillingAddress = () => {
+  const SelectedBillingAddress = memo(() => {
     if (!selectedBillingAddress) return null;
 
     const hasPinLocation = !!selectedBillingAddress.pin_location;
@@ -669,9 +684,9 @@ const ProductVariantSelection = () => {
         </View>
       </Surface>
     );
-  };
+  });
 
-  const PaymentMethodSection = () => {
+  const PaymentMethodSection = memo(() => {
     return (
       <Surface
         style={[
@@ -742,9 +757,9 @@ const ProductVariantSelection = () => {
         </View>
       </Surface>
     );
-  };
+  });
 
-  const QuantitySelector = ({ quantity, onDecrease, onIncrease }) => (
+  const QuantitySelector = memo(({ quantity, onDecrease, onIncrease }) => (
     <View style={styles.quantityContainer}>
       <TouchableOpacity
         style={[
@@ -770,268 +785,284 @@ const ProductVariantSelection = () => {
         <Feather name="plus" size={16} color={isDarkTheme ? "#fff" : "#333"} />
       </TouchableOpacity>
     </View>
+  ));
+
+  const hasValidVariants = useMemo(
+    () => (item) => {
+      return (
+        item.variants &&
+        item.variants.length > 0 &&
+        !(
+          item.variants.length === 1 &&
+          (item.variants[0].variants_id === null ||
+            item.variants[0].variant_values === null ||
+            item.variants[0].variant_title === null)
+        )
+      );
+    },
+    []
   );
 
-  // Memoized function to determine if variants exist and are valid
-  const hasValidVariants = (item) => {
-    return (
-      item.variants &&
-      item.variants.length > 0 &&
-      !(
-        item.variants.length === 1 &&
-        (item.variants[0].variants_id === null ||
-          item.variants[0].variant_values === null ||
-          item.variants[0].variant_title === null)
-      )
-    );
-  };
+  const renderItem = useCallback(
+    ({ item, index }) => {
+      const selection = selections.find(
+        (sel) => sel.id === item.consumer_cart_items_id
+      );
 
-  const renderItem = ({ item, index }) => {
-    const selection = selections.find(
-      (sel) => sel.id === item.consumer_cart_items_id
-    );
+      if (!selection) return null;
 
-    if (!selection) return null;
+      const isComplete = isItemComplete(item.consumer_cart_items_id);
+      const completionPercentage = getCompletionPercentage(
+        item.consumer_cart_items_id
+      );
+      const isExpanded = expandedItem === item.consumer_cart_items_id;
+      const itemSubtotal = Number.parseFloat(item.spu) * selection.quantity;
+      const itemHasValidVariants = hasValidVariants(item);
 
-    const isComplete = isItemComplete(item.consumer_cart_items_id);
-    const completionPercentage = getCompletionPercentage(
-      item.consumer_cart_items_id
-    );
-    const isExpanded = expandedItem === item.consumer_cart_items_id;
-    const itemSubtotal = Number.parseFloat(item.spu) * selection.quantity;
-    const itemHasValidVariants = hasValidVariants(item);
-
-    return (
-      <Surface
-        style={[
-          styles.itemContainer,
-          { backgroundColor: theme.colors.primary },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.itemHeaderContainer}
-          onPress={() => toggleExpandItem(item.consumer_cart_items_id)}
-          activeOpacity={0.7}
+      return (
+        <Surface
+          style={[
+            styles.itemContainer,
+            { backgroundColor: theme.colors.primary },
+          ]}
         >
-          <View style={styles.itemHeaderLeft}>
-            <View style={styles.itemNumberContainer}>
-              <Text style={styles.itemNumber}>{index + 1}</Text>
-            </View>
-            <View style={styles.itemTitleContainer}>
-              <Text
-                style={[styles.itemTitle, { color: theme.colors.textColor }]}
-                numberOfLines={1}
-              >
-                {item.title}
-              </Text>
-              <View style={styles.progressContainer}>
-                <View
-                  style={[
-                    styles.progressBar,
-                    {
-                      width: `${completionPercentage}%`,
-                      backgroundColor: isComplete
-                        ? theme.colors.button
-                        : theme.colors.inactiveColor,
-                    },
-                  ]}
-                />
-                <Text style={styles.progressText}>
-                  {isComplete
-                    ? "Complete"
-                    : `${Math.round(completionPercentage)}% complete`}
+          <TouchableOpacity
+            style={styles.itemHeaderContainer}
+            onPress={() => toggleExpandItem(item.consumer_cart_items_id)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.itemHeaderLeft}>
+              <View style={styles.itemNumberContainer}>
+                <Text style={styles.itemNumber}>{index + 1}</Text>
+              </View>
+              <View style={styles.itemTitleContainer}>
+                <Text
+                  style={[styles.itemTitle, { color: theme.colors.textColor }]}
+                  numberOfLines={1}
+                >
+                  {item.title}
                 </Text>
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.itemHeaderRight}>
-            <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
-              AF {item.spu}
-            </Text>
-            <Feather
-              name={isExpanded ? "chevron-up" : "chevron-down"}
-              size={20}
-              color={theme.colors.textColor}
-            />
-          </View>
-        </TouchableOpacity>
-
-        {isExpanded && (
-          <View style={styles.expandedContent}>
-            <View style={styles.productDetailsRow}>
-              <Image
-                source={
-                  isDarkTheme
-                    ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                    : require("../../../assets/images/imageSkeleton.jpg")
-                }
-                style={styles.itemImage}
-              />
-
-              <View style={styles.productDetails}>
-                <View style={styles.detailRow}>
-                  <Text
+                <View style={styles.progressContainer}>
+                  <View
                     style={[
-                      styles.detailLabel,
-                      { color: theme.colors.textColor },
+                      styles.progressBar,
+                      {
+                        width: `${completionPercentage}%`,
+                        backgroundColor: isComplete
+                          ? theme.colors.button
+                          : theme.colors.inactiveColor,
+                      },
                     ]}
-                  >
-                    Quantity:
-                  </Text>
-                  <QuantitySelector
-                    quantity={selection.quantity}
-                    onDecrease={() =>
-                      handleQuantityChange(item.consumer_cart_items_id, -1)
-                    }
-                    onIncrease={() =>
-                      handleQuantityChange(item.consumer_cart_items_id, 1)
-                    }
                   />
-                </View>
-
-                <View style={styles.detailRow}>
-                  <Text
-                    style={[
-                      styles.detailLabel,
-                      { color: theme.colors.textColor },
-                    ]}
-                  >
-                    Subtotal:
-                  </Text>
-                  <Text
-                    style={[
-                      styles.subtotalValue,
-                      { color: theme.colors.button },
-                    ]}
-                  >
-                    AF {itemSubtotal}
+                  <Text style={styles.progressText}>
+                    {isComplete
+                      ? "Complete"
+                      : `${Math.round(completionPercentage)}% complete`}
                   </Text>
                 </View>
               </View>
             </View>
 
-            <Divider style={styles.divider} />
+            <View style={styles.itemHeaderRight}>
+              <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
+                AF {item.spu}
+              </Text>
+              <Feather
+                name={isExpanded ? "chevron-up" : "chevron-down"}
+                size={20}
+                color={theme.colors.textColor}
+              />
+            </View>
+          </TouchableOpacity>
 
-            {itemHasValidVariants && (
-              <View style={styles.variantsContainer}>
-                {item.variants.map((variant) => {
-                  const isVariantSelected =
-                    !!selection.selectedVariants[variant.variant_title];
+          {isExpanded && (
+            <View style={styles.expandedContent}>
+              <View style={styles.productDetailsRow}>
+                <Image
+                  source={
+                    isDarkTheme
+                      ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                      : require("../../../assets/images/imageSkeleton.jpg")
+                  }
+                  style={styles.itemImage}
+                />
 
-                  return (
-                    <View
-                      key={variant.variants_id}
-                      style={styles.variantSection}
+                <View style={styles.productDetails}>
+                  <View style={styles.detailRow}>
+                    <Text
+                      style={[
+                        styles.detailLabel,
+                        { color: theme.colors.textColor },
+                      ]}
                     >
-                      <View style={styles.variantHeader}>
-                        <Text
-                          style={[
-                            styles.variantTitle,
-                            { color: theme.colors.textColor },
-                          ]}
-                        >
-                          {variant.variant_title}
-                        </Text>
-                        {isVariantSelected ? (
-                          <Chip
-                            icon={() => (
-                              <Feather name="check" size={14} color="#fff" />
-                            )}
-                            style={[
-                              styles.selectedChip,
-                              { backgroundColor: theme.colors.button },
-                            ]}
-                            textStyle={{ color: "white", fontSize: 12 }}
-                          >
-                            Selected
-                          </Chip>
-                        ) : (
-                          <Chip
-                            icon={() => (
-                              <Feather
-                                name="alert-circle"
-                                size={14}
-                                color="#fff"
-                              />
-                            )}
-                            style={styles.requiredChip}
-                            textStyle={{ color: "white", fontSize: 12 }}
-                          >
-                            Required
-                          </Chip>
-                        )}
-                      </View>
+                      Quantity:
+                    </Text>
+                    <QuantitySelector
+                      quantity={selection.quantity}
+                      onDecrease={() =>
+                        handleQuantityChange(item.consumer_cart_items_id, -1)
+                      }
+                      onIncrease={() =>
+                        handleQuantityChange(item.consumer_cart_items_id, 1)
+                      }
+                    />
+                  </View>
 
-                      <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.optionsContainer}
-                      >
-                        {(variant.variant_values
-                          ? variant.variant_values.split(",")
-                          : []
-                        ).map((value) => {
-                          const isSelected =
-                            selection.selectedVariants[
-                              variant.variant_title
-                            ] === value;
-
-                          return (
-                            <TouchableOpacity
-                              key={value}
-                              style={[
-                                styles.optionItem,
-                                isSelected && styles.selectedOptionItem,
-                                {
-                                  backgroundColor: isDarkTheme
-                                    ? "#333"
-                                    : "#f0f0f0",
-                                },
-                              ]}
-                              onPress={() =>
-                                handleVariantSelect(
-                                  item.consumer_cart_items_id,
-                                  variant.variant_title,
-                                  value
-                                )
-                              }
-                              activeOpacity={0.7}
-                            >
-                              {isSelected && (
-                                <View style={styles.selectedIndicator}>
-                                  <Feather
-                                    name="check"
-                                    size={12}
-                                    color="#fff"
-                                  />
-                                </View>
-                              )}
-                              <Text
-                                style={[
-                                  styles.optionText,
-                                  { color: theme.colors.textColor },
-                                  isSelected && styles.selectedOptionText,
-                                ]}
-                              >
-                                {value}
-                              </Text>
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  );
-                })}
+                  <View style={styles.detailRow}>
+                    <Text
+                      style={[
+                        styles.detailLabel,
+                        { color: theme.colors.textColor },
+                      ]}
+                    >
+                      Subtotal:
+                    </Text>
+                    <Text
+                      style={[
+                        styles.subtotalValue,
+                        { color: theme.colors.button },
+                      ]}
+                    >
+                      AF {itemSubtotal}
+                    </Text>
+                  </View>
+                </View>
               </View>
-            )}
-          </View>
-        )}
-      </Surface>
-    );
-  };
 
-  const OrderSummary = () => {
+              <Divider style={styles.divider} />
+
+              {itemHasValidVariants && (
+                <View style={styles.variantsContainer}>
+                  {item.variants.map((variant) => {
+                    const isVariantSelected =
+                      !!selection.selectedVariants[variant.variant_title];
+
+                    return (
+                      <View
+                        key={variant.variants_id}
+                        style={styles.variantSection}
+                      >
+                        <View style={styles.variantHeader}>
+                          <Text
+                            style={[
+                              styles.variantTitle,
+                              { color: theme.colors.textColor },
+                            ]}
+                          >
+                            {variant.variant_title}
+                          </Text>
+                          {isVariantSelected ? (
+                            <Chip
+                              icon={() => (
+                                <Feather name="check" size={14} color="#fff" />
+                              )}
+                              style={[
+                                styles.selectedChip,
+                                { backgroundColor: theme.colors.button },
+                              ]}
+                              textStyle={{ color: "white", fontSize: 12 }}
+                            >
+                              Selected
+                            </Chip>
+                          ) : (
+                            <Chip
+                              icon={() => (
+                                <Feather
+                                  name="alert-circle"
+                                  size={14}
+                                  color="#fff"
+                                />
+                              )}
+                              style={styles.requiredChip}
+                              textStyle={{ color: "white", fontSize: 12 }}
+                            >
+                              Required
+                            </Chip>
+                          )}
+                        </View>
+
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={styles.optionsContainer}
+                        >
+                          {(variant.variant_values
+                            ? variant.variant_values.split(",")
+                            : []
+                          ).map((value) => {
+                            const isSelected =
+                              selection.selectedVariants[
+                                variant.variant_title
+                              ] === value;
+
+                            return (
+                              <TouchableOpacity
+                                key={value}
+                                style={[
+                                  styles.optionItem,
+                                  isSelected && styles.selectedOptionItem,
+                                  {
+                                    backgroundColor: isDarkTheme
+                                      ? "#333"
+                                      : "#f0f0f0",
+                                  },
+                                ]}
+                                onPress={() =>
+                                  handleVariantSelect(
+                                    item.consumer_cart_items_id,
+                                    variant.variant_title,
+                                    value
+                                  )
+                                }
+                                activeOpacity={0.7}
+                              >
+                                {isSelected && (
+                                  <View style={styles.selectedIndicator}>
+                                    <Feather
+                                      name="check"
+                                      size={12}
+                                      color="#fff"
+                                    />
+                                  </View>
+                                )}
+                                <Text
+                                  style={[
+                                    styles.optionText,
+                                    { color: theme.colors.textColor },
+                                    isSelected && styles.selectedOptionText,
+                                  ]}
+                                >
+                                  {value}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </View>
+          )}
+        </Surface>
+      );
+    },
+    [
+      selections,
+      expandedItem,
+      theme.colors,
+      isDarkTheme,
+      isItemComplete,
+      getCompletionPercentage,
+      hasValidVariants,
+      handleQuantityChange,
+      handleVariantSelect,
+      toggleExpandItem,
+    ]
+  );
+
+  const OrderSummary = memo(() => {
     const allComplete = selectedItems.every((item) =>
       isItemComplete(item.consumer_cart_items_id)
     );
@@ -1155,7 +1186,12 @@ const ProductVariantSelection = () => {
                 allComplete ? styles.completeButton : styles.incompleteButton,
               ]}
               contentStyle={styles.buttonContent}
-              labelStyle={styles.buttonLabel}
+              labelStyle={[
+                styles.buttonLabel,
+                {
+                  color: "white",
+                },
+              ]}
               loading={isSubmitting}
               disabled={isSubmitting || !allComplete}
               textColor="white"
@@ -1177,7 +1213,7 @@ const ProductVariantSelection = () => {
         </Surface>
       </View>
     );
-  };
+  });
 
   const EmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -1243,13 +1279,16 @@ const ProductVariantSelection = () => {
         visible={alertVisible}
         title={alertTitle}
         message={alertMessage}
-        onDismiss={() => setAlertVisible(false)}
+        onDismiss={() => {
+          setAlertVisible(false);
+          alertConfirmAction();
+        }}
         onConfirm={() => {
           setAlertVisible(false);
           alertConfirmAction();
         }}
         confirmText="OK"
-        cancelText="Cancel"
+        cancelText=""
       />
     </View>
   );

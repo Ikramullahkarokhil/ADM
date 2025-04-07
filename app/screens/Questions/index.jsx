@@ -1,4 +1,4 @@
-import React, {
+import {
   useEffect,
   useLayoutEffect,
   useState,
@@ -48,6 +48,8 @@ const Questions = () => {
   });
   const [editingQuestionId, setEditingQuestionId] = useState(null);
   const [totalQuestions, setTotalQuestions] = useState(0);
+  // Add a flag to prevent multiple auto-load triggers
+  const [isAutoLoading, setIsAutoLoading] = useState(false);
 
   const {
     user,
@@ -62,6 +64,7 @@ const Questions = () => {
   const pendingQuestionsRef = useRef(new Set());
   const dataFetchedRef = useRef(false);
   const editInputRef = useRef(null);
+  const flatListRef = useRef(null);
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -85,6 +88,9 @@ const Questions = () => {
         setIsLoading(true);
       } else {
         setIsLoadingMore(true);
+        if (page > questionPage) {
+          setIsAutoLoading(true);
+        }
       }
 
       try {
@@ -129,10 +135,11 @@ const Questions = () => {
         isLoadingRef.current = false;
         setIsLoading(false);
         setIsLoadingMore(false);
+        setIsAutoLoading(false);
       }
     },
     // Remove totalQuestions from dependencies to prevent reload cycles
-    [productId, getProductQuestionList]
+    [productId, getProductQuestionList, questionPage]
   );
 
   useEffect(() => {
@@ -332,7 +339,7 @@ const Questions = () => {
       const isUserQuestion = user && question.consumer_id === user.consumer_id;
       if (!isUserQuestion) return;
 
-      const options = ["Update Question", "Delete Question", "Cancel"];
+      const options = ["Edit Question", "Delete Question", "Cancel"];
       const destructiveButtonIndex = 1;
       const cancelButtonIndex = 2;
 
@@ -377,6 +384,21 @@ const Questions = () => {
     [showQuestionOptions, theme, editingQuestionId, user]
   );
 
+  // Handle auto-loading when scrolling to the end
+  const handleEndReached = useCallback(() => {
+    if (!isLoading && !isLoadingMore && !isAutoLoading && hasMoreQuestions) {
+      loadQuestions(questionPage + 1);
+    }
+  }, [
+    isLoading,
+    isLoadingMore,
+    isAutoLoading,
+    hasMoreQuestions,
+    questionPage,
+    loadQuestions,
+  ]);
+
+  // Manual load more button handler
   const handleLoadMore = useCallback(() => {
     if (!isLoading && !isLoadingMore && hasMoreQuestions) {
       loadQuestions(questionPage + 1);
@@ -391,7 +413,7 @@ const Questions = () => {
         color={theme.colors.inactiveColor}
       />
       <Text style={[styles.emptyText, { color: theme.colors.textColor }]}>
-        No questions yet. Be the first to ask!
+        No questions yet.
       </Text>
     </View>
   );
@@ -411,18 +433,20 @@ const Questions = () => {
   );
 
   const renderFooter = () => {
-    // Only show the "Show More" button if:
-    // 1. We're not currently loading more questions
-    // 2. There are more questions to load (hasMoreQuestions is true)
-    // 3. We have at least 10 questions already loaded
     if (isLoadingMore) {
       return (
         <View style={styles.footerIndicator}>
           <ActivityIndicator size="small" color={theme.colors.textColor} />
+          <Text
+            style={[styles.loadingMoreText, { color: theme.colors.textColor }]}
+          >
+            Loading more questions...
+          </Text>
         </View>
       );
     }
 
+    // Show the "Show More" button as a fallback if auto-loading fails
     if (hasMoreQuestions && questions.length >= 10) {
       return (
         <View style={styles.showMoreContainer}>
@@ -459,6 +483,7 @@ const Questions = () => {
           renderLoadingState()
         ) : (
           <FlatList
+            ref={flatListRef}
             data={questions}
             keyExtractor={(item) => item.products_qna_id.toString()}
             renderItem={renderQuestionItem}
@@ -472,7 +497,14 @@ const Questions = () => {
             initialNumToRender={10}
             maxToRenderPerBatch={10}
             windowSize={10}
-            // Removed onEndReached for the "Show More" button approach
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.3} // Trigger when user is 30% from the end
+            removeClippedSubviews={true}
+            onRefresh={() => {
+              dataFetchedRef.current = false;
+              loadQuestions(1, true);
+            }}
+            refreshing={isLoading && questionPage === 1}
           />
         )}
         <View
@@ -796,6 +828,11 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 10,
     fontSize: 16,
+    opacity: 0.7,
+  },
+  loadingMoreText: {
+    marginTop: 5,
+    fontSize: 14,
     opacity: 0.7,
   },
   footerIndicator: {

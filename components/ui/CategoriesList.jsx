@@ -58,6 +58,7 @@ const SubcategoryItem = ({ item, index, isDarkTheme }) => {
           ]}
           accessibilityLabel={`View products in ${item.title}`}
           android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+          activeOpacity={0.7}
         >
           <View style={styles.imageContainer}>
             <Image
@@ -109,12 +110,12 @@ const CategorySection = ({
   const isExpanded = expandedCategories[item.main_category_id] || false;
   const displaySubCategories = isExpanded
     ? item.subCategories
-    : item.subCategories.slice(0, 6);
+    : item.subCategories;
 
   return (
     <View style={styles.categoryContainer}>
       <View style={styles.headerContainer}>
-        <Text style={[styles.header, { color: isDarkTheme ? "#fff" : "#000" }]}>
+        <Text style={[styles.header, { color: theme.colors.textColor }]}>
           {item.name}
         </Text>
         {item.totalSubCategories > 6 && (
@@ -195,14 +196,14 @@ const CategoriesSectionList = ({ data: rawData }) => {
       <View
         style={[
           styles.loaderContainer,
-          { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
+          { backgroundColor: theme.colors.primary },
         ]}
       >
         <ActivityIndicator size="large" color={theme.colors.primary} />
         <Text
           style={{
             marginTop: 10,
-            color: isDarkTheme ? "#fff" : "#000",
+            color: theme.colors.textColor,
             fontWeight: "500",
           }}
         >
@@ -231,13 +232,13 @@ const CategoriesSectionList = ({ data: rawData }) => {
       keyExtractor={(item) => item.main_category_id.toString()}
       contentContainerStyle={[
         styles.container,
-        { backgroundColor: isDarkTheme ? "#121212" : "#f5f5f5" },
+        { backgroundColor: theme.colors.primary },
       ]}
       ItemSeparatorComponent={() => (
         <View
           style={[
             styles.separator,
-            { borderBottomColor: isDarkTheme ? "#333" : "#e0e0e0" },
+            { borderBottomColor: theme.colors.subInactiveColor },
           ]}
         />
       )}
@@ -262,7 +263,6 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   categoryContainer: {
-    marginBottom: 16,
     padding: 12,
     borderRadius: 16,
   },
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   header: {
     fontSize: 22,
@@ -295,6 +295,7 @@ const styles = StyleSheet.create({
     margin: 6,
     borderRadius: 16,
     overflow: "hidden",
+    elevation: 10,
   },
   product: {
     borderRadius: 16,
@@ -302,7 +303,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 4,
+    elevation: 2,
   },
   imageContainer: {
     position: "relative",

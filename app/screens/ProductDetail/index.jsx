@@ -34,6 +34,7 @@ import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import RelatedProducts from "../../../components/ui/RelatedProducts";
 import ProductDetailSkeleton from "../../../components/skeleton/ProductDetailsSkeleton";
+import { Colors } from "react-native/Libraries/NewAppScreen";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -78,11 +79,11 @@ const useAlertDialog = () => {
 };
 
 // 2. Extract Rating component
-const ProductRating = memo(({ rating, onRate }) => {
+const ProductRating = memo(({ rating, colors }) => {
   return (
     <View style={styles.ratingContainer}>
       {[...Array(5)].map((_, index) => (
-        <Pressable key={index} onPress={() => onRate(index + 1)}>
+        <Pressable key={index}>
           <FontAwesome
             name={index < rating ? "star" : "star-o"}
             size={15}
@@ -91,6 +92,9 @@ const ProductRating = memo(({ rating, onRate }) => {
           />
         </Pressable>
       ))}
+      <Text style={{ marginLeft: 5, color: colors.textColor }}>
+        {rating} / 5
+      </Text>
     </View>
   );
 });
@@ -324,9 +328,9 @@ const ProductDetail = () => {
     deleteProductQuestion,
     productQuestions,
     productComments,
-    updateProductRating,
     searchFavoriteProduct,
     fetchRelatedProducts,
+    rateProduct,
   } = useProductStore();
 
   // Memoize product map to avoid recalculation
@@ -596,10 +600,10 @@ const ProductDetail = () => {
       setState((prev) => ({ ...prev, userRating: rating }));
 
       try {
-        if (updateProductRating) {
-          await updateProductRating({
-            productID: product.products_id,
-            consumerID: user.consumer_id,
+        if (user) {
+          await rateProduct({
+            productId: product.products_id,
+            consumerId: user.consumer_id,
             rating,
           });
 
@@ -612,7 +616,7 @@ const ProductDetail = () => {
         showAlert("Error", err.message || "Failed to update rating");
       }
     },
-    [user, product, userRating, updateProductRating, showAlert]
+    [user, product, userRating, rateProduct, showAlert]
   );
 
   // Delete question handler
@@ -809,10 +813,10 @@ const ProductDetail = () => {
           </View>
 
           {/* Rating - Extracted to component */}
-          <ProductRating rating={userRating} onRate={handleRate} />
+          <ProductRating rating={userRating} colors={theme.colors} />
 
           <Text style={[styles.price, { color: theme.colors.button }]}>
-            {product.spu}
+            AF {product.spu}
           </Text>
 
           {product.description && (
@@ -837,6 +841,36 @@ const ProductDetail = () => {
               </Text>
             </View>
           )}
+
+          <Link
+            href={{
+              pathname: "/screens/SellerProfile",
+              params: {
+                sellerId: product.accounts_id,
+                sellerTitle: product.store_name,
+              },
+            }}
+            asChild
+          >
+            <Pressable
+              style={styles.detailsRow}
+              android_ripple={{ color: theme.colors.ripple }}
+            >
+              <Text
+                style={[styles.detailLabel, { color: theme.colors.textColor }]}
+              >
+                Seller
+              </Text>
+              <Text
+                style={[
+                  styles.showCommentsButton,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                {product.store_name}
+              </Text>
+            </Pressable>
+          </Link>
 
           <Link
             href={{
