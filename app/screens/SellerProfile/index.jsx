@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, memo, useMemo } from "react";
+import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
 import {
   View,
   Text,
@@ -16,12 +16,14 @@ import {
   MaterialIcons,
   AntDesign,
   MaterialCommunityIcons,
+  Feather,
 } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import useThemeStore from "../../../components/store/useThemeStore";
 
-const months = [
+// Pre-defined constants to avoid recreating arrays on each render
+const MONTHS = [
   "Jan",
   "Feb",
   "Mar",
@@ -36,21 +38,20 @@ const months = [
   "Dec",
 ];
 
-// Format date without date-fns
+// Pure functions moved outside component for better performance
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
-  const date = new Date(Number.parseInt(timestamp) * 1000);
-  return `${months[date.getMonth()]} ${date.getFullYear()}`;
+  const date = new Date(parseInt(timestamp, 10) * 1000);
+  return `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 };
 
-// Format review date
 const formatReviewDate = (dateString) => {
   if (!dateString) return "";
   const date = new Date(dateString);
-  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  return `${MONTHS[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
 };
 
-// Memoized rating component
+// Optimized RatingStars component with better memoization
 const RatingStars = memo(({ rating, size = 16, color }) => {
   // Pre-calculate stars for better performance
   const stars = useMemo(() => {
@@ -61,20 +62,15 @@ const RatingStars = memo(({ rating, size = 16, color }) => {
     for (let i = 0; i < 5; i++) {
       if (i < fullStars) {
         result.push(
-          <AntDesign key={`star-${i}`} name="star" size={size} color={color} />
+          <AntDesign key={i} name="star" size={size} color={color} />
         );
       } else if (i === fullStars && halfStar) {
         result.push(
-          <AntDesign
-            key={`star-${i}`}
-            name="starhalf"
-            size={size}
-            color={color}
-          />
+          <AntDesign key={i} name="starhalf" size={size} color={color} />
         );
       } else {
         result.push(
-          <AntDesign key={`star-${i}`} name="staro" size={size} color={color} />
+          <AntDesign key={i} name="staro" size={size} color={color} />
         );
       }
     }
@@ -84,15 +80,16 @@ const RatingStars = memo(({ rating, size = 16, color }) => {
   return <View style={styles.ratingContainer}>{stars}</View>;
 });
 
-// Memoized product item component with optimized image loading
+// Optimized ProductItem with better prop structure
 const ProductItem = memo(
-  ({ product, onPress, colors }) => {
-    // Handle press with product ID to avoid re-renders
+  ({ product, onPress, colors, isDarkTheme }) => {
     const handlePress = useCallback(() => {
       onPress(product.products_id);
     }, [product.products_id, onPress]);
 
-    const { isDarkTheme } = useThemeStore();
+    const placeholderImage = isDarkTheme
+      ? require("../../../assets/images/darkImagePlaceholder.jpg")
+      : require("../../../assets/images/imageSkeleton.jpg");
 
     return (
       <TouchableOpacity
@@ -103,16 +100,14 @@ const ProductItem = memo(
         <View style={styles.productImageContainer}>
           <Image
             source={
-              product.product_images[0]
+              product.product_images?.[0]
                 ? { uri: product.product_images[0] }
-                : isDarkTheme
-                ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                : require("../../../assets/images/imageSkeleton.jpg")
+                : placeholderImage
             }
             style={styles.productImage}
             resizeMode="cover"
-            progressiveRenderingEnabled={true}
-            fadeDuration={300}
+            progressiveRenderingEnabled
+            fadeDuration={200}
           />
         </View>
         <View style={styles.productInfo}>
@@ -130,51 +125,42 @@ const ProductItem = memo(
     );
   },
   (prevProps, nextProps) => {
-    // Custom comparison for memo to prevent unnecessary re-renders
+    // Optimized comparison for memo
     return (
       prevProps.product.products_id === nextProps.product.products_id &&
-      prevProps.colors === nextProps.colors
+      prevProps.colors === nextProps.colors &&
+      prevProps.isDarkTheme === nextProps.isDarkTheme
     );
   }
 );
 
-// Memoized review item component
-const ReviewItem = memo(({ review, colors }) => {
-  // Memoize formatted date to avoid recalculation
-  const formattedDate = useMemo(
-    () => formatReviewDate(review.date),
-    [review.date]
-  );
-
-  return (
-    <View
-      style={[styles.reviewItem, { backgroundColor: colors.cardBackground }]}
-    >
-      <View style={styles.reviewHeader}>
-        <View
-          style={[styles.reviewAvatar, { backgroundColor: colors.activeColor }]}
-        >
-          <Text style={[styles.reviewInitial, { color: colors.primary }]}>
-            {review.consumer_name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
-        <View style={styles.reviewInfo}>
-          <Text style={[styles.reviewerName, { color: colors.textColor }]}>
-            {review.consumer_name}
-          </Text>
-          <Text style={[styles.reviewDate, { color: colors.inactiveColor }]}>
-            {formattedDate}
-          </Text>
-        </View>
+// Simplified ReviewItem component
+const ReviewItem = memo(({ review, colors }) => (
+  <View style={[styles.reviewItem, { backgroundColor: colors.cardBackground }]}>
+    <View style={styles.reviewHeader}>
+      <View
+        style={[styles.reviewAvatar, { backgroundColor: colors.activeColor }]}
+      >
+        <Text style={[styles.reviewInitial, { color: colors.primary }]}>
+          {review.consumer_name.charAt(0).toUpperCase()}
+        </Text>
       </View>
-      <Text style={[styles.reviewComment, { color: colors.textColor }]}>
-        {review.comment}
-      </Text>
+      <View style={styles.reviewInfo}>
+        <Text style={[styles.reviewerName, { color: colors.textColor }]}>
+          {review.consumer_name}
+        </Text>
+        <Text style={[styles.reviewDate, { color: colors.inactiveColor }]}>
+          {formatReviewDate(review.date)}
+        </Text>
+      </View>
     </View>
-  );
-});
+    <Text style={[styles.reviewComment, { color: colors.textColor }]}>
+      {review.comment}
+    </Text>
+  </View>
+));
 
-// Optimized empty state component
+// Simple EmptyReviews component
 const EmptyReviews = memo(({ colors }) => (
   <View style={styles.emptyReviews}>
     <MaterialCommunityIcons
@@ -188,50 +174,61 @@ const EmptyReviews = memo(({ colors }) => (
   </View>
 ));
 
-// Main component
+// Section Header component
+const SectionHeader = memo(
+  ({ title, onShowAll, colors, displayNumberOfReviews }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+        {title}
+        {displayNumberOfReviews ? ` (${displayNumberOfReviews})` : ""}
+      </Text>
+
+      <TouchableOpacity onPress={onShowAll} style={{ flexDirection: "row" }}>
+        <Text style={[styles.showAllText, { color: colors.button }]}>
+          View All
+        </Text>
+        <Feather name="chevron-right" size={18} color={colors.button} />
+      </TouchableOpacity>
+    </View>
+  )
+);
+
+// Main component with optimized structure
 const SellerProfile = () => {
   const { sellerId, sellerTitle } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [sellerData, setSellerData] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
-  const { fetchSellerProfile, user, followSeller } = useProductStore();
+  const { fetchSellerProfile, user, followSeller, sellerVisitCount } =
+    useProductStore();
   const { colors } = useTheme();
-  const [activeTab, setActiveTab] = useState("newArrivals");
-
-  // Optimize by limiting initial render items
-  const [visibleReviews, setVisibleReviews] = useState(5);
-  const [visibleProducts, setVisibleProducts] = useState(6);
-
-  // IMPORTANT: Move the destructuring inside the render section after null checks
-  // Don't destructure sellerData here
+  const { isDarkTheme } = useThemeStore();
 
   // Set navigation options
   useEffect(() => {
     navigation.setOptions({
       headerTitle: sellerTitle || "Seller Profile",
       headerShown: true,
-      headerStyle: {
-        backgroundColor: colors.primary,
-      },
+      headerStyle: { backgroundColor: colors.primary },
       headerTintColor: colors.textColor,
     });
   }, [sellerTitle, navigation, colors]);
 
-  // Load seller data with error handling and retry
+  // Load seller data with error handling
   useEffect(() => {
     let isMounted = true;
     let retryCount = 0;
     const maxRetries = 3;
 
     const loadSellerData = async () => {
-      if (!sellerId) return;
+      if (!sellerId || !user?.consumer_id) return;
 
       try {
         setLoading(true);
         const data = await fetchSellerProfile({
-          sellerId: sellerId,
-          consumerId: user?.consumer_id,
+          sellerId,
+          consumerId: user.consumer_id,
         });
 
         if (isMounted) {
@@ -242,7 +239,6 @@ const SellerProfile = () => {
       } catch (error) {
         console.error("Error fetching seller data:", error);
 
-        // Implement retry logic
         if (retryCount < maxRetries && isMounted) {
           retryCount++;
           setTimeout(loadSellerData, 1000 * retryCount);
@@ -253,81 +249,115 @@ const SellerProfile = () => {
     };
 
     loadSellerData();
-
-    // Cleanup function to prevent state updates after unmount
     return () => {
       isMounted = false;
     };
   }, [sellerId, fetchSellerProfile, user?.consumer_id]);
 
+  // Track seller visit
+  useEffect(() => {
+    if (sellerData?.do_i_visit === 0 && sellerId && user?.consumer_id) {
+      sellerVisitCount({ sellerId, consumerId: user.consumer_id });
+    }
+  }, [sellerData, sellerId, user?.consumer_id, sellerVisitCount]);
+
   // Memoized handlers
   const handleFollowToggle = useCallback(() => {
-    if (!sellerData || !sellerId) return;
+    if (!sellerData || !sellerId || !user?.consumer_id) return;
 
     setIsFollowing((prev) => !prev);
-    followSeller({
-      sellerId: sellerId,
-      consumerId: user?.consumer_id,
-    });
+    followSeller({ sellerId, consumerId: user.consumer_id });
   }, [sellerId, user?.consumer_id, followSeller, sellerData]);
 
   const handleProductPress = useCallback((productId) => {
-    // Navigate to product detail
     router.push({
       pathname: "/screens/ProductDetail",
       params: { idFromFavorite: productId },
     });
   }, []);
 
-  const handleLoadMoreReviews = useCallback(() => {
-    setVisibleReviews((prev) => prev + 5);
-  }, []);
+  const handleShowAll = useCallback(
+    (type) => {
+      if (type === "newArrivals") {
+        // Navigate to a screen showing all new arrivals or expand the list
+        router.push({
+          pathname: "/screens/SellerProducts",
+          params: {
+            sellerId,
+            listType: "newArrivals",
+            title: "New Arrivals",
+          },
+        });
+      } else if (type === "allProducts") {
+        // Navigate to a screen showing all products or expand the list
+        router.push({
+          pathname: "/screens/SellerProducts",
+          params: {
+            sellerId,
+            listType: "allProducts",
+            title: "All Products",
+          },
+        });
+      } else if (type === "reviews") {
+        // Navigate to a screen showing all reviews or expand the list
+        router.push({
+          pathname: "/screens/SellerReviews",
+          params: {
+            sellerId,
+            title: "Customer Reviews",
+          },
+        });
+      }
+    },
+    [sellerId]
+  );
 
-  const handleLoadMoreProducts = useCallback(() => {
-    setVisibleProducts((prev) => prev + 6);
-  }, []);
+  // Memoized data
+  const displayNewArrivals = useMemo(() => {
+    if (!sellerData?.new_arrivals?.data) return [];
+    return sellerData.new_arrivals.data;
+  }, [sellerData?.new_arrivals?.data]);
 
-  // Tab switching with memoization
-  const handleTabChange = useCallback((tab) => {
-    setActiveTab(tab);
-    // Reset visible products when switching tabs
-    setVisibleProducts(6);
-  }, []);
+  const displayAllProducts = useMemo(() => {
+    if (!sellerData?.all_products.data) return [];
+    return sellerData.all_products.data;
+  }, [sellerData?.all_products.data]);
 
-  // Memoize filtered products based on active tab
-  const displayProducts = useMemo(() => {
-    if (!sellerData) return [];
-
-    const products =
-      activeTab === "newArrivals"
-        ? sellerData.new_arrivals?.data || []
-        : sellerData.all_products || [];
-
-    return products.slice(0, visibleProducts);
-  }, [sellerData, activeTab, visibleProducts]);
-
-  // Memoize visible reviews
   const displayReviews = useMemo(() => {
-    if (!sellerData?.people_reviews?.data) return [];
-    return sellerData.people_reviews.data.slice(0, visibleReviews);
-  }, [sellerData?.people_reviews?.data, visibleReviews]);
+    return sellerData?.people_reviews?.data || [];
+  }, [sellerData?.people_reviews?.data]);
 
-  // Memoize whether there are more items to load
-  const hasMoreReviews = useMemo(() => {
-    if (!sellerData?.people_reviews?.data) return false;
-    return visibleReviews < sellerData.people_reviews.data.length;
-  }, [sellerData?.people_reviews?.data, visibleReviews]);
+  const displayNumberOfReviews = useMemo(() => {
+    return sellerData?.people_reviews?.total;
+  }, [sellerData?.people_reviews]);
 
-  const hasMoreProducts = useMemo(() => {
-    if (!sellerData) return false;
-
-    const totalProducts =
-      activeTab === "newArrivals"
-        ? sellerData.new_arrivals?.data?.length || 0
-        : sellerData.all_products?.length || 0;
-
-    return visibleProducts < totalProducts;
-  }, [sellerData, activeTab, visibleProducts]);
+  // Render login prompt if user not logged in
+  if (!user) {
+    return (
+      <View
+        style={[styles.errorContainer, { backgroundColor: colors.primary }]}
+      >
+        <MaterialIcons
+          name="error-outline"
+          size={48}
+          color={colors.deleteButton}
+        />
+        <Text style={[styles.errorText, { color: colors.textColor }]}>
+          Please Login to view seller profile
+        </Text>
+        <Pressable
+          style={[styles.backButton, { borderColor: colors.inactiveColor }]}
+          onPress={() => {
+            router.replace("/Login");
+          }}
+        >
+          <Text style={[styles.backButtonText, { color: colors.textColor }]}>
+            Login
+          </Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   // Loading state
   if (loading) {
@@ -369,7 +399,7 @@ const SellerProfile = () => {
     );
   }
 
-  // Now that we've confirmed sellerData exists, we can safely destructure it
+  // Destructure data once we know it exists
   const {
     seller,
     followers_count,
@@ -378,9 +408,6 @@ const SellerProfile = () => {
     people_reviews,
     all_products,
   } = sellerData;
-
-  // Format registration date
-  const formattedDate = formatDate(seller.registration_date);
 
   return (
     <ScrollView
@@ -419,21 +446,22 @@ const SellerProfile = () => {
             >
               {seller.store_name}
             </Text>
-
-            {/* Rating Section */}
             <View style={styles.ratingSection}>
-              <RatingStars
-                rating={Number.parseFloat(average_rating)}
-                color="yellow"
-              />
-              <Text style={[styles.ratingText, { color: "yellow" }]}>
-                {Number.parseFloat(average_rating).toFixed(1)}
-              </Text>
+              <RatingStars rating={parseFloat(average_rating)} color="yellow" />
+              {average_rating ? (
+                <Text style={[styles.ratingText, { color: "white" }]}>
+                  {parseFloat(average_rating).toFixed(1)} / 5
+                </Text>
+              ) : (
+                <Text style={[styles.ratingText, { color: "white" }]}>
+                  0 / 5
+                </Text>
+              )}
             </View>
             <View style={styles.ratingSection}>
-              <Text style={[{ color: "white" }]}>Since:</Text>
+              <Text style={{ color: "white" }}>Since:</Text>
               <Text style={[styles.ratingText, { color: "white" }]}>
-                {formattedDate}
+                {formatDate(seller.registration_date)}
               </Text>
             </View>
           </View>
@@ -442,46 +470,30 @@ const SellerProfile = () => {
 
       {/* Stats Section */}
       <View style={styles.statsSection}>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.textColor }]}>
-            {followers_count}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.inactiveColor }]}>
-            Followers
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.statDivider,
-            { backgroundColor: colors.subInactiveColor },
-          ]}
-        />
-
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.textColor }]}>
-            {total_visits}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.inactiveColor }]}>
-            Visits
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.statDivider,
-            { backgroundColor: colors.subInactiveColor },
-          ]}
-        />
-
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: colors.textColor }]}>
-            {all_products.length}
-          </Text>
-          <Text style={[styles.statLabel, { color: colors.inactiveColor }]}>
-            Products
-          </Text>
-        </View>
+        {[
+          { label: "Followers", value: followers_count },
+          { label: "Visits", value: total_visits },
+          { label: "Products", value: all_products.total },
+        ].map((stat, index, array) => (
+          <React.Fragment key={stat.label}>
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: colors.textColor }]}>
+                {stat.value}
+              </Text>
+              <Text style={[styles.statLabel, { color: colors.inactiveColor }]}>
+                {stat.label}
+              </Text>
+            </View>
+            {index < array.length - 1 && (
+              <View
+                style={[
+                  styles.statDivider,
+                  { backgroundColor: colors.subInactiveColor },
+                ]}
+              />
+            )}
+          </React.Fragment>
+        ))}
       </View>
 
       {/* Follow Button */}
@@ -513,123 +525,87 @@ const SellerProfile = () => {
         </Text>
       </TouchableOpacity>
 
-      {/* Products Tabs */}
-      <View style={[styles.tabsContainer, { backgroundColor: colors.primary }]}>
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === "newArrivals" && [
-              styles.activeTab,
-              { borderColor: colors.button },
-            ],
-          ]}
-          onPress={() => handleTabChange("newArrivals")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              {
-                color:
-                  activeTab === "newArrivals"
-                    ? colors.activeColor
-                    : colors.inactiveColor,
-              },
-            ]}
-          >
-            New Arrivals
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.tab,
-            activeTab === "allProducts" && [
-              styles.activeTab,
-              { borderColor: colors.button },
-            ],
-          ]}
-          onPress={() => handleTabChange("allProducts")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              {
-                color:
-                  activeTab === "allProducts"
-                    ? colors.activeColor
-                    : colors.inactiveColor,
-              },
-            ]}
-          >
-            All Products
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Products List - Using optimized FlatList */}
-      <View style={styles.productsContainer}>
-        <FlatList
-          data={displayProducts}
-          keyExtractor={(item) => item.products_id.toString()}
-          horizontal={false}
-          numColumns={2}
-          renderItem={({ item }) => (
-            <ProductItem
-              product={item}
-              onPress={handleProductPress}
-              colors={colors}
-            />
-          )}
-          scrollEnabled={false}
-          contentContainerStyle={styles.productsGrid}
-          initialNumToRender={4}
-          maxToRenderPerBatch={6}
-          windowSize={5}
-          removeClippedSubviews={Platform.OS === "android"}
+      {/* New Arrivals Section */}
+      <View style={[styles.section, { backgroundColor: colors.primary }]}>
+        <SectionHeader
+          title="New Arrivals"
+          onShowAll={() => handleShowAll("newArrivals")}
+          colors={colors}
         />
 
-        {hasMoreProducts && (
-          <TouchableOpacity
-            style={[styles.viewMoreButton, { borderColor: colors.button }]}
-            onPress={handleLoadMoreProducts}
-          >
-            <Text style={[styles.viewMoreText, { color: colors.button }]}>
-              View More{" "}
-              {activeTab === "newArrivals" ? "New Arrivals" : "Products"}
-            </Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.productsGrid}>
+          {displayNewArrivals.map((product) => (
+            <ProductItem
+              key={`new-arrival-${product.products_id}`}
+              product={product}
+              onPress={handleProductPress}
+              colors={colors}
+              isDarkTheme={isDarkTheme}
+            />
+          ))}
+        </View>
+      </View>
+
+      {/* All Products Section */}
+      <View style={[styles.section, { backgroundColor: colors.primary }]}>
+        <SectionHeader
+          title="All Products"
+          onShowAll={() => handleShowAll("allProducts")}
+          colors={colors}
+        />
+
+        <View style={styles.productsGrid}>
+          {displayAllProducts.map((product) => (
+            <ProductItem
+              key={`all-product-${product.products_id}`}
+              product={product}
+              onPress={handleProductPress}
+              colors={colors}
+              isDarkTheme={isDarkTheme}
+            />
+          ))}
+        </View>
       </View>
 
       {/* Reviews Section */}
-      <View style={[styles.section, { backgroundColor: colors.primary }]}>
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-            Customer Reviews
-          </Text>
-        </View>
+      <View
+        style={[
+          styles.section,
+          {
+            backgroundColor: colors.primary,
+            elevation: 5,
+            marginHorizontal: 16,
+          },
+        ]}
+      >
+        <SectionHeader
+          title="Customer Reviews"
+          onShowAll={() => handleShowAll("reviews")}
+          colors={colors}
+          displayNumberOfReviews={displayNumberOfReviews}
+        />
 
         {people_reviews.data.length > 0 ? (
-          <>
-            {displayReviews.map((review, index) => (
-              <ReviewItem
-                key={`${review.consumer_name}-${index}`}
-                review={review}
-                colors={colors}
-              />
-            ))}
-
-            {hasMoreReviews && (
-              <TouchableOpacity
-                style={[styles.viewMoreButton, { borderColor: colors.button }]}
-                onPress={handleLoadMoreReviews}
-              >
-                <Text style={[styles.viewMoreText, { color: colors.button }]}>
-                  View More Reviews
-                </Text>
-              </TouchableOpacity>
+          <FlatList
+            data={displayReviews}
+            keyExtractor={(item, index) => `review-${index}`}
+            renderItem={({ item }) => (
+              <ReviewItem review={item} colors={colors} />
             )}
-          </>
+            ItemSeparatorComponent={() => (
+              <View
+                style={{
+                  borderBottomWidth: 0.5,
+                  borderBottomColor: colors.subInactiveColor,
+                  marginVertical: 8,
+                }}
+              />
+            )}
+            scrollEnabled={false}
+            initialNumToRender={3}
+            maxToRenderPerBatch={5}
+            removeClippedSubviews={Platform.OS === "android"}
+          />
         ) : (
           <EmptyReviews colors={colors} />
         )}
@@ -638,13 +614,17 @@ const SellerProfile = () => {
   );
 };
 
+// Optimized styles with better organization
 const styles = StyleSheet.create({
+  // Layout containers
   container: {
     flex: 1,
   },
   contentContainer: {
     paddingBottom: 20,
   },
+
+  // Loading and error states
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -674,6 +654,8 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 14,
   },
+
+  // Header styles
   headerImageContainer: {
     position: "relative",
     height: 120,
@@ -704,11 +686,17 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: 3,
     borderColor: "#fff",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   profileImage: {
     width: "100%",
@@ -726,6 +714,8 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: "700",
   },
+
+  // Rating styles
   ratingSection: {
     flexDirection: "row",
     alignItems: "center",
@@ -739,6 +729,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+
+  // Stats section
   statsSection: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -763,6 +755,8 @@ const styles = StyleSheet.create({
     height: "80%",
     alignSelf: "center",
   },
+
+  // Follow button
   followButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -772,7 +766,17 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginHorizontal: 16,
     marginTop: 8,
-    elevation: 5,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   followIcon: {
     marginRight: 6,
@@ -781,101 +785,53 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+
+  // Section styles
   section: {
-    marginHorizontal: 16,
     marginTop: 16,
     padding: 16,
     borderRadius: 12,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    justifyContent: "space-between",
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    marginLeft: 8,
     flex: 1,
   },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: 14,
-    width: 110,
-  },
-  infoValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    flex: 1,
-  },
-  themeIndicator: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  contactItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  contactText: {
-    marginLeft: 12,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  tabsContainer: {
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    overflow: "hidden",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: "transparent",
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-  },
-  tabText: {
+  showAllText: {
     fontSize: 14,
     fontWeight: "600",
   },
-  productsContainer: {
-    marginTop: 8,
-    paddingHorizontal: 8,
+
+  // Products grid
+  productsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginHorizontal: -4,
   },
-  productsGrid: {},
   productItem: {
-    width: "46%",
-    marginHorizontal: "2%",
-    marginVertical: 8,
+    width: "48%",
+    marginHorizontal: "1%",
+    marginBottom: 12,
     borderRadius: 12,
     overflow: "hidden",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 5,
+      },
+    }),
   },
   productImageContainer: {
     height: 120,
@@ -884,12 +840,6 @@ const styles = StyleSheet.create({
   productImage: {
     width: "100%",
     height: "100%",
-  },
-  placeholderImage: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
   },
   productInfo: {
     padding: 10,
@@ -903,32 +853,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 4,
   },
-  viewMoreButton: {
-    marginTop: 12,
-    marginHorizontal: 8,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-  },
-  viewMoreText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  ratingBadge: {
-    backgroundColor: "#FFD700",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  ratingBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#000",
-  },
+
+  // Review styles
   reviewItem: {
-    marginTop: 12,
-    padding: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     borderRadius: 8,
   },
   reviewHeader: {

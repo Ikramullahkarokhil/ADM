@@ -1,7 +1,5 @@
 "use client";
 
-// Optimized Search.tsx
-
 import {
   useReducer,
   useEffect,
@@ -9,6 +7,7 @@ import {
   useMemo,
   useCallback,
   memo,
+  useRef,
 } from "react";
 import {
   StyleSheet,
@@ -22,6 +21,7 @@ import {
   StatusBar,
   Pressable,
   ActivityIndicator,
+  Platform,
 } from "react-native";
 import { useNavigation, useFocusEffect, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -34,16 +34,33 @@ import useThemeStore from "../../components/store/useThemeStore";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import AlertDialog from "../../components/ui/AlertDialog";
 
-// 1. Create a more efficient debounce function
-const debounce = (func, wait) => {
-  let timeout;
-  return (...args) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
-  };
-};
+// Constants to avoid recreating objects on each render
+const STORAGE_KEY = "searchHistory";
+const INITIAL_PRICE_RANGE = [0, 10000];
+const DEBOUNCE_DELAY = 300;
+const RATINGS = [0, 1, 2, 3, 4, 5];
+const INITIAL_ITEMS_TO_RENDER = 8;
+const BATCH_SIZE = 10;
 
-// 2. Define initial state and reducer for state management
+// Optimized debounce function with useRef to persist timeout between renders
+function useDebounce(callback, delay) {
+  const timeoutRef = useRef(null);
+
+  return useCallback(
+    (...args) => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      timeoutRef.current = setTimeout(() => {
+        callback(...args);
+      }, delay);
+    },
+    [callback, delay]
+  );
+}
+
+// Initial state for reducer
 const initialState = {
   searchQuery: "",
   isFilterVisible: false,
@@ -51,7 +68,7 @@ const initialState = {
     minRating: 0,
     selectedBrands: [],
     selectedCategories: [],
-    priceRange: [0, 10000],
+    priceRange: INITIAL_PRICE_RANGE,
   },
   searchHistory: [],
   showClearHistoryDialog: false,
@@ -60,6 +77,7 @@ const initialState = {
   refreshing: false,
 };
 
+// Optimized reducer with better type handling
 function reducer(state, action) {
   switch (action.type) {
     case "SET_SEARCH_QUERY":
@@ -88,11 +106,8 @@ function reducer(state, action) {
       return {
         ...state,
         filters: {
-          ...state.filters,
-          minRating: 0,
-          selectedBrands: [],
-          selectedCategories: [],
-          priceRange: action.payload || [0, 10000],
+          ...initialState.filters,
+          priceRange: action.payload || INITIAL_PRICE_RANGE,
         },
       };
     case "SET_SEARCH_HISTORY":
@@ -105,35 +120,37 @@ function reducer(state, action) {
       return { ...state, isLoading: action.payload };
     case "RESET_STATE":
       return {
-        ...state,
-        searchQuery: "",
-        filters: {
-          minRating: 0,
-          selectedBrands: [],
-          selectedCategories: [],
-          priceRange: [0, 10000],
-        },
-        page: 1,
-        isFilterVisible: false,
+        ...initialState,
+        searchHistory: state.searchHistory, // Preserve search history
       };
     default:
       return state;
   }
 }
 
-// 3. Extract and memoize RatingStars component
+// Optimized RatingStars component
 const RatingStars = memo(({ rating, theme }) => {
-  const renderStars = (rating) => {
-    const stars = [];
-    for (let i = 0; i < Math.floor(rating); i++) {
-      stars.push(<Feather key={i} name="star" size={16} color="#FFD700" />);
+  // Pre-calculate stars for better performance
+  const stars = useMemo(() => {
+    const result = [];
+    const fullStars = Math.floor(rating);
+
+    for (let i = 0; i < 5; i++) {
+      result.push(
+        <Feather
+          key={i}
+          name={i < fullStars ? "star" : "star"}
+          size={16}
+          color={i < fullStars ? "#FFD700" : theme.colors.subInactiveColor}
+        />
+      );
     }
-    return stars;
-  };
+    return result;
+  }, [rating, theme.colors.subInactiveColor]);
 
   return (
     <View style={styles.ratingContainer}>
-      {renderStars(rating)}
+      {stars}
       <Text style={[styles.ratingText, { color: theme.colors.inactiveColor }]}>
         {rating || 0}
       </Text>
@@ -141,41 +158,12 @@ const RatingStars = memo(({ rating, theme }) => {
   );
 });
 
-// 4. Extract and memoize ProductItem component
+// Optimized ProductItem component with better prop structure
 const ProductItem = memo(
-  ({
-    item,
-    searchQuery,
-    searchHistory,
-    onUpdateSearchHistory,
-    theme,
-    isDarkTheme,
-    router,
-  }) => {
-    const handleProductPress = useCallback(async () => {
-      if (searchQuery && searchQuery.trim()) {
-        // Create new history array with current query at the beginning
-        const newHistory = [
-          searchQuery,
-          ...searchHistory.filter((q) => q !== searchQuery),
-        ].slice(0, 10);
-
-        // Call the passed function to update search history
-        await onUpdateSearchHistory(newHistory);
-      }
-
-      // Navigate to product detail
-      router.push({
-        pathname: `/screens/ProductDetail`,
-        params: { id: item.products_id },
-      });
-    }, [
-      item.products_id,
-      searchQuery,
-      searchHistory,
-      onUpdateSearchHistory,
-      router,
-    ]);
+  ({ item, onProductPress, theme, isDarkTheme }) => {
+    const handlePress = useCallback(() => {
+      onProductPress(item.products_id);
+    }, [item.products_id, onProductPress]);
 
     const placeholderImage = isDarkTheme
       ? require("../../assets/images/darkImagePlaceholder.jpg")
@@ -183,7 +171,7 @@ const ProductItem = memo(
 
     return (
       <Pressable
-        onPress={handleProductPress}
+        onPress={handlePress}
         style={({ pressed }) => [
           styles.productCard,
           {
@@ -197,13 +185,15 @@ const ProductItem = memo(
         <View style={styles.productCardContent}>
           <Image
             source={
-              item.product_images && item.product_images.length > 0
+              item.product_images?.length > 0
                 ? { uri: item.product_images[0] }
                 : placeholderImage
             }
             style={styles.productImage}
             resizeMode="cover"
             accessibilityLabel={`Image of ${item.title}`}
+            fadeDuration={200}
+            progressiveRenderingEnabled={true}
           />
           <View style={styles.productInfo}>
             <Text
@@ -216,7 +206,7 @@ const ProductItem = memo(
               AF {item.spu}
             </Text>
 
-            {item.brand_title !== "none" && (
+            {item.brand_title && item.brand_title !== "none" && (
               <View style={styles.categoryContainer}>
                 <Text
                   style={[
@@ -231,17 +221,67 @@ const ProductItem = memo(
                 </Text>
               </View>
             )}
-            {!item.average_rating == 0 && (
+
+            {item.average_rating > 0 && (
               <RatingStars rating={item.average_rating} theme={theme} />
             )}
           </View>
         </View>
       </Pressable>
     );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison for memo to prevent unnecessary re-renders
+    return (
+      prevProps.item.products_id === nextProps.item.products_id &&
+      prevProps.theme === nextProps.theme &&
+      prevProps.isDarkTheme === nextProps.isDarkTheme
+    );
   }
 );
 
-// 5. Extract and memoize FilterModal component
+// Optimized FilterChip component
+const FilterChip = memo(({ label, isSelected, onPress, theme }) => (
+  <TouchableOpacity
+    style={[
+      styles.filterChip,
+      {
+        backgroundColor: isSelected ? theme.colors.button : theme.colors.chip,
+        borderColor: theme.colors.subInactiveColor,
+        borderWidth: 1,
+      },
+    ]}
+    onPress={onPress}
+  >
+    <Text
+      style={[
+        styles.chipText,
+        {
+          color: isSelected ? "#FFFFFF" : theme.colors.textColor,
+        },
+      ]}
+    >
+      {label}
+    </Text>
+  </TouchableOpacity>
+));
+
+// Optimized ActiveFilterChip component
+const ActiveFilterChip = memo(({ label, onRemove, theme }) => (
+  <View
+    style={[styles.activeFilterChip, { backgroundColor: theme.colors.button }]}
+  >
+    <Text style={styles.activeFilterText}>{label}</Text>
+    <TouchableOpacity
+      onPress={onRemove}
+      hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
+    >
+      <Feather name="x" size={14} color="#FFFFFF" />
+    </TouchableOpacity>
+  </View>
+));
+
+// Optimized FilterModal component
 const FilterModal = memo(
   ({
     isVisible,
@@ -264,12 +304,11 @@ const FilterModal = memo(
         backdropOpacity={0.5}
         animationIn="slideInUp"
         animationOut="slideOutDown"
-        animationOutTiming={500}
-        animationInTiming={500}
+        animationOutTiming={300}
+        animationInTiming={300}
         useNativeDriver={true}
         useNativeDriverForBackdrop={true}
-        backdropTransitionOutTiming={10}
-        backdropTransitionInTiming={500}
+        backdropTransitionOutTiming={0}
       >
         <View
           style={[
@@ -295,7 +334,9 @@ const FilterModal = memo(
           <ScrollView
             style={styles.modalScroll}
             showsVerticalScrollIndicator={false}
+            removeClippedSubviews={Platform.OS === "android"}
           >
+            {/* Rating Section */}
             <View style={styles.filterSection}>
               <Text
                 style={[styles.filterTitle, { color: theme.colors.textColor }]}
@@ -303,7 +344,7 @@ const FilterModal = memo(
                 Minimum Rating
               </Text>
               <View style={styles.ratingOptions}>
-                {[0, 1, 2, 3, 4, 5].map((rating) => (
+                {RATINGS.map((rating) => (
                   <TouchableOpacity
                     key={rating}
                     style={[
@@ -340,6 +381,7 @@ const FilterModal = memo(
               </View>
             </View>
 
+            {/* Brands Section */}
             <View style={styles.filterSection}>
               <Text
                 style={[styles.filterTitle, { color: theme.colors.textColor }]}
@@ -350,41 +392,20 @@ const FilterModal = memo(
                 {brands
                   .filter((brand) => brand.toLowerCase() !== "none")
                   .map((brand) => (
-                    <TouchableOpacity
+                    <FilterChip
                       key={brand}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor: filters.selectedBrands.includes(
-                            brand
-                          )
-                            ? theme.colors.button
-                            : theme.colors.chip,
-                          borderColor: theme.colors.subInactiveColor,
-                          borderWidth: 1,
-                        },
-                      ]}
+                      label={brand}
+                      isSelected={filters.selectedBrands.includes(brand)}
                       onPress={() =>
                         onUpdateFilterItem("selectedBrands", brand)
                       }
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: filters.selectedBrands.includes(brand)
-                              ? "#FFFFFF"
-                              : theme.colors.textColor,
-                          },
-                        ]}
-                      >
-                        {brand}
-                      </Text>
-                    </TouchableOpacity>
+                      theme={theme}
+                    />
                   ))}
               </View>
             </View>
 
+            {/* Categories Section */}
             {categoryOptions?.length > 0 && (
               <View style={styles.filterSection}>
                 <Text
@@ -397,47 +418,26 @@ const FilterModal = memo(
                 </Text>
                 <View style={styles.chipContainer}>
                   {categoryOptions.map((category) => (
-                    <TouchableOpacity
+                    <FilterChip
                       key={category.id}
-                      style={[
-                        styles.filterChip,
-                        {
-                          backgroundColor: filters.selectedCategories.includes(
-                            category.categorie_id || category.id
-                          )
-                            ? theme.colors.button
-                            : theme.colors.chip,
-                          borderColor: theme.colors.subInactiveColor,
-                          borderWidth: 1,
-                        },
-                      ]}
+                      label={category.name}
+                      isSelected={filters.selectedCategories.includes(
+                        category.categorie_id || category.id
+                      )}
                       onPress={() =>
                         onUpdateFilterItem(
                           "selectedCategories",
                           category.categorie_id || category.id
                         )
                       }
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          {
-                            color: filters.selectedCategories.includes(
-                              category.categorie_id || category.id
-                            )
-                              ? "#FFFFFF"
-                              : theme.colors.textColor,
-                          },
-                        ]}
-                      >
-                        {category.name}
-                      </Text>
-                    </TouchableOpacity>
+                      theme={theme}
+                    />
                   ))}
                 </View>
               </View>
             )}
 
+            {/* Price Range Section */}
             <View style={styles.filterSection}>
               <Text
                 style={[styles.filterTitle, { color: theme.colors.textColor }]}
@@ -482,6 +482,7 @@ const FilterModal = memo(
               />
             </View>
 
+            {/* Action Buttons */}
             <View style={styles.filterActions}>
               <Button
                 mode="outlined"
@@ -515,7 +516,7 @@ const FilterModal = memo(
   }
 );
 
-// 6. Extract and memoize ActiveFilters component
+// Optimized ActiveFilters component
 const ActiveFilters = memo(
   ({
     filters,
@@ -527,12 +528,16 @@ const ActiveFilters = memo(
     onUpdateFilterItem,
     onResetFilters,
   }) => {
-    const hasActiveFilters =
-      filters.minRating > 0 ||
-      filters.selectedBrands.length > 0 ||
-      filters.selectedCategories.length > 0 ||
-      filters.priceRange[0] !== priceBounds[0] ||
-      filters.priceRange[1] !== priceBounds[1];
+    // Check if any filters are active
+    const hasActiveFilters = useMemo(
+      () =>
+        filters.minRating > 0 ||
+        filters.selectedBrands.length > 0 ||
+        filters.selectedCategories.length > 0 ||
+        filters.priceRange[0] !== priceBounds[0] ||
+        filters.priceRange[1] !== priceBounds[1],
+      [filters, priceBounds]
+    );
 
     if (!hasActiveFilters || !searchQuery) return null;
 
@@ -544,40 +549,20 @@ const ActiveFilters = memo(
           contentContainerStyle={styles.activeFiltersScroll}
         >
           {filters.minRating > 0 && (
-            <View
-              style={[
-                styles.activeFilterChip,
-                { backgroundColor: theme.colors.button },
-              ]}
-            >
-              <Text style={styles.activeFilterText}>
-                {filters.minRating}+ Stars
-              </Text>
-              <TouchableOpacity
-                onPress={() => onUpdateFilters({ minRating: 0 })}
-                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-              >
-                <Feather name="x" size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ActiveFilterChip
+              label={`${filters.minRating}+ Stars`}
+              onRemove={() => onUpdateFilters({ minRating: 0 })}
+              theme={theme}
+            />
           )}
 
           {filters.selectedBrands.map((brand) => (
-            <View
-              key={brand}
-              style={[
-                styles.activeFilterChip,
-                { backgroundColor: theme.colors.button },
-              ]}
-            >
-              <Text style={[styles.activeFilterText]}>{brand}</Text>
-              <TouchableOpacity
-                onPress={() => onUpdateFilterItem("selectedBrands", brand)}
-                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-              >
-                <Feather name="x" size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ActiveFilterChip
+              key={`brand-${brand}`}
+              label={brand}
+              onRemove={() => onUpdateFilterItem("selectedBrands", brand)}
+              theme={theme}
+            />
           ))}
 
           {filters.selectedCategories.map((catId) => {
@@ -585,89 +570,63 @@ const ActiveFilters = memo(
               (c) => c.id === catId || c.categorie_id === catId
             );
             return category ? (
-              <View
-                key={catId}
-                style={[
-                  styles.activeFilterChip,
-                  { backgroundColor: theme.colors.button },
-                ]}
-              >
-                <Text style={[styles.activeFilterText]}>{category.name}</Text>
-                <TouchableOpacity
-                  onPress={() =>
-                    onUpdateFilterItem("selectedCategories", catId)
-                  }
-                  hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-                >
-                  <Feather name="x" size={14} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
+              <ActiveFilterChip
+                key={`cat-${catId}`}
+                label={category.name}
+                onRemove={() => onUpdateFilterItem("selectedCategories", catId)}
+                theme={theme}
+              />
             ) : null;
           })}
 
           {(filters.priceRange[0] !== priceBounds[0] ||
             filters.priceRange[1] !== priceBounds[1]) && (
-            <View
-              style={[
-                styles.activeFilterChip,
-                { backgroundColor: theme.colors.button },
-              ]}
-            >
-              <Text style={[styles.activeFilterText]}>
-                AF {filters.priceRange[0]} - AF {filters.priceRange[1]}
-              </Text>
-              <TouchableOpacity
-                onPress={() => onUpdateFilters({ priceRange: priceBounds })}
-                hitSlop={{ top: 10, bottom: 10, left: 5, right: 5 }}
-              >
-                <Feather name="x" size={14} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
+            <ActiveFilterChip
+              label={`AF ${filters.priceRange[0]} - AF ${filters.priceRange[1]}`}
+              onRemove={() => onUpdateFilters({ priceRange: priceBounds })}
+              theme={theme}
+            />
           )}
 
-          {hasActiveFilters && (
-            <TouchableOpacity
-              style={[
-                styles.clearAllButton,
-                { borderColor: theme.colors.subInactiveColor },
-              ]}
-              onPress={() => onResetFilters(priceBounds)}
-            >
-              <Text style={{ color: theme.colors.textColor }}>Clear All</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[
+              styles.clearAllButton,
+              { borderColor: theme.colors.subInactiveColor },
+            ]}
+            onPress={() => onResetFilters(priceBounds)}
+          >
+            <Text style={{ color: theme.colors.textColor }}>Clear All</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     );
   }
 );
 
-// 8. Extract and memoize HistoryItem component
-const HistoryItem = memo(({ query, index, theme, onPress }) => {
-  return (
-    <TouchableOpacity
-      onPress={() => onPress(query)}
-      style={[
-        styles.historyItemContainer,
-        { borderBottomColor: theme.colors.subInactiveColor },
-      ]}
-      accessibilityLabel={`Search for ${query}`}
-      accessibilityHint="Tap to search for this term"
-    >
-      <Feather
-        name="clock"
-        size={16}
-        color={theme.colors.inactiveColor}
-        style={styles.historyIcon}
-      />
-      <Text style={[styles.historyItem, { color: theme.colors.textColor }]}>
-        {query}
-      </Text>
-    </TouchableOpacity>
-  );
-});
+// Optimized HistoryItem component
+const HistoryItem = memo(({ query, theme, onPress }) => (
+  <TouchableOpacity
+    onPress={() => onPress(query)}
+    style={[
+      styles.historyItemContainer,
+      { borderBottomColor: theme.colors.subInactiveColor },
+    ]}
+    accessibilityLabel={`Search for ${query}`}
+    accessibilityHint="Tap to search for this term"
+  >
+    <Feather
+      name="clock"
+      size={16}
+      color={theme.colors.inactiveColor}
+      style={styles.historyIcon}
+    />
+    <Text style={[styles.historyItem, { color: theme.colors.textColor }]}>
+      {query}
+    </Text>
+  </TouchableOpacity>
+));
 
-// 7. Extract and memoize SearchResults component
+// Optimized SearchResults component
 const SearchResults = memo(
   ({
     isLoading,
@@ -684,6 +643,7 @@ const SearchResults = memo(
     clearSearchHistory,
     onHistoryItemPress,
   }) => {
+    // Loading state
     if (isLoading || isSearching) {
       return (
         <View style={styles.loadingContainer}>
@@ -695,7 +655,15 @@ const SearchResults = memo(
       );
     }
 
+    // No results state
     if (searchQuery && filteredProducts.length === 0) {
+      const hasActiveFilters =
+        filters.minRating > 0 ||
+        filters.selectedBrands.length > 0 ||
+        filters.selectedCategories.length > 0 ||
+        filters.priceRange[0] !== priceBounds[0] ||
+        filters.priceRange[1] !== priceBounds[1];
+
       return (
         <View style={styles.emptyStateContainer}>
           <Feather name="search" size={50} color={theme.colors.textColor} />
@@ -707,11 +675,7 @@ const SearchResults = memo(
           >
             Try adjusting your search or filters
           </Text>
-          {filters.minRating > 0 ||
-          filters.selectedBrands.length > 0 ||
-          filters.selectedCategories.length > 0 ||
-          filters.priceRange[0] !== priceBounds[0] ||
-          filters.priceRange[1] !== priceBounds[1] ? (
+          {hasActiveFilters && (
             <Button
               mode="outlined"
               style={{ marginTop: 16, borderColor: theme.colors.button }}
@@ -720,11 +684,12 @@ const SearchResults = memo(
             >
               Clear Filters
             </Button>
-          ) : null}
+          )}
         </View>
       );
     }
 
+    // Search results
     if (searchQuery) {
       return (
         <View style={{ flex: 1 }}>
@@ -740,15 +705,15 @@ const SearchResults = memo(
           <FlatList
             data={filteredProducts}
             renderItem={renderProductItem}
-            keyExtractor={(item) => item.products_id.toString()}
+            keyExtractor={(item) => `product-${item.products_id}`}
             contentContainerStyle={styles.listContainer}
             showsVerticalScrollIndicator={false}
             onEndReached={loadMoreProducts}
             onEndReachedThreshold={0.5}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
+            removeClippedSubviews={Platform.OS === "android"}
+            maxToRenderPerBatch={BATCH_SIZE}
             windowSize={10}
-            initialNumToRender={8}
+            initialNumToRender={INITIAL_ITEMS_TO_RENDER}
             getItemLayout={(data, index) => ({
               length: 144, // height of item + margin
               offset: 144 * index,
@@ -759,6 +724,7 @@ const SearchResults = memo(
       );
     }
 
+    // Search history
     return (
       <View style={styles.historyContainer}>
         <View style={styles.historyHeader}>
@@ -785,9 +751,8 @@ const SearchResults = memo(
             .slice(0, 5)
             .map((query, index) => (
               <HistoryItem
-                key={index}
+                key={`history-${index}`}
                 query={query}
-                index={index}
                 theme={theme}
                 onPress={onHistoryItemPress}
               />
@@ -820,6 +785,7 @@ const Search = () => {
   const navigation = useNavigation();
   const router = useRouter();
   const theme = useTheme();
+  const inputRef = useRef(null);
 
   // Destructure state for readability
   const {
@@ -844,7 +810,7 @@ const Search = () => {
   useEffect(() => {
     const loadSearchHistory = async () => {
       try {
-        const history = await AsyncStorage.getItem("searchHistory");
+        const history = await AsyncStorage.getItem(STORAGE_KEY);
         if (history !== null) {
           dispatch({
             type: "SET_SEARCH_HISTORY",
@@ -862,7 +828,7 @@ const Search = () => {
   // Save search history to AsyncStorage
   const saveSearchHistory = useCallback(async (history) => {
     try {
-      await AsyncStorage.setItem("searchHistory", JSON.stringify(history));
+      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(history));
     } catch (error) {
       console.error("Failed to save search history:", error);
     }
@@ -886,6 +852,10 @@ const Search = () => {
   useFocusEffect(
     useCallback(() => {
       dispatch({ type: "RESET_STATE" });
+      // Focus the search input when the screen comes into focus
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
     }, [])
   );
 
@@ -895,19 +865,20 @@ const Search = () => {
     });
   }, [navigation]);
 
-  // Memoize the debounced search function
-  const debouncedSearch = useMemo(
-    () =>
-      debounce((query) => {
-        if (query) {
-          dispatch({ type: "SET_LOADING", payload: true });
-          searchProductData(query).finally(() =>
-            dispatch({ type: "SET_LOADING", payload: false })
-          );
-        }
-      }, 300),
+  // Create debounced search function
+  const performSearch = useCallback(
+    (query) => {
+      if (query) {
+        dispatch({ type: "SET_LOADING", payload: true });
+        searchProductData(query).finally(() =>
+          dispatch({ type: "SET_LOADING", payload: false })
+        );
+      }
+    },
     [searchProductData]
   );
+
+  const debouncedSearch = useDebounce(performSearch, DEBOUNCE_DELAY);
 
   // Trigger search when query changes
   useEffect(() => {
@@ -918,51 +889,60 @@ const Search = () => {
   const brands = useMemo(() => {
     const uniqueBrands = [
       ...new Set(productData.map((item) => item.brand_title)),
-    ];
+    ].filter(Boolean);
     return uniqueBrands.length > 0 ? uniqueBrands : ["No brands available"];
   }, [productData]);
 
   const categoriesFromData = useMemo(() => {
     const uniqueCategories = [
       ...new Set(productData.map((item) => item.categories_id)),
-    ];
+    ].filter(Boolean);
     return uniqueCategories;
   }, [productData]);
 
   const categoryOptions = useMemo(() => {
-    if (!subcategories || !categoriesFromData)
+    if (!subcategories || !categoriesFromData.length)
       return [{ id: 0, name: "No categories available" }];
+
     return Object.values(subcategories)
       .flat()
       .filter((subcat) => subcat && categoriesFromData.includes(subcat.id));
   }, [subcategories, categoriesFromData]);
 
   const priceBounds = useMemo(() => {
-    if (productData.length === 0) return [0, 10000];
+    if (productData.length === 0) return INITIAL_PRICE_RANGE;
+
     const prices = productData
-      .map((item) => Number.parseFloat(item.spu))
+      .map((item) => parseFloat(item.spu))
       .filter(
         (price) => !isNaN(price) && price !== null && price !== undefined
       );
+
     return prices.length > 0
-      ? [Math.min(...prices), Math.max(...prices)]
-      : [0, 10000];
+      ? [Math.floor(Math.min(...prices)), Math.ceil(Math.max(...prices))]
+      : INITIAL_PRICE_RANGE;
   }, [productData]);
 
   // Memoize filtered products
   const filteredProducts = useMemo(() => {
     if (!searchQuery) return [];
+
     return productData.filter((product) => {
+      // Rating filter
       if (filters.minRating > 0) {
-        const rating = product.average_rating || 0;
+        const rating = parseFloat(product.average_rating) || 0;
         if (rating < filters.minRating) return false;
       }
+
+      // Brand filter
       if (
         filters.selectedBrands.length > 0 &&
         !filters.selectedBrands.includes(product.brand_title)
       ) {
         return false;
       }
+
+      // Category filter
       if (
         filters.selectedCategories.length > 0 &&
         (!product.categories_id ||
@@ -970,20 +950,29 @@ const Search = () => {
       ) {
         return false;
       }
-      const price = Number.parseFloat(product.spu);
-      if (price < filters.priceRange[0] || price > filters.priceRange[1])
+
+      // Price filter
+      const price = parseFloat(product.spu);
+      if (
+        isNaN(price) ||
+        price < filters.priceRange[0] ||
+        price > filters.priceRange[1]
+      )
         return false;
+
       return true;
     });
   }, [productData, filters, searchQuery]);
 
   // Handle loading more products
   const loadMoreProducts = useCallback(() => {
-    dispatch({ type: "SET_PAGE", payload: page + 1 });
-  }, [page]);
+    if (!isLoading && !isSearching) {
+      dispatch({ type: "SET_PAGE", payload: page + 1 });
+    }
+  }, [page, isLoading, isSearching]);
 
   // Handle filter item updates
-  const handleUpdateFilterItem = useCallback((filterType, value) => {
+  const handleFilterItemUpdate = useCallback((filterType, value) => {
     dispatch({
       type: "UPDATE_FILTER_ITEM",
       payload: { filterType, value },
@@ -1005,17 +994,37 @@ const Search = () => {
     dispatch({ type: "SET_SEARCH_QUERY", payload: query });
   }, []);
 
-  // Handle history item press - Fixed to properly trigger search
+  // Handle product press - update history and navigate
+  const handleProductPress = useCallback(
+    (productId) => {
+      if (searchQuery && searchQuery.trim()) {
+        // Create new history array with current query at the beginning
+        const newHistory = [
+          searchQuery,
+          ...searchHistory.filter((q) => q !== searchQuery),
+        ].slice(0, 10);
+
+        // Update search history
+        handleSearchHistoryUpdate(newHistory);
+      }
+
+      // Navigate to product detail
+      router.push({
+        pathname: `/screens/ProductDetail`,
+        params: { id: productId },
+      });
+    },
+    [searchQuery, searchHistory, handleSearchHistoryUpdate, router]
+  );
+
+  // Handle history item press
   const handleHistoryItemPress = useCallback(
     (query) => {
       dispatch({ type: "SET_SEARCH_QUERY", payload: query });
-      // Directly call searchProductData instead of relying on the effect
-      dispatch({ type: "SET_LOADING", payload: true });
-      searchProductData(query).finally(() =>
-        dispatch({ type: "SET_LOADING", payload: false })
-      );
+      // Directly call search to avoid waiting for debounce
+      performSearch(query);
     },
-    [searchProductData]
+    [performSearch]
   );
 
   // Memoize renderProductItem function
@@ -1023,22 +1032,12 @@ const Search = () => {
     ({ item }) => (
       <ProductItem
         item={item}
-        searchQuery={searchQuery}
-        searchHistory={searchHistory}
-        onUpdateSearchHistory={handleSearchHistoryUpdate}
+        onProductPress={handleProductPress}
         theme={theme}
         isDarkTheme={isDarkTheme}
-        router={router}
       />
     ),
-    [
-      searchQuery,
-      searchHistory,
-      handleSearchHistoryUpdate,
-      theme,
-      isDarkTheme,
-      router,
-    ]
+    [handleProductPress, theme, isDarkTheme]
   );
 
   return (
@@ -1050,6 +1049,7 @@ const Search = () => {
         backgroundColor={theme.colors.primary}
       />
 
+      {/* Header with Logo */}
       <View style={styles.headerContainer}>
         <Image
           source={
@@ -1062,6 +1062,7 @@ const Search = () => {
         />
       </View>
 
+      {/* Search Input and Filter Button */}
       <View style={styles.searchContainer}>
         <View
           style={[
@@ -1080,13 +1081,13 @@ const Search = () => {
             style={styles.searchIcon}
           />
           <TextInput
+            ref={inputRef}
             accessibilityLabel="Search for products"
             style={[
               styles.searchInput,
               {
                 backgroundColor: theme.colors.primary,
                 color: theme.colors.textColor,
-                height: 40,
               },
             ]}
             placeholder="Search products..."
@@ -1100,6 +1101,7 @@ const Search = () => {
             <TouchableOpacity
               onPress={() => handleSearchQueryChange("")}
               accessibilityLabel="Clear search"
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Feather name="x" size={20} color={theme.colors.textColor} />
             </TouchableOpacity>
@@ -1129,6 +1131,7 @@ const Search = () => {
         </TouchableOpacity>
       </View>
 
+      {/* Active Filters */}
       <ActiveFilters
         filters={filters}
         searchQuery={searchQuery}
@@ -1136,10 +1139,11 @@ const Search = () => {
         theme={theme}
         categoryOptions={categoryOptions}
         onUpdateFilters={handleUpdateFilters}
-        onUpdateFilterItem={handleUpdateFilterItem}
+        onUpdateFilterItem={handleFilterItemUpdate}
         onResetFilters={handleResetFilters}
       />
 
+      {/* Search Results or History */}
       <View style={{ backgroundColor: theme.colors.primary, flex: 1 }}>
         <SearchResults
           isLoading={isLoading}
@@ -1158,6 +1162,7 @@ const Search = () => {
         />
       </View>
 
+      {/* Filter Modal */}
       <FilterModal
         isVisible={isFilterVisible}
         onClose={() =>
@@ -1165,7 +1170,7 @@ const Search = () => {
         }
         filters={filters}
         onUpdateFilters={handleUpdateFilters}
-        onUpdateFilterItem={handleUpdateFilterItem}
+        onUpdateFilterItem={handleFilterItemUpdate}
         onResetFilters={handleResetFilters}
         theme={theme}
         brands={brands}
@@ -1173,7 +1178,7 @@ const Search = () => {
         priceBounds={priceBounds}
       />
 
-      {/* AlertDialog for clearing search history */}
+      {/* Clear History Dialog */}
       <AlertDialog
         visible={showClearHistoryDialog}
         title="Clear Search History"
@@ -1183,7 +1188,7 @@ const Search = () => {
         }
         onConfirm={async () => {
           try {
-            await AsyncStorage.removeItem("searchHistory");
+            await AsyncStorage.removeItem(STORAGE_KEY);
             dispatch({ type: "SET_SEARCH_HISTORY", payload: [] });
             dispatch({ type: "TOGGLE_CLEAR_HISTORY_DIALOG", payload: false });
           } catch (error) {
@@ -1195,6 +1200,7 @@ const Search = () => {
         backdropOpacity={0.4}
       />
 
+      {/* Error State */}
       {error && (
         <View
           style={[
@@ -1222,8 +1228,12 @@ const Search = () => {
   );
 };
 
+// Optimized styles with better organization and platform-specific enhancements
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  // Layout containers
+  container: {
+    flex: 1,
+  },
   headerContainer: {
     height: 50,
     width: "100%",
@@ -1236,6 +1246,8 @@ const styles = StyleSheet.create({
     width: 120,
     resizeMode: "contain",
   },
+
+  // Search input
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1249,7 +1261,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 12,
     paddingHorizontal: 12,
-    height: 48,
+    height: 50,
   },
   searchIcon: {
     marginRight: 8,
@@ -1267,6 +1279,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderWidth: 1,
   },
+
+  // Active filters
   activeFiltersContainer: {
     paddingHorizontal: 16,
     marginBottom: 8,
@@ -1276,16 +1290,7 @@ const styles = StyleSheet.create({
     paddingRight: 16,
     flexDirection: "row",
     alignItems: "center",
-  },
-  resultsHeader: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
-  },
-  resultsCount: {
-    fontSize: 14,
-    fontWeight: "500",
+    gap: 8,
   },
   activeFilterChip: {
     flexDirection: "row",
@@ -1305,6 +1310,20 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+
+  // Results header
+  resultsHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+  },
+  resultsCount: {
+    fontSize: 14,
+    fontWeight: "500",
+  },
+
+  // Product list
   listContainer: {
     padding: 16,
     paddingBottom: 20,
@@ -1314,11 +1333,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   productCardContent: {
     flexDirection: "row",
@@ -1363,6 +1388,8 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 12,
   },
+
+  // Empty states
   emptyStateContainer: {
     alignItems: "center",
     justifyContent: "center",
@@ -1380,6 +1407,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: "center",
   },
+
+  // Filter modal
   bottomModal: {
     justifyContent: "flex-end",
     margin: 0,
@@ -1438,6 +1467,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 20,
   },
+
+  // Slider
   sliderContainer: {
     marginTop: 10,
     marginLeft: 20,
@@ -1453,6 +1484,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#666",
   },
+  marker: {
+    height: 20,
+    width: 20,
+    borderRadius: 10,
+  },
+  selectedTrack: {
+    height: 4,
+  },
+  track: {
+    height: 4,
+  },
+
+  // Filter actions
   filterActions: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1466,17 +1510,8 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 8,
   },
-  marker: {
-    height: 20,
-    width: 20,
-    borderRadius: 10,
-  },
-  selectedTrack: {
-    height: 4,
-  },
-  track: {
-    height: 4,
-  },
+
+  // Error state
   errorContainer: {
     position: "absolute",
     bottom: 20,
@@ -1487,11 +1522,17 @@ const styles = StyleSheet.create({
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   errorIcon: {
     marginBottom: 8,
@@ -1502,6 +1543,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+
+  // Search history
   historyContainer: {
     paddingHorizontal: 16,
     flex: 1,
@@ -1533,6 +1576,8 @@ const styles = StyleSheet.create({
   historyItem: {
     fontSize: 16,
   },
+
+  // Loading state
   loadingContainer: {
     flex: 1,
     justifyContent: "center",

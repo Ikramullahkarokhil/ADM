@@ -103,6 +103,30 @@ const useProductStore = create(
         );
       },
 
+      sellerVisitCount: async ({ sellerId, consumerId }) => {
+        return await api.post(
+          `/seller/visit?consumer_id=${consumerId}&seller_id=${sellerId}`
+        );
+      },
+
+      fetchSellerNewArivals: async ({ sellerId, page }) => {
+        return await api.get(
+          `/seller/new-arrivals?seller_id=${sellerId}&page=${page}`
+        );
+      },
+
+      fetchSellerReviews: async ({ sellerId, page }) => {
+        return await api.get(
+          `/seller/all-reviews?seller_id=${sellerId}&page=${page}`
+        );
+      },
+
+      fetchSellerAllProducts: async ({ sellerId, page }) => {
+        return await api.get(
+          `/seller/all-products?seller_id=${sellerId}&page=${page}`
+        );
+      },
+
       // Fetch Main Categories
       fetchMainCategories: async () => {
         const data = await get().apiRequest("/get-main-categories");

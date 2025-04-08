@@ -34,7 +34,6 @@ import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import RelatedProducts from "../../../components/ui/RelatedProducts";
 import ProductDetailSkeleton from "../../../components/skeleton/ProductDetailsSkeleton";
-import { Colors } from "react-native/Libraries/NewAppScreen";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -79,11 +78,14 @@ const useAlertDialog = () => {
 };
 
 // 2. Extract Rating component
-const ProductRating = memo(({ rating, colors }) => {
+const ProductRating = memo(({ rating, colors, onRateProduct, readOnly }) => {
   return (
     <View style={styles.ratingContainer}>
       {[...Array(5)].map((_, index) => (
-        <Pressable key={index}>
+        <Pressable
+          key={index}
+          onPress={() => !readOnly && onRateProduct(index + 1)}
+        >
           <FontAwesome
             name={index < rating ? "star" : "star-o"}
             size={15}
@@ -266,6 +268,68 @@ const QuestionSection = memo(
         >
           Ask a Question
         </Button>
+      </View>
+    );
+  }
+);
+
+const ReviewSection = memo(
+  ({ user, theme, productId, rating, onRateProduct }) => {
+    const [showLoginAlert, setShowLoginAlert] = useState(false);
+
+    const handleRatingPress = (selectedRating) => {
+      if (user) {
+        onRateProduct(selectedRating);
+      } else {
+        setShowLoginAlert(true);
+      }
+    };
+
+    return (
+      <View
+        style={[
+          styles.questionsSection,
+          { backgroundColor: theme.colors.primary },
+        ]}
+      >
+        <Text
+          style={[styles.questionsTitle, { color: theme.colors.textColor }]}
+        >
+          Product Review
+        </Text>
+        <View style={styles.reviewContainer}>
+          <Text
+            style={[styles.rateProductText, { color: theme.colors.textColor }]}
+          >
+            Rate this product:
+          </Text>
+          <ProductRating
+            rating={rating}
+            colors={theme.colors}
+            onRateProduct={handleRatingPress}
+            readOnly={!user}
+          />
+          {showLoginAlert && (
+            <View>
+              <Text
+                style={{
+                  color: theme.colors.textColor,
+                  textAlign: "center",
+                  marginTop: 10,
+                }}
+              >
+                You need to be logged in to rate this product.
+              </Text>
+              <Button
+                mode="contained"
+                onPress={() => router.push("/screens/Login")}
+                style={styles.loginButton}
+              >
+                Login
+              </Button>
+            </View>
+          )}
+        </View>
       </View>
     );
   }
@@ -813,7 +877,12 @@ const ProductDetail = () => {
           </View>
 
           {/* Rating - Extracted to component */}
-          <ProductRating rating={userRating} colors={theme.colors} />
+          <ProductRating
+            rating={userRating}
+            colors={theme.colors}
+            onRateProduct={handleRate}
+            readOnly={true} // Read-only in the product info section
+          />
 
           <Text style={[styles.price, { color: theme.colors.button }]}>
             AF {product.spu}
@@ -912,6 +981,14 @@ const ProductDetail = () => {
             theme={theme}
           />
         </View>
+
+        <ReviewSection
+          user={user}
+          theme={theme}
+          productId={product.products_id}
+          rating={userRating}
+          onRateProduct={handleRate}
+        />
 
         {/* Questions Section - Extracted to component */}
         <QuestionSection
@@ -1128,6 +1205,14 @@ const styles = StyleSheet.create({
     color: "#ff4444",
     textAlign: "center",
     marginBottom: 16,
+    elevation: 2,
+    borderWidth: 1,
+  },
+  errorText: {
+    fontSize: 18,
+    color: "#ff4444",
+    textAlign: "center",
+    marginBottom: 16,
   },
   retryButton: {
     padding: 12,
@@ -1237,6 +1322,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginLeft: 5,
     fontWeight: "bold",
+  },
+  reviewContainer: {
+    marginVertical: 10,
+    alignItems: "center",
+  },
+  rateProductText: {
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  loginButton: {
+    marginTop: 15,
+    alignSelf: "center",
+    paddingHorizontal: 20,
   },
 });
 
