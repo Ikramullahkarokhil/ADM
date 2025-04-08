@@ -1,3 +1,5 @@
+"use client";
+
 import {
   useEffect,
   useLayoutEffect,
@@ -17,6 +19,7 @@ import {
   ToastAndroid,
   Dimensions,
   RefreshControl,
+  Animated,
 } from "react-native";
 import Carousel from "react-native-reanimated-carousel";
 import {
@@ -77,29 +80,68 @@ const useAlertDialog = () => {
   };
 };
 
-// 2. Extract Rating component
-const ProductRating = memo(({ rating, colors, onRateProduct, readOnly }) => {
-  return (
-    <View style={styles.ratingContainer}>
-      {[...Array(5)].map((_, index) => (
-        <Pressable
-          key={index}
-          onPress={() => !readOnly && onRateProduct(index + 1)}
-        >
-          <FontAwesome
-            name={index < rating ? "star" : "star-o"}
-            size={15}
-            color={index < rating ? "#FFD700" : "#ccc"}
-            style={styles.starIcon}
-          />
-        </Pressable>
-      ))}
-      <Text style={{ marginLeft: 5, color: colors.textColor }}>
-        {rating} / 5
-      </Text>
-    </View>
-  );
-});
+// 2. Enhanced Rating component with animations
+const ProductRating = memo(
+  ({ rating, colors, onRateProduct, readOnly, size }) => {
+    // Animation values for each star
+    const starAnimations = useMemo(
+      () => [...Array(5)].map(() => new Animated.Value(1)),
+      []
+    );
+
+    // Handle star press with animation
+    const handleStarPress = useCallback(
+      (index) => {
+        if (readOnly) return;
+
+        // Animate the pressed star
+        Animated.sequence([
+          Animated.timing(starAnimations[index], {
+            toValue: 1.5,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+          Animated.timing(starAnimations[index], {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        onRateProduct(index + 1);
+      },
+      [readOnly, onRateProduct, starAnimations]
+    );
+
+    return (
+      <View style={styles.ratingContainer}>
+        {[...Array(5)].map((_, index) => (
+          <Pressable
+            key={index}
+            onPress={() => handleStarPress(index)}
+            style={styles.starButton}
+          >
+            <Animated.View
+              style={{
+                transform: [{ scale: starAnimations[index] }],
+              }}
+            >
+              <FontAwesome
+                name={index < rating ? "star" : "star-o"}
+                size={size}
+                color={index < rating ? "#FFD700" : colors.inactiveColor}
+                style={styles.starIcon}
+              />
+            </Animated.View>
+          </Pressable>
+        ))}
+        <Text style={[styles.ratingText, { color: colors.textColor }]}>
+          {rating}
+        </Text>
+      </View>
+    );
+  }
+);
 
 // 3. Extract ProductImages component
 const ProductImages = memo(({ images, isDarkTheme }) => {
@@ -273,9 +315,20 @@ const QuestionSection = memo(
   }
 );
 
+// 6. Enhanced ReviewSection component with better UI
 const ReviewSection = memo(
   ({ user, theme, productId, rating, onRateProduct }) => {
     const [showLoginAlert, setShowLoginAlert] = useState(false);
+    const fadeAnim = useMemo(() => new Animated.Value(0), []);
+
+    // Animate the review section when it appears
+    useEffect(() => {
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }).start();
+    }, [fadeAnim]);
 
     const handleRatingPress = (selectedRating) => {
       if (user) {
@@ -286,31 +339,97 @@ const ReviewSection = memo(
     };
 
     return (
-      <View
+      <Animated.View
         style={[
-          styles.questionsSection,
-          { backgroundColor: theme.colors.primary },
+          styles.reviewSection,
+          {
+            backgroundColor: theme.colors.primary,
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateY: fadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [20, 0],
+                }),
+              },
+            ],
+          },
         ]}
       >
-        <Text
-          style={[styles.questionsTitle, { color: theme.colors.textColor }]}
-        >
-          Product Review
-        </Text>
-        <View style={styles.reviewContainer}>
-          <Text
-            style={[styles.rateProductText, { color: theme.colors.textColor }]}
-          >
-            Rate this product:
-          </Text>
-          <ProductRating
-            rating={rating}
-            colors={theme.colors}
-            onRateProduct={handleRatingPress}
-            readOnly={!user}
+        <View style={styles.reviewHeader}>
+          <Ionicons
+            name="star-half-outline"
+            size={24}
+            color={theme.colors.button}
           />
+          <Text style={[styles.reviewTitle, { color: theme.colors.textColor }]}>
+            Product Review
+          </Text>
+        </View>
+
+        <View style={styles.reviewContainer}>
+          <View style={styles.ratingCard}>
+            <Text
+              style={[
+                styles.rateProductText,
+                { color: theme.colors.textColor },
+              ]}
+            >
+              Rate this product:
+            </Text>
+            <ProductRating
+              rating={rating}
+              colors={theme.colors}
+              onRateProduct={handleRatingPress}
+              readOnly={!user}
+              size={24}
+            />
+
+            <View style={styles.ratingInfoContainer}>
+              <View style={styles.ratingInfoItem}>
+                <Text
+                  style={[
+                    styles.ratingInfoLabel,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  Current Rating
+                </Text>
+                <Text
+                  style={[
+                    styles.ratingInfoValue,
+                    { color: theme.colors.button },
+                  ]}
+                >
+                  {rating}
+                </Text>
+              </View>
+
+              <View style={styles.ratingDivider} />
+
+              <View style={styles.ratingInfoItem}>
+                <Text
+                  style={[
+                    styles.ratingInfoLabel,
+                    { color: theme.colors.textColor },
+                  ]}
+                >
+                  Your Rating
+                </Text>
+                <Text
+                  style={[
+                    styles.ratingInfoValue,
+                    { color: theme.colors.button },
+                  ]}
+                >
+                  {user ? `${rating}` : "Not rated"}
+                </Text>
+              </View>
+            </View>
+          </View>
+
           {showLoginAlert && (
-            <View>
+            <View style={styles.loginAlertContainer}>
               <Text
                 style={{
                   color: theme.colors.textColor,
@@ -324,13 +443,14 @@ const ReviewSection = memo(
                 mode="contained"
                 onPress={() => router.push("/screens/Login")}
                 style={styles.loginButton}
+                buttonColor={theme.colors.button}
               >
                 Login
               </Button>
             </View>
           )}
         </View>
-      </View>
+      </Animated.View>
     );
   }
 );
@@ -344,7 +464,7 @@ const ProductDetail = () => {
   const { showActionSheetWithOptions } = useActionSheet();
   const { isDarkTheme } = useThemeStore();
 
-  // Consolidated state with useReducer pattern
+  // Use useReducer for complex state management
   const [state, setState] = useState({
     isFavorite: false,
     isFavoriting: false,
@@ -882,6 +1002,7 @@ const ProductDetail = () => {
             colors={theme.colors}
             onRateProduct={handleRate}
             readOnly={true} // Read-only in the product info section
+            size={16}
           />
 
           <Text style={[styles.price, { color: theme.colors.button }]}>
@@ -1163,8 +1284,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  starButton: {
+    padding: 5, // Increase touch target
+  },
   starIcon: {
     marginRight: 4,
+  },
+  ratingText: {
+    marginLeft: 5,
+    fontSize: 16,
+    fontWeight: "500",
   },
   price: {
     fontSize: 24,
@@ -1205,14 +1334,6 @@ const styles = StyleSheet.create({
     color: "#ff4444",
     textAlign: "center",
     marginBottom: 16,
-    elevation: 2,
-    borderWidth: 1,
-  },
-  errorText: {
-    fontSize: 18,
-    color: "#ff4444",
-    textAlign: "center",
-    marginBottom: 16,
   },
   retryButton: {
     padding: 12,
@@ -1231,7 +1352,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     elevation: 5,
     marginHorizontal: 16,
-    marginBottom: 50,
+    marginBottom: 24,
   },
   questionsTitle: {
     fontSize: 20,
@@ -1323,13 +1444,69 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontWeight: "bold",
   },
+  // Enhanced review section styles
+  reviewSection: {
+    padding: 20,
+    borderRadius: 20,
+    elevation: 5,
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  reviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  reviewTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
   reviewContainer: {
-    marginVertical: 10,
+    alignItems: "center",
+  },
+  ratingCard: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 16,
     alignItems: "center",
   },
   rateProductText: {
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: 18,
+    fontWeight: "500",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  ratingInfoContainer: {
+    flexDirection: "row",
+    width: "100%",
+    marginTop: 20,
+    justifyContent: "space-around",
+    alignItems: "center",
+  },
+  ratingInfoItem: {
+    alignItems: "center",
+  },
+  ratingInfoLabel: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  ratingInfoValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  ratingDivider: {
+    height: 40,
+    width: 1,
+    backgroundColor: "#ddd",
+  },
+  loginAlertContainer: {
+    marginTop: 20,
+    padding: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    width: "100%",
   },
   loginButton: {
     marginTop: 15,

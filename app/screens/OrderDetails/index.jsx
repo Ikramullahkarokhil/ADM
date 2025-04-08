@@ -395,430 +395,446 @@ const OrderDetails = () => {
         style={[styles.container, { backgroundColor: colors.primary }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Order Header */}
-        <Card style={[styles.card, { backgroundColor: colors.primary }]}>
-          <Card.Content>
-            <View style={styles.orderHeader}>
-              <View>
-                <Text
-                  style={[
-                    styles.orderNumberLabel,
-                    { color: colors.inactiveColor },
-                  ]}
-                >
-                  ORDER NUMBER
-                </Text>
-                <Text style={[styles.orderNumber, { color: colors.textColor }]}>
-                  {orderData.order_details.order_no}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.orderMeta}>
-              <View style={styles.metaItem}>
-                <MaterialCommunityIcons
-                  name="calendar"
-                  size={16}
-                  color={colors.inactiveColor}
-                />
-                <Text style={[styles.metaText, { color: colors.textColor }]}>
-                  {formatDate(orderData.order_details.date)}
-                </Text>
-              </View>
-              <View style={styles.metaItem}>
-                <MaterialCommunityIcons
-                  name="credit-card"
-                  size={16}
-                  color={colors.inactiveColor}
-                />
-                <Text style={[styles.metaText, { color: colors.textColor }]}>
-                  {orderData.order_details.payment_type.toUpperCase()}
-                </Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Products Section */}
-        <Card style={[styles.card, { backgroundColor: colors.primary }]}>
-          <Card.Content>
-            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-              Products
-            </Text>
-            {orderData.cart_products.map((product, index) => {
-              const variantValues = safeJsonParse(product.variant_values, []);
-              const variantText = Array.isArray(variantValues)
-                ? variantValues.join(", ")
-                : "";
-              const { text: productStatusText, color: productStatusColor } =
-                orderStatus(product.status);
-              return (
-                <View key={product.consumer_cart_items_id}>
-                  <View style={styles.productItem}>
-                    <View
-                      style={[
-                        styles.productImageContainer,
-                        {
-                          borderColor: colors.subInactiveColor,
-                          opacity:
-                            product.status === "5" || product.status === "7"
-                              ? 0.5
-                              : 1,
-                        },
-                      ]}
-                    >
-                      <Image
-                        source={
-                          product.image
-                            ? { uri: product.image_url }
-                            : isDarkTheme
-                            ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                            : require("../../../assets/images/imageSkeleton.jpg")
-                        }
-                        style={styles.productImage}
-                        resizeMode="cover"
-                      />
-                      {(product.status === "5" || product.status === "7") && (
-                        <View style={styles.cancelledOverlay}>
-                          <MaterialCommunityIcons
-                            name="close-circle"
-                            size={24}
-                            color={colors.deleteButton}
-                          />
-                        </View>
-                      )}
-                    </View>
-                    <View
-                      style={[
-                        styles.productDetails,
-                        (product.status === "5" || product.status === "7") && {
-                          opacity: 0.7,
-                        },
-                      ]}
-                    >
-                      <View>
-                        <View style={styles.productTitleRow}>
-                          <Text
-                            style={[
-                              styles.productTitle,
-                              { color: colors.textColor },
-                            ]}
-                            numberOfLines={1}
-                          >
-                            {product.title}
-                          </Text>
-                          <Badge
-                            style={{
-                              backgroundColor: productStatusColor,
-                              color: "white",
-                              paddingHorizontal: 5,
-                              borderRadius: 5,
-                            }}
-                          >
-                            {productStatusText}
-                          </Badge>
-                        </View>
-                        {variantText && (
-                          <View style={styles.variantContainer}>
-                            {variantValues.map((variant, i) => (
-                              <View
-                                key={i}
-                                style={[
-                                  styles.variantChip,
-                                  { backgroundColor: colors.background },
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.variantText,
-                                    { color: colors.inactiveColor },
-                                  ]}
-                                >
-                                  {variant}
-                                </Text>
-                              </View>
-                            ))}
-                          </View>
-                        )}
-                      </View>
-                      <View style={styles.productBottomRow}>
-                        <View style={styles.productPriceRow}>
-                          <Text
-                            style={[
-                              styles.productPrice,
-                              {
-                                color:
-                                  product.status === "5" ||
-                                  product.status === "7"
-                                    ? colors.inactiveColor
-                                    : colors.button,
-                              },
-                            ]}
-                          >
-                            AF {Number.parseFloat(product.spu || 0)}
-                          </Text>
-                          <View
-                            style={[
-                              styles.quantityBadge,
-                              { backgroundColor: colors.background },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.productQuantity,
-                                { color: colors.textColor },
-                              ]}
-                            >
-                              x{product.qty}
-                            </Text>
-                          </View>
-                        </View>
-                        {product.status === "2" && (
-                          <TouchableOpacity
-                            style={[
-                              styles.cancelProductButton,
-                              { borderColor: colors.deleteButton },
-                            ]}
-                            onPress={() =>
-                              handleUpdateProductStatus(
-                                product.consumer_cart_items_id,
-                                product.status
-                              )
-                            }
-                            disabled={
-                              cancellingProductId ===
-                              product.consumer_cart_items_id
-                            }
-                          >
-                            {cancellingProductId ===
-                            product.consumer_cart_items_id ? (
-                              <ActivityIndicator
-                                size="small"
-                                color={colors.deleteButton}
-                              />
-                            ) : (
-                              <>
-                                <MaterialCommunityIcons
-                                  name="close"
-                                  size={14}
-                                  color={colors.deleteButton}
-                                />
-                                <Text
-                                  style={[
-                                    styles.cancelProductText,
-                                    { color: colors.deleteButton },
-                                  ]}
-                                >
-                                  Cancel
-                                </Text>
-                              </>
-                            )}
-                          </TouchableOpacity>
-                        )}
-                        {product.status === "5" && (
-                          <TouchableOpacity
-                            style={[
-                              styles.cancelProductButton,
-                              { borderColor: colors.button },
-                            ]}
-                            onPress={() =>
-                              handleUpdateProductStatus(
-                                product.consumer_cart_items_id,
-                                product.status
-                              )
-                            }
-                          >
-                            <MaterialCommunityIcons
-                              name="undo"
-                              size={14}
-                              color={colors.button}
-                            />
-                            <Text
-                              style={[
-                                styles.cancelProductText,
-                                { color: colors.button },
-                              ]}
-                            >
-                              Revert
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                  {index < orderData.cart_products.length - 1 && (
-                    <Divider
-                      style={[
-                        styles.divider,
-                        { backgroundColor: colors.subInactiveColor },
-                      ]}
-                    />
-                  )}
-                </View>
-              );
-            })}
-          </Card.Content>
-        </Card>
-
-        {/* Order Summary */}
-        <Card style={[styles.card, { backgroundColor: colors.primary }]}>
-          <Card.Content>
-            <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-              Order Summary
-            </Text>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[styles.summaryLabel, { color: colors.inactiveColor }]}
-              >
-                Subtotal
-              </Text>
-              <Text style={[styles.summaryValue, { color: colors.textColor }]}>
-                AF {total}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text
-                style={[styles.summaryLabel, { color: colors.inactiveColor }]}
-              >
-                Shipping
-              </Text>
-              <Text style={[styles.summaryValue, { color: colors.textColor }]}>
-                Free
-              </Text>
-            </View>
-            <Divider
-              style={[
-                styles.divider,
-                { backgroundColor: colors.subInactiveColor },
-              ]}
-            />
-            <View style={styles.totalRow}>
-              <Text style={[styles.totalLabel, { color: colors.textColor }]}>
-                Total
-              </Text>
-              <Text style={[styles.totalValue, { color: colors.button }]}>
-                AF {total}
-              </Text>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Shipping Address */}
-        <Card style={[styles.card, { backgroundColor: colors.primary }]}>
-          <Card.Content>
-            <View style={styles.addressHeader}>
-              <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
-                Shipping Address
-              </Text>
-              <TouchableOpacity
-                style={[styles.editButton, !coordinates && { opacity: 0.5 }]}
-                onPress={() => {
-                  if (coordinates) {
-                    const { latitude, longitude } = coordinates;
-                    const url = `https://www.google.com/maps?q=${latitude},${longitude}`;
-                    Linking.openURL(url);
-                  }
-                }}
-                disabled={!coordinates}
-              >
-                <MaterialCommunityIcons
-                  name="map-marker"
-                  size={18}
-                  color={colors.button}
-                />
-                <Text style={[styles.editButtonText, { color: colors.button }]}>
-                  Map
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <View
-              style={[
-                styles.addressBox,
-                { backgroundColor: colors.background },
-              ]}
-            >
-              {orderData.order_details.billing_address_id && billingAddress ? (
-                <>
-                  <Text
-                    style={[styles.addressName, { color: colors.textColor }]}
-                  >
-                    {billingAddress.name}
-                  </Text>
+        <View style={styles.contentContainer}>
+          {/* Order Header */}
+          <Card style={[styles.card, { backgroundColor: colors.primary }]}>
+            <Card.Content>
+              <View style={styles.orderHeader}>
+                <View>
                   <Text
                     style={[
-                      styles.addressText,
+                      styles.orderNumberLabel,
                       { color: colors.inactiveColor },
                     ]}
                   >
-                    {billingAddress.address}
+                    ORDER NUMBER
                   </Text>
                   <Text
-                    style={[styles.addressPhone, { color: colors.textColor }]}
+                    style={[styles.orderNumber, { color: colors.textColor }]}
                   >
-                    {billingAddress.phone}
+                    {orderData.order_details.order_no}
                   </Text>
-                </>
-              ) : (
-                <Text style={[styles.addressName, { color: colors.textColor }]}>
-                  No billing address found
-                </Text>
-              )}
-            </View>
-          </Card.Content>
-        </Card>
+                </View>
+              </View>
+              <View style={styles.orderMeta}>
+                <View style={styles.metaItem}>
+                  <MaterialCommunityIcons
+                    name="calendar"
+                    size={16}
+                    color={colors.inactiveColor}
+                  />
+                  <Text style={[styles.metaText, { color: colors.textColor }]}>
+                    {formatDate(orderData.order_details.date)}
+                  </Text>
+                </View>
+                <View style={styles.metaItem}>
+                  <MaterialCommunityIcons
+                    name="credit-card"
+                    size={16}
+                    color={colors.inactiveColor}
+                  />
+                  <Text style={[styles.metaText, { color: colors.textColor }]}>
+                    {orderData.order_details.payment_type.toUpperCase()}
+                  </Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
 
-        {/* Action Buttons */}
-        {!allProductsCancelled && (
-          <View style={styles.actionButtons}>
-            {allProductsInProcess && (
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  styles.cancelButton,
-                  {
-                    backgroundColor: colors.primary,
-                    borderColor: colors.deleteButton,
-                  },
-                ]}
-                activeOpacity={0.8}
-                onPress={handleCancelOrder}
-              >
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={20}
-                  color={colors.deleteButton}
-                />
+          {/* Products Section */}
+          <Card style={[styles.card, { backgroundColor: colors.primary }]}>
+            <Card.Content>
+              <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+                Products
+              </Text>
+              {orderData.cart_products.map((product, index) => {
+                const variantValues = safeJsonParse(product.variant_values, []);
+                const variantText = Array.isArray(variantValues)
+                  ? variantValues.join(", ")
+                  : "";
+                const { text: productStatusText, color: productStatusColor } =
+                  orderStatus(product.status);
+                return (
+                  <View key={product.consumer_cart_items_id}>
+                    <View style={styles.productItem}>
+                      <View
+                        style={[
+                          styles.productImageContainer,
+                          {
+                            borderColor: colors.subInactiveColor,
+                            opacity:
+                              product.status === "5" || product.status === "7"
+                                ? 0.5
+                                : 1,
+                          },
+                        ]}
+                      >
+                        <Image
+                          source={
+                            product.image
+                              ? { uri: product.image_url }
+                              : isDarkTheme
+                              ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                              : require("../../../assets/images/imageSkeleton.jpg")
+                          }
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                        {(product.status === "5" || product.status === "7") && (
+                          <View style={styles.cancelledOverlay}>
+                            <MaterialCommunityIcons
+                              name="close-circle"
+                              size={24}
+                              color={colors.deleteButton}
+                            />
+                          </View>
+                        )}
+                      </View>
+                      <View
+                        style={[
+                          styles.productDetails,
+                          (product.status === "5" ||
+                            product.status === "7") && {
+                            opacity: 0.7,
+                          },
+                        ]}
+                      >
+                        <View>
+                          <View style={styles.productTitleRow}>
+                            <Text
+                              style={[
+                                styles.productTitle,
+                                { color: colors.textColor },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {product.title}
+                            </Text>
+                            <Badge
+                              style={{
+                                backgroundColor: productStatusColor,
+                                color: "white",
+                                paddingHorizontal: 5,
+                                borderRadius: 5,
+                              }}
+                            >
+                              {productStatusText}
+                            </Badge>
+                          </View>
+                          {variantText && (
+                            <View style={styles.variantContainer}>
+                              {variantValues.map((variant, i) => (
+                                <View
+                                  key={i}
+                                  style={[
+                                    styles.variantChip,
+                                    { backgroundColor: colors.background },
+                                  ]}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.variantText,
+                                      { color: colors.inactiveColor },
+                                    ]}
+                                  >
+                                    {variant}
+                                  </Text>
+                                </View>
+                              ))}
+                            </View>
+                          )}
+                        </View>
+                        <View style={styles.productBottomRow}>
+                          <View style={styles.productPriceRow}>
+                            <Text
+                              style={[
+                                styles.productPrice,
+                                {
+                                  color:
+                                    product.status === "5" ||
+                                    product.status === "7"
+                                      ? colors.inactiveColor
+                                      : colors.button,
+                                },
+                              ]}
+                            >
+                              AF {Number.parseFloat(product.spu || 0)}
+                            </Text>
+                            <View
+                              style={[
+                                styles.quantityBadge,
+                                { backgroundColor: colors.background },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.productQuantity,
+                                  { color: colors.textColor },
+                                ]}
+                              >
+                                x{product.qty}
+                              </Text>
+                            </View>
+                          </View>
+                          {product.status === "2" && (
+                            <TouchableOpacity
+                              style={[
+                                styles.cancelProductButton,
+                                { borderColor: colors.deleteButton },
+                              ]}
+                              onPress={() =>
+                                handleUpdateProductStatus(
+                                  product.consumer_cart_items_id,
+                                  product.status
+                                )
+                              }
+                              disabled={
+                                cancellingProductId ===
+                                product.consumer_cart_items_id
+                              }
+                            >
+                              {cancellingProductId ===
+                              product.consumer_cart_items_id ? (
+                                <ActivityIndicator
+                                  size="small"
+                                  color={colors.deleteButton}
+                                />
+                              ) : (
+                                <>
+                                  <MaterialCommunityIcons
+                                    name="close"
+                                    size={14}
+                                    color={colors.deleteButton}
+                                  />
+                                  <Text
+                                    style={[
+                                      styles.cancelProductText,
+                                      { color: colors.deleteButton },
+                                    ]}
+                                  >
+                                    Cancel
+                                  </Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                          )}
+                          {product.status === "5" && (
+                            <TouchableOpacity
+                              style={[
+                                styles.cancelProductButton,
+                                { borderColor: colors.button },
+                              ]}
+                              onPress={() =>
+                                handleUpdateProductStatus(
+                                  product.consumer_cart_items_id,
+                                  product.status
+                                )
+                              }
+                            >
+                              <MaterialCommunityIcons
+                                name="undo"
+                                size={14}
+                                color={colors.button}
+                              />
+                              <Text
+                                style={[
+                                  styles.cancelProductText,
+                                  { color: colors.button },
+                                ]}
+                              >
+                                Revert
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </View>
+                    </View>
+                    {index < orderData.cart_products.length - 1 && (
+                      <Divider
+                        style={[
+                          styles.divider,
+                          { backgroundColor: colors.subInactiveColor },
+                        ]}
+                      />
+                    )}
+                  </View>
+                );
+              })}
+            </Card.Content>
+          </Card>
+
+          {/* Order Summary */}
+          <Card style={[styles.card, { backgroundColor: colors.primary }]}>
+            <Card.Content>
+              <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
+                Order Summary
+              </Text>
+              <View style={styles.summaryRow}>
                 <Text
-                  style={[
-                    styles.cancelButtonText,
-                    { color: colors.deleteButton },
-                  ]}
+                  style={[styles.summaryLabel, { color: colors.inactiveColor }]}
                 >
-                  Cancel Order
+                  Subtotal
                 </Text>
-              </TouchableOpacity>
-            )}
-            {allProductsDelivered && (
-              <View
-                style={[
-                  styles.actionButton,
-                  {
-                    backgroundColor: colors.button,
-                    borderColor: colors.button,
-                  },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={20}
-                  color="white"
-                />
-                <Text style={[styles.cancelButtonText, { color: "white" }]}>
-                  Order Completed
+                <Text
+                  style={[styles.summaryValue, { color: colors.textColor }]}
+                >
+                  AF {total}
                 </Text>
               </View>
-            )}
-          </View>
-        )}
+              <View style={styles.summaryRow}>
+                <Text
+                  style={[styles.summaryLabel, { color: colors.inactiveColor }]}
+                >
+                  Shipping
+                </Text>
+                <Text
+                  style={[styles.summaryValue, { color: colors.textColor }]}
+                >
+                  Free
+                </Text>
+              </View>
+              <Divider
+                style={[
+                  styles.divider,
+                  { backgroundColor: colors.subInactiveColor },
+                ]}
+              />
+              <View style={styles.totalRow}>
+                <Text style={[styles.totalLabel, { color: colors.textColor }]}>
+                  Total
+                </Text>
+                <Text style={[styles.totalValue, { color: colors.button }]}>
+                  AF {total}
+                </Text>
+              </View>
+            </Card.Content>
+          </Card>
+
+          {/* Shipping Address */}
+          <Card style={[styles.card, { backgroundColor: colors.primary }]}>
+            <Card.Content>
+              <View style={styles.addressHeader}>
+                <Text
+                  style={[styles.sectionTitle, { color: colors.textColor }]}
+                >
+                  Shipping Address
+                </Text>
+                <TouchableOpacity
+                  style={[styles.editButton, !coordinates && { opacity: 0.5 }]}
+                  onPress={() => {
+                    if (coordinates) {
+                      const { latitude, longitude } = coordinates;
+                      const url = `https://www.google.com/maps?q=${latitude},${longitude}`;
+                      Linking.openURL(url);
+                    }
+                  }}
+                  disabled={!coordinates}
+                >
+                  <MaterialCommunityIcons
+                    name="map-marker"
+                    size={18}
+                    color={colors.button}
+                  />
+                  <Text
+                    style={[styles.editButtonText, { color: colors.button }]}
+                  >
+                    Map
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View
+                style={[
+                  styles.addressBox,
+                  { backgroundColor: colors.background },
+                ]}
+              >
+                {orderData.order_details.billing_address_id &&
+                billingAddress ? (
+                  <>
+                    <Text
+                      style={[styles.addressName, { color: colors.textColor }]}
+                    >
+                      {billingAddress.name}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.addressText,
+                        { color: colors.inactiveColor },
+                      ]}
+                    >
+                      {billingAddress.address}
+                    </Text>
+                    <Text
+                      style={[styles.addressPhone, { color: colors.textColor }]}
+                    >
+                      {billingAddress.phone}
+                    </Text>
+                  </>
+                ) : (
+                  <Text
+                    style={[styles.addressName, { color: colors.textColor }]}
+                  >
+                    No billing address found
+                  </Text>
+                )}
+              </View>
+            </Card.Content>
+          </Card>
+
+          {/* Action Buttons */}
+          {!allProductsCancelled && (
+            <View style={styles.actionButtons}>
+              {allProductsInProcess && (
+                <TouchableOpacity
+                  style={[
+                    styles.actionButton,
+                    styles.cancelButton,
+                    {
+                      backgroundColor: colors.primary,
+                      borderColor: colors.deleteButton,
+                    },
+                  ]}
+                  activeOpacity={0.8}
+                  onPress={handleCancelOrder}
+                >
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={20}
+                    color={colors.deleteButton}
+                  />
+                  <Text
+                    style={[
+                      styles.cancelButtonText,
+                      { color: colors.deleteButton },
+                    ]}
+                  >
+                    Cancel Order
+                  </Text>
+                </TouchableOpacity>
+              )}
+              {allProductsDelivered && (
+                <View
+                  style={[
+                    styles.actionButton,
+                    {
+                      backgroundColor: colors.button,
+                      borderColor: colors.button,
+                    },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={20}
+                    color="white"
+                  />
+                  <Text style={[styles.cancelButtonText, { color: "white" }]}>
+                    Order Completed
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       {/* Alert Dialog */}
@@ -844,6 +860,7 @@ export default OrderDetails;
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16 },
+  contentContainer: { flex: 1, paddingBottom: 24 },
   loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 16, fontSize: 16 },
   errorContainer: {

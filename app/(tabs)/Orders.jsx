@@ -274,10 +274,7 @@ const Orders = () => {
             tintColor={colors.button}
           />
         }
-        contentContainerStyle={[
-          styles.listContentContainer,
-          filteredOrders.length === 0 && { flex: 1 },
-        ]}
+        contentContainerStyle={styles.listContentContainer}
         removeClippedSubviews={true}
         maxToRenderPerBatch={10}
         windowSize={10}
@@ -295,7 +292,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   listContentContainer: {
-    paddingBottom: 20,
+    paddingBottom: 30,
     flexGrow: 1,
   },
   emptyState: {

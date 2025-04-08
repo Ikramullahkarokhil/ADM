@@ -17,6 +17,7 @@ import {
   AntDesign,
   MaterialCommunityIcons,
   Feather,
+  FontAwesome,
 } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
@@ -66,7 +67,12 @@ const RatingStars = memo(({ rating, size = 16, color }) => {
         );
       } else if (i === fullStars && halfStar) {
         result.push(
-          <AntDesign key={i} name="starhalf" size={size} color={color} />
+          <FontAwesome
+            key={i}
+            name="star-half-empty"
+            size={size}
+            color={color}
+          />
         );
       } else {
         result.push(
@@ -441,7 +447,7 @@ const SellerProfile = () => {
           </View>
           <View style={styles.headerInfo}>
             <Text
-              style={[styles.sellerName, { color: "white" }]}
+              style={[styles.sellerName, { color: colors.buttonText }]}
               numberOfLines={1}
             >
               {seller.store_name}
@@ -449,18 +455,18 @@ const SellerProfile = () => {
             <View style={styles.ratingSection}>
               <RatingStars rating={parseFloat(average_rating)} color="yellow" />
               {average_rating ? (
-                <Text style={[styles.ratingText, { color: "white" }]}>
-                  {parseFloat(average_rating).toFixed(1)} / 5
+                <Text style={[styles.ratingText, { color: colors.buttonText }]}>
+                  {parseFloat(average_rating).toFixed(1)}
                 </Text>
               ) : (
-                <Text style={[styles.ratingText, { color: "white" }]}>
-                  0 / 5
+                <Text style={[styles.ratingText, { color: colors.buttonText }]}>
+                  0
                 </Text>
               )}
             </View>
             <View style={styles.ratingSection}>
-              <Text style={{ color: "white" }}>Since:</Text>
-              <Text style={[styles.ratingText, { color: "white" }]}>
+              <Text style={{ color: colors.buttonText }}>Since:</Text>
+              <Text style={[styles.ratingText, { color: colors.buttonText }]}>
                 {formatDate(seller.registration_date)}
               </Text>
             </View>
