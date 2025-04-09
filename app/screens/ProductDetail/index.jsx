@@ -1,5 +1,3 @@
-"use client";
-
 import {
   useEffect,
   useLayoutEffect,
@@ -384,48 +382,6 @@ const ReviewSection = memo(
               readOnly={!user}
               size={24}
             />
-
-            <View style={styles.ratingInfoContainer}>
-              <View style={styles.ratingInfoItem}>
-                <Text
-                  style={[
-                    styles.ratingInfoLabel,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  Current Rating
-                </Text>
-                <Text
-                  style={[
-                    styles.ratingInfoValue,
-                    { color: theme.colors.button },
-                  ]}
-                >
-                  {rating}
-                </Text>
-              </View>
-
-              <View style={styles.ratingDivider} />
-
-              <View style={styles.ratingInfoItem}>
-                <Text
-                  style={[
-                    styles.ratingInfoLabel,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  Your Rating
-                </Text>
-                <Text
-                  style={[
-                    styles.ratingInfoValue,
-                    { color: theme.colors.button },
-                  ]}
-                >
-                  {user ? `${rating}` : "Not rated"}
-                </Text>
-              </View>
-            </View>
           </View>
 
           {showLoginAlert && (
@@ -606,7 +562,7 @@ const ProductDetail = () => {
     setState((prev) => ({
       ...prev,
       hasProduct: true,
-      userRating: Math.floor(product.average_rating || 0),
+      userRating: product.average_rating || 0,
       isFavorite:
         favProducts?.some((item) => item.products_id === product.products_id) ||
         false,
@@ -1288,7 +1244,7 @@ const styles = StyleSheet.create({
     padding: 5, // Increase touch target
   },
   starIcon: {
-    marginRight: 4,
+    marginRight: 2,
   },
   ratingText: {
     marginLeft: 5,

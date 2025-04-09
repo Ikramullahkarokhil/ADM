@@ -15,9 +15,6 @@ import { useTheme } from "react-native-paper";
 import { useNavigation, useRouter } from "expo-router";
 import useThemeStore from "../../../components/store/useThemeStore";
 import useProductStore from "../../../components/api/useProductStore";
-import { useMemo } from "react";
-import { useFocusEffect } from "@react-navigation/native";
-import { Feather } from "@expo/vector-icons";
 
 // ProductItem component
 const ProductItem = ({ item, isDarkTheme, colors }) => {

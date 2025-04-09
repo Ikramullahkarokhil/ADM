@@ -1,7 +1,7 @@
 import React, {
+  useState,
   useEffect,
   useLayoutEffect,
-  useReducer,
   useCallback,
   useMemo,
   memo,
@@ -29,58 +29,6 @@ import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 
-// 1. Create a reducer for state management
-const initialState = {
-  loading: false,
-  refreshing: false,
-  categoriesWithSubCategories: [],
-  alertVisible: false,
-  isConnected: true,
-};
-
-function reducer(state, action) {
-  switch (action.type) {
-    case "FETCH_START":
-      return {
-        ...state,
-        loading: true,
-        refreshing: true,
-      };
-    case "FETCH_SUCCESS":
-      return {
-        ...state,
-        loading: false,
-        refreshing: false,
-        categoriesWithSubCategories: action.payload,
-      };
-    case "FETCH_ERROR":
-      return {
-        ...state,
-        loading: false,
-        refreshing: false,
-        categoriesWithSubCategories: [],
-      };
-    case "SET_CONNECTED":
-      return {
-        ...state,
-        isConnected: action.payload,
-      };
-    case "SHOW_ALERT":
-      return {
-        ...state,
-        alertVisible: true,
-      };
-    case "HIDE_ALERT":
-      return {
-        ...state,
-        alertVisible: false,
-      };
-    default:
-      return state;
-  }
-}
-
-// 2. Create a memoized Header component
 const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   return (
     <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
@@ -128,84 +76,63 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   );
 });
 
-// Main component
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [isConnected, setIsConnected] = useState(true);
+
   const { isDarkTheme } = useThemeStore();
   const { user, fetchMainPageData, cartItem } = useProductStore();
 
-  // Destructure state for readability
-  const {
-    loading,
-    refreshing,
-    categoriesWithSubCategories,
-    alertVisible,
-    isConnected,
-  } = state;
-
-  // Set navigation bar color
   useEffect(() => {
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
   }, [theme]);
 
-  // Hide header
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // Fetch categories data
   const fetchCategories = useCallback(async () => {
-    dispatch({ type: "FETCH_START" });
+    setLoading(true);
+    setRefreshing(true);
     try {
       const data = await fetchMainPageData();
-      dispatch({ type: "FETCH_SUCCESS", payload: data });
+      setCategories(data);
     } catch (err) {
       console.error("Failed to fetch data:", err);
-      dispatch({ type: "FETCH_ERROR" });
+      setCategories([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   }, [fetchMainPageData]);
 
-  // Monitor internet connectivity
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
-      const isConnectedNow = state.isConnected;
-      dispatch({ type: "SET_CONNECTED", payload: isConnectedNow });
-
-      // If internet reconnects and we don't have data, fetch data
-      if (isConnectedNow && categoriesWithSubCategories.length === 0) {
+      const connected = state.isConnected;
+      setIsConnected(connected);
+      if (connected && categories.length === 0) {
         fetchCategories();
       }
     });
 
     return () => unsubscribe();
-  }, [fetchCategories, categoriesWithSubCategories.length]);
+  }, [fetchCategories, categories.length]);
 
-  // Handle cart press
   const handleCartPress = useCallback(() => {
     if (!user?.consumer_id) {
-      dispatch({ type: "SHOW_ALERT" });
+      setAlertVisible(true);
     } else {
       router.navigate("/screens/Cart");
     }
-  }, [user, router]);
+  }, [user]);
 
-  // Handle alert dismiss
-  const handleAlertDismiss = useCallback(() => {
-    dispatch({ type: "HIDE_ALERT" });
-  }, []);
-
-  // Handle alert confirm
-  const handleAlertConfirm = useCallback(() => {
-    dispatch({ type: "HIDE_ALERT" });
-    navigation.navigate("Login");
-  }, [navigation]);
-
-  // Memoize cart item count
   const cartItemCount = useMemo(() => cartItem.length, [cartItem]);
 
-  // Optimize FlatList rendering
   const keyExtractor = useCallback(
     (item, index) => `category-${index}-${loading ? "skeleton" : "data"}`,
     [loading]
@@ -221,16 +148,6 @@ const Home = () => {
     [loading]
   );
 
-  const getItemLayout = useCallback(
-    (data, index) => ({
-      length: loading ? 150 : 250, // Approximate height of each item
-      offset: (loading ? 150 : 250) * index,
-      index,
-    }),
-    [loading]
-  );
-
-  // In your Home component's return statement:
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <Header
@@ -249,9 +166,8 @@ const Home = () => {
           />
         }
       >
-        {/* Categories list */}
         <FlatList
-          data={loading ? Array(6).fill(null) : categoriesWithSubCategories}
+          data={loading ? Array(6).fill(null) : categories}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
           numColumns={loading ? 2 : 1}
@@ -259,25 +175,27 @@ const Home = () => {
           contentContainerStyle={
             loading ? styles.skeletonContainer : styles.dataContainer
           }
-          getItemLayout={getItemLayout}
-          initialNumToRender={4}
-          maxToRenderPerBatch={4}
-          windowSize={5}
-          removeClippedSubviews={true}
-          scrollEnabled={false} // This is fine here as the parent ScrollView handles scrolling.
+          scrollEnabled={false}
         />
 
-        <NewArrivals />
-        <JustForYou />
-        <TopSellers />
+        {isConnected && (
+          <View>
+            <NewArrivals />
+            <JustForYou />
+            <TopSellers />
+          </View>
+        )}
       </ScrollView>
 
       <AlertDialog
         visible={alertVisible}
         title="Login Required"
         message="Please log in to access your cart."
-        onDismiss={handleAlertDismiss}
-        onConfirm={handleAlertConfirm}
+        onDismiss={() => setAlertVisible(false)}
+        onConfirm={() => {
+          setAlertVisible(false);
+          navigation.navigate("Login");
+        }}
         confirmText="Login"
         cancelText="Cancel"
       />
@@ -304,14 +222,12 @@ const styles = StyleSheet.create({
     left: 25,
     color: "white",
   },
-  productsListContent: { marginTop: 5 },
   logo: { height: 30, width: 120 },
   skeletonContainer: {
     marginTop: 50,
     marginHorizontal: 10,
   },
   dataContainer: {},
-  searchBar: {},
 });
 
 export default memo(Home);
