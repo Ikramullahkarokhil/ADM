@@ -143,7 +143,7 @@ const Comments = () => {
           page,
           limitData: 15,
         });
-        // Cache the result
+
         commentsCache.current[cacheKey] = data;
         setRetryCount(0);
         return data;

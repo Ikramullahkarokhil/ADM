@@ -132,7 +132,7 @@ const ProductItem = memo(
   }
 );
 
-const NewArrivals = () => {
+const NewArrivals = ({ data }) => {
   const router = useRouter();
   const { colors } = useTheme();
   const { fetchNewArrivals } = useProductStore();
@@ -152,7 +152,7 @@ const NewArrivals = () => {
     (productId) => {
       router.navigate({
         pathname: "/screens/ProductDetail",
-        params: { idFromFavorite: productId },
+        params: { id: productId },
       });
     },
     [router]
@@ -165,53 +165,32 @@ const NewArrivals = () => {
     });
   }, [router]);
 
-  const loadProducts = useCallback(
-    async (isRefreshing = false) => {
-      if (!isRefreshing) {
-        setLoading(true);
-      }
-      setError(null);
-
-      try {
-        const page = 1;
-        const response = await fetchNewArrivals(page);
-        if (response?.data) {
-          const formattedProducts = response.data.map((product) => ({
-            id: product.products_id.toString(),
-            name: product.title,
-            price: product.spu,
-            image: product.product_images?.[0] || null,
-          }));
-
-          // Only update state if products actually changed
-          setNewArrivalProducts((prev) => {
-            const prevIds = prev.map((p) => p.id);
-            const newIds = formattedProducts.map((p) => p.id);
-            if (JSON.stringify(prevIds) === JSON.stringify(newIds)) {
-              return prev;
-            }
-            return formattedProducts;
-          });
-        }
-      } catch (err) {
-        console.error("Error fetching new arrival products:", err);
-        setError("Failed to load products");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [fetchNewArrivals]
-  );
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadProducts(true);
-  }, [loadProducts]);
-
   useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+    try {
+      if (data?.data) {
+        const formattedProducts = data.data.map((product) => ({
+          id: product.products_id.toString(),
+          name: product.title,
+          price: product.spu,
+          image: product.product_images?.[0] || null,
+        }));
+
+        // Only update state if products actually changed
+        setNewArrivalProducts((prev) => {
+          const prevIds = prev.map((p) => p.id);
+          const newIds = formattedProducts.map((p) => p.id);
+          if (JSON.stringify(prevIds) === JSON.stringify(newIds)) {
+            return prev;
+          }
+          return formattedProducts;
+        });
+        setLoading(false);
+      }
+    } catch (err) {
+      console.error("Error fetching new arrival products:", err);
+      setError("Failed to load products");
+    }
+  }, [data]);
 
   const renderItem = useCallback(
     ({ item }) => {
@@ -253,7 +232,7 @@ const NewArrivals = () => {
     return [...newArrivalProducts, "viewAll"];
   }, [newArrivalProducts]);
 
-  if (loading && !refreshing) {
+  if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.primary }]}>
         <View style={styles.headerContainer}>
@@ -332,7 +311,6 @@ const NewArrivals = () => {
           index,
         })}
         refreshing={refreshing}
-        onRefresh={handleRefresh}
         ListEmptyComponent={renderEmptyComponent}
         extraData={isDarkTheme} // Ensure re-render when theme changes
       />

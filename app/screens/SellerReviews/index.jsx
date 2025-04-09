@@ -12,6 +12,7 @@ import { useLocalSearchParams, useNavigation, router } from "expo-router";
 import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
+import { StatusBar } from "expo-status-bar";
 
 // Pre-defined constants to avoid recreating arrays on each render
 const MONTHS = [
@@ -76,7 +77,7 @@ const EmptyReviews = memo(({ colors }) => (
 ));
 
 const ReviewsList = () => {
-  const { sellerId, title } = useLocalSearchParams();
+  const { sellerId, title, sellerName } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState([]);
@@ -88,10 +89,12 @@ const ReviewsList = () => {
   // Set navigation options
   useEffect(() => {
     navigation.setOptions({
-      headerTitle: title || "Customer Reviews",
-      headerShown: true,
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
+      headerTitle: sellerName || "Customer Reviews",
+      headerTintColor: colors.buttonText,
+      headerStyle: {
+        backgroundColor: colors.button,
+      },
+      headerShadowVisible: false,
     });
   }, [title, navigation, colors]);
 
@@ -193,16 +196,50 @@ const ReviewsList = () => {
       <View
         style={[styles.loadingContainer, { backgroundColor: colors.primary }]}
       >
-        <ActivityIndicator size="large" color={colors.button} />
-        <Text style={[styles.loadingText, { color: colors.textColor }]}>
-          Loading reviews...
-        </Text>
+        <View>
+          <StatusBar style="light" backgroundColor={colors.button} />
+          <Text
+            style={{
+              fontSize: 18,
+              padding: 10,
+              borderTopWidth: 0.4,
+              color: colors.buttonText,
+              backgroundColor: colors.button,
+              borderTopColor: colors.buttonText,
+            }}
+          >
+            {title}
+          </Text>
+        </View>
+        <View
+          style={{ justifyContent: "center", alignItems: "center", flex: 1 }}
+        >
+          <ActivityIndicator size="large" color={colors.button} />
+          <Text style={[styles.loadingText, { color: colors.button }]}>
+            Loading reviews...
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
+      <View>
+        <StatusBar style="light" backgroundColor={colors.button} />
+        <Text
+          style={{
+            fontSize: 18,
+            padding: 10,
+            borderTopWidth: 0.4,
+            color: colors.buttonText,
+            backgroundColor: colors.button,
+            borderTopColor: colors.buttonText,
+          }}
+        >
+          {title}
+        </Text>
+      </View>
       {reviews.length === 0 ? (
         <EmptyReviews colors={colors} />
       ) : (
@@ -253,8 +290,6 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
   loadingText: {
     marginTop: 16,

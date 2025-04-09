@@ -145,16 +145,14 @@ const SellerItem = memo(({ item, index, onPress, isDarkTheme }) => {
   );
 });
 
-const TopSellers = () => {
+const TopSellers = ({ data }) => {
   const router = useRouter();
   const { colors } = useTheme();
-  const { fetchTopSellers } = useProductStore();
   const { isDarkTheme } = useThemeStore();
   const { width } = useWindowDimensions();
   const [sellers, setSellers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
   const itemWidth = width > 550 ? width / 3 - 24 : width / 2 - 24;
 
@@ -177,43 +175,17 @@ const TopSellers = () => {
     });
   }, [router]);
 
-  const loadSellers = useCallback(
-    async (isRefreshing = false) => {
-      if (!isRefreshing) {
-        setLoading(true);
-      }
-      setError(null);
-
-      try {
-        const response = await fetchTopSellers();
-        if (response && response.data) {
-          setSellers(response.data);
-        }
-      } catch (err) {
-        console.error("Error fetching top sellers:", err);
-        setError("Failed to load top sellers");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [fetchTopSellers]
-  );
-
-  const handleRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadSellers(true);
-  }, [loadSellers]);
-
   useEffect(() => {
-    const fetchData = async () => {
-      const netState = await NetInfo.fetch();
-      if (netState.isConnected) {
-        loadSellers();
+    try {
+      if (data && data.data) {
+        setSellers(data.data);
+        setLoading(false);
       }
-    };
-    fetchData();
-  }, []);
+    } catch (err) {
+      console.error("Error fetching top sellers:", err);
+      setError("Failed to load top sellers");
+    }
+  }, [data]);
 
   const renderItem = useCallback(
     ({ item, index }) => {
@@ -260,7 +232,7 @@ const TopSellers = () => {
     return [...sellers, "viewAll"];
   }, [sellers]);
 
-  if (loading && !refreshing) {
+  if (loading) {
     return (
       <View style={[styles.container, { backgroundColor: colors.primary }]}>
         <View style={styles.headerContainer}>
@@ -343,8 +315,6 @@ const TopSellers = () => {
           offset: (itemWidth + 12) * index,
           index,
         })}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
         ListEmptyComponent={renderEmptyComponent}
       />
     </View>

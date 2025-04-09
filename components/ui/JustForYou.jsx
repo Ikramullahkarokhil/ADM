@@ -23,7 +23,7 @@ const ProductItem = ({ item, isDarkTheme, colors }) => {
         href={{
           pathname: `/screens/ProductDetail`,
           params: {
-            idFromFavorite: item.products_id,
+            id: item.products_id,
           },
         }}
         asChild
@@ -72,37 +72,29 @@ const ProductItem = ({ item, isDarkTheme, colors }) => {
   );
 };
 
-const JustForYou = () => {
+const JustForYou = ({ data }) => {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const numColumns = width > 550 ? 3 : 2;
   const { isDarkTheme } = useThemeStore();
-  const { fetchJustForYou } = useProductStore();
   const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
   const [products, setProducts] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
   const colors = theme.colors;
   const router = useRouter();
 
   // Fetch products on component mount
   useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const page = 1;
-        setLoading(true);
-        const response = await fetchJustForYou();
-        setProducts(response.data);
-        setHasMore(response.current_page < response.total_pages);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching just for you products:", error);
-        setLoading(false);
-      }
-    };
-
-    loadProducts();
-  }, [fetchJustForYou]);
+    try {
+      setLoading(true);
+      setProducts(data.data);
+      setTotal(data.total_rows);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error fetching just for you products:", error);
+      setLoading(false);
+    }
+  }, [data]);
 
   // Create a unique key extractor combining products_id and spu
   const keyExtractor = useCallback((item, index) => {
@@ -136,12 +128,18 @@ const JustForYou = () => {
         <Text style={[styles.header, { color: theme.colors.textColor }]}>
           Just For You
         </Text>
-        <Pressable style={styles.viewAllButton} onPress={handleViewAll}>
-          <Text style={[styles.viewAllText, { color: theme.colors.button }]}>
-            View All
-          </Text>
-          <Feather name="chevron-right" size={16} color={theme.colors.button} />
-        </Pressable>
+        {total > 10 && (
+          <Pressable style={styles.viewAllButton} onPress={handleViewAll}>
+            <Text style={[styles.viewAllText, { color: theme.colors.button }]}>
+              View All
+            </Text>
+            <Feather
+              name="chevron-right"
+              size={16}
+              color={theme.colors.button}
+            />
+          </Pressable>
+        )}
       </View>
 
       <FlatList

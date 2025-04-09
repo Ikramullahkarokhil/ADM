@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { Button, useTheme } from "react-native-paper";
+import { Button, useTheme, ActivityIndicator } from "react-native-paper";
 import Modal from "react-native-modal";
 
 const AlertDialog = ({
@@ -12,7 +12,19 @@ const AlertDialog = ({
   animationIn = "zoomIn",
   animationOut = "zoomOut",
 }) => {
+  const [loading, setLoading] = useState(false);
   const theme = useTheme();
+
+  // Handle button press by showing the loading indicator,
+  // waiting for a few seconds and then calling the onConfirm prop.
+  const handlePress = () => {
+    setLoading(true);
+    // Simulate a delay (e.g., 2 seconds)
+    setTimeout(() => {
+      setLoading(false);
+      onConfirm();
+    }, 2000);
+  };
 
   return (
     <Modal
@@ -20,7 +32,6 @@ const AlertDialog = ({
       animationIn={animationIn}
       animationOut={animationOut}
       backdropOpacity={0.1}
-      statusBarTranslucent
     >
       <View style={[styles.dialog, { backgroundColor: theme.colors.primary }]}>
         <Text style={[styles.title, { color: theme.colors.textColor }]}>
@@ -32,12 +43,19 @@ const AlertDialog = ({
         <View style={styles.buttonsContainer}>
           <Button
             mode="contained"
-            onPress={onConfirm}
+            onPress={handlePress}
             style={styles.button}
             buttonColor={theme.colors.button}
-            labelStyle={{ color: theme.colors.primary }}
+            labelStyle={{ color: theme.colors.buttonText }}
           >
-            {confirmText}
+            {loading ? (
+              <ActivityIndicator
+                animating={true}
+                color={theme.colors.buttonText}
+              />
+            ) : (
+              confirmText
+            )}
           </Button>
         </View>
       </View>
@@ -65,7 +83,7 @@ const styles = StyleSheet.create({
   },
   buttonsContainer: {
     flexDirection: "row",
-    justifyContent: "flex-end", // Align Refresh button to the right
+    justifyContent: "flex-end",
   },
   button: {
     marginLeft: 10,

@@ -186,11 +186,11 @@ const useProductStore = create(
         }
       },
 
-      searchFavoriteProduct: async (productId) => {
+      fetchProductDetails: async ({ productId, consumerId }) => {
         try {
           set({ loading: true, error: null });
-          const data = await get().apiRequest("/get-search-products", {
-            params: { products_id: productId },
+          const data = await get().apiRequest("/get-product-details", {
+            params: { products_id: productId, consumer_id: consumerId },
           });
           return data?.data || [];
         } catch (err) {

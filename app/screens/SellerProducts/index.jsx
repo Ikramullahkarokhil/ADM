@@ -15,6 +15,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import useThemeStore from "../../../components/store/useThemeStore";
+import { StatusBar } from "expo-status-bar";
 
 // Product Item component optimized with memo
 const ProductItem = memo(
@@ -70,7 +71,7 @@ const ProductItem = memo(
 );
 
 const ProductsList = () => {
-  const { sellerId, listType, title } = useLocalSearchParams();
+  const { sellerId, listType, title, sellerName } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -85,10 +86,12 @@ const ProductsList = () => {
   // Set navigation options
   useEffect(() => {
     navigation.setOptions({
-      headerTitle: title || "Products",
-      headerShown: true,
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
+      headerTitle: sellerName || "Products",
+      headerTintColor: colors.buttonText,
+      headerStyle: {
+        backgroundColor: colors.button,
+      },
+      headerShadowVisible: false,
     });
   }, [title, navigation, colors]);
 
@@ -172,7 +175,7 @@ const ProductsList = () => {
   const handleProductPress = useCallback((productId) => {
     router.push({
       pathname: "/screens/ProductDetail",
-      params: { idFromFavorite: productId },
+      params: { id: productId },
     });
   }, []);
 
@@ -182,10 +185,29 @@ const ProductsList = () => {
       <View
         style={[styles.loadingContainer, { backgroundColor: colors.primary }]}
       >
-        <ActivityIndicator size="large" color={colors.button} />
-        <Text style={[styles.loadingText, { color: colors.textColor }]}>
-          Loading products...
-        </Text>
+        <View>
+          <StatusBar style="light" backgroundColor={colors.button} />
+          <Text
+            style={{
+              fontSize: 18,
+              padding: 10,
+              borderTopWidth: 0.4,
+              color: colors.buttonText,
+              backgroundColor: colors.button,
+              borderTopColor: colors.buttonText,
+            }}
+          >
+            {title}
+          </Text>
+        </View>
+        <View
+          style={{ justifyContent: "center", alignItems: "center", flex: 1 }}
+        >
+          <ActivityIndicator size="large" color={colors.button} />
+          <Text style={[styles.loadingText, { color: colors.button }]}>
+            Loading products...
+          </Text>
+        </View>
       </View>
     );
   }
@@ -245,6 +267,20 @@ const ProductsList = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
+      <StatusBar style={"light"} backgroundColor={colors.button} />
+
+      <Text
+        style={{
+          fontSize: 18,
+          padding: 10,
+          borderTopWidth: 0.4,
+          color: colors.buttonText,
+          backgroundColor: colors.button,
+          borderTopColor: colors.buttonText,
+        }}
+      >
+        {title}
+      </Text>
       <FlatList
         data={products}
         keyExtractor={(item) => `product-${item.products_id}`}
@@ -288,8 +324,6 @@ const styles = StyleSheet.create({
   },
   loadingContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
   },
   loadingText: {
     marginTop: 16,

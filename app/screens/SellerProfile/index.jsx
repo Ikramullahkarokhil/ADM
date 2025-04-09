@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  memo,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -10,6 +17,7 @@ import {
   Image,
   TouchableOpacity,
   FlatList,
+  Animated,
 } from "react-native";
 import { useLocalSearchParams, useNavigation, router } from "expo-router";
 import {
@@ -182,19 +190,20 @@ const EmptyReviews = memo(({ colors }) => (
 
 // Section Header component
 const SectionHeader = memo(
-  ({ title, onShowAll, colors, displayNumberOfReviews }) => (
+  ({ title, onShowAll, colors, displayNumberOfReviews, count }) => (
     <View style={styles.sectionHeader}>
       <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
         {title}
         {displayNumberOfReviews ? ` (${displayNumberOfReviews})` : ""}
       </Text>
-
-      <TouchableOpacity onPress={onShowAll} style={{ flexDirection: "row" }}>
-        <Text style={[styles.showAllText, { color: colors.button }]}>
-          View All
-        </Text>
-        <Feather name="chevron-right" size={18} color={colors.button} />
-      </TouchableOpacity>
+      {(count > 10 || displayNumberOfReviews > 5) && (
+        <TouchableOpacity onPress={onShowAll} style={{ flexDirection: "row" }}>
+          <Text style={[styles.showAllText, { color: colors.button }]}>
+            View All
+          </Text>
+          <Feather name="chevron-right" size={18} color={colors.button} />
+        </TouchableOpacity>
+      )}
     </View>
   )
 );
@@ -210,6 +219,9 @@ const SellerProfile = () => {
     useProductStore();
   const { colors } = useTheme();
   const { isDarkTheme } = useThemeStore();
+
+  // Add this for the animated scroll
+  const scrollY = useRef(new Animated.Value(0)).current;
 
   // Set navigation options
   useEffect(() => {
@@ -278,12 +290,13 @@ const SellerProfile = () => {
   const handleProductPress = useCallback((productId) => {
     router.push({
       pathname: "/screens/ProductDetail",
-      params: { idFromFavorite: productId },
+      params: { id: productId },
     });
   }, []);
 
   const handleShowAll = useCallback(
     (type) => {
+      if (!sellerData || !user?.consumer_id) return;
       if (type === "newArrivals") {
         // Navigate to a screen showing all new arrivals or expand the list
         router.push({
@@ -292,6 +305,7 @@ const SellerProfile = () => {
             sellerId,
             listType: "newArrivals",
             title: "New Arrivals",
+            sellerName: sellerData?.seller.store_name,
           },
         });
       } else if (type === "allProducts") {
@@ -302,6 +316,7 @@ const SellerProfile = () => {
             sellerId,
             listType: "allProducts",
             title: "All Products",
+            sellerName: sellerData?.seller.store_name,
           },
         });
       } else if (type === "reviews") {
@@ -311,11 +326,12 @@ const SellerProfile = () => {
           params: {
             sellerId,
             title: "Customer Reviews",
+            sellerName: sellerData?.seller.store_name,
           },
         });
       }
     },
-    [sellerId]
+    [sellerId, sellerData]
   );
 
   // Memoized data
@@ -323,6 +339,11 @@ const SellerProfile = () => {
     if (!sellerData?.new_arrivals?.data) return [];
     return sellerData.new_arrivals.data;
   }, [sellerData?.new_arrivals?.data]);
+
+  const displayNewArrivalsCount = useMemo(() => {
+    if (!sellerData?.new_arrivals?.total) return [];
+    return sellerData.new_arrivals.total;
+  }, [sellerData?.new_arrivals]);
 
   const displayAllProducts = useMemo(() => {
     if (!sellerData?.all_products.data) return [];
@@ -416,14 +437,21 @@ const SellerProfile = () => {
   } = sellerData;
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.primary }]}
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.contentContainer}
-      removeClippedSubviews={Platform.OS === "android"}
-    >
-      {/* Header Section */}
-      <View style={styles.headerImageContainer}>
+    <View style={[styles.container, { backgroundColor: colors.primary }]}>
+      {/* Sticky Header Section */}
+      <Animated.View
+        style={[
+          styles.headerImageContainer,
+          {
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 999,
+            elevation: 5,
+          },
+        ]}
+      >
         <View
           style={[styles.headerGradient, { backgroundColor: colors.button }]}
         />
@@ -472,151 +500,177 @@ const SellerProfile = () => {
             </View>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
-      {/* Stats Section */}
-      <View style={styles.statsSection}>
-        {[
-          { label: "Followers", value: followers_count },
-          { label: "Visits", value: total_visits },
-          { label: "Products", value: all_products.total },
-        ].map((stat, index, array) => (
-          <React.Fragment key={stat.label}>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: colors.textColor }]}>
-                {stat.value}
-              </Text>
-              <Text style={[styles.statLabel, { color: colors.inactiveColor }]}>
-                {stat.label}
-              </Text>
-            </View>
-            {index < array.length - 1 && (
-              <View
-                style={[
-                  styles.statDivider,
-                  { backgroundColor: colors.subInactiveColor },
-                ]}
-              />
-            )}
-          </React.Fragment>
-        ))}
-      </View>
-
-      {/* Follow Button */}
-      <TouchableOpacity
+      <Animated.ScrollView
         style={[
-          styles.followButton,
-          {
-            backgroundColor: isFollowing ? colors.primary : colors.button,
-            borderColor: isFollowing ? colors.button : "transparent",
-            borderWidth: isFollowing ? 1 : 0,
-          },
+          styles.scrollView,
+          { backgroundColor: colors.primary, marginTop: 120 },
         ]}
-        onPress={handleFollowToggle}
-        activeOpacity={0.8}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.contentContainer}
+        removeClippedSubviews={Platform.OS === "android"}
+        scrollEventThrottle={16}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: false }
+        )}
       >
-        <AntDesign
-          name={isFollowing ? "check" : "plus"}
-          size={16}
-          color={isFollowing ? colors.button : colors.primary}
-          style={styles.followIcon}
-        />
-        <Text
+        {/* Empty space to account for the sticky header */}
+        <View style={{ height: 5 }} />
+
+        {/* Stats Section */}
+        <View style={styles.statsSection}>
+          {[
+            { label: "Followers", value: followers_count },
+            { label: "Visits", value: total_visits },
+            { label: "Products", value: all_products.total },
+          ].map((stat, index, array) => (
+            <React.Fragment key={stat.label}>
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, { color: colors.textColor }]}>
+                  {stat.value}
+                </Text>
+                <Text
+                  style={[styles.statLabel, { color: colors.inactiveColor }]}
+                >
+                  {stat.label}
+                </Text>
+              </View>
+              {index < array.length - 1 && (
+                <View
+                  style={[
+                    styles.statDivider,
+                    { backgroundColor: colors.subInactiveColor },
+                  ]}
+                />
+              )}
+            </React.Fragment>
+          ))}
+        </View>
+
+        {/* Follow Button */}
+        <TouchableOpacity
           style={[
-            styles.followButtonText,
-            { color: isFollowing ? colors.button : colors.primary },
+            styles.followButton,
+            {
+              backgroundColor: isFollowing ? colors.primary : colors.button,
+              borderColor: isFollowing ? colors.button : "transparent",
+              borderWidth: isFollowing ? 1 : 0,
+            },
+          ]}
+          onPress={handleFollowToggle}
+          activeOpacity={0.8}
+        >
+          <AntDesign
+            name={isFollowing ? "check" : "plus"}
+            size={16}
+            color={isFollowing ? colors.button : colors.primary}
+            style={styles.followIcon}
+          />
+          <Text
+            style={[
+              styles.followButtonText,
+              { color: isFollowing ? colors.button : colors.primary },
+            ]}
+          >
+            {isFollowing ? "Following" : "Follow"}
+          </Text>
+        </TouchableOpacity>
+
+        {/* New Arrivals Section */}
+        {displayNewArrivalsCount > 10 && (
+          <View style={[styles.section, { backgroundColor: colors.primary }]}>
+            <SectionHeader
+              title="New Arrivals"
+              onShowAll={() => handleShowAll("newArrivals")}
+              colors={colors}
+              count={sellerData.new_arrivals.total}
+            />
+
+            <View style={styles.productsGrid}>
+              {displayNewArrivals.map((product) => (
+                <ProductItem
+                  key={`new-arrival-${product.products_id}`}
+                  product={product}
+                  onPress={handleProductPress}
+                  colors={colors}
+                  isDarkTheme={isDarkTheme}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* All Products Section */}
+        {displayAllProducts.length > 0 && (
+          <View style={[styles.section, { backgroundColor: colors.primary }]}>
+            <SectionHeader
+              title="All Products"
+              onShowAll={() => handleShowAll("allProducts")}
+              colors={colors}
+              count={sellerData.all_products.total}
+            />
+
+            <View style={styles.productsGrid}>
+              {displayAllProducts.map((product) => (
+                <ProductItem
+                  key={`all-product-${product.products_id}`}
+                  product={product}
+                  onPress={handleProductPress}
+                  colors={colors}
+                  isDarkTheme={isDarkTheme}
+                />
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Reviews Section */}
+        <View
+          style={[
+            styles.section,
+            {
+              backgroundColor: colors.primary,
+              elevation: 5,
+              marginHorizontal: 16,
+            },
           ]}
         >
-          {isFollowing ? "Following" : "Follow"}
-        </Text>
-      </TouchableOpacity>
-
-      {/* New Arrivals Section */}
-      <View style={[styles.section, { backgroundColor: colors.primary }]}>
-        <SectionHeader
-          title="New Arrivals"
-          onShowAll={() => handleShowAll("newArrivals")}
-          colors={colors}
-        />
-
-        <View style={styles.productsGrid}>
-          {displayNewArrivals.map((product) => (
-            <ProductItem
-              key={`new-arrival-${product.products_id}`}
-              product={product}
-              onPress={handleProductPress}
-              colors={colors}
-              isDarkTheme={isDarkTheme}
-            />
-          ))}
-        </View>
-      </View>
-
-      {/* All Products Section */}
-      <View style={[styles.section, { backgroundColor: colors.primary }]}>
-        <SectionHeader
-          title="All Products"
-          onShowAll={() => handleShowAll("allProducts")}
-          colors={colors}
-        />
-
-        <View style={styles.productsGrid}>
-          {displayAllProducts.map((product) => (
-            <ProductItem
-              key={`all-product-${product.products_id}`}
-              product={product}
-              onPress={handleProductPress}
-              colors={colors}
-              isDarkTheme={isDarkTheme}
-            />
-          ))}
-        </View>
-      </View>
-
-      {/* Reviews Section */}
-      <View
-        style={[
-          styles.section,
-          {
-            backgroundColor: colors.primary,
-            elevation: 5,
-            marginHorizontal: 16,
-          },
-        ]}
-      >
-        <SectionHeader
-          title="Customer Reviews"
-          onShowAll={() => handleShowAll("reviews")}
-          colors={colors}
-          displayNumberOfReviews={displayNumberOfReviews}
-        />
-
-        {people_reviews.data.length > 0 ? (
-          <FlatList
-            data={displayReviews}
-            keyExtractor={(item, index) => `review-${index}`}
-            renderItem={({ item }) => (
-              <ReviewItem review={item} colors={colors} />
-            )}
-            ItemSeparatorComponent={() => (
-              <View
-                style={{
-                  borderBottomWidth: 0.5,
-                  borderBottomColor: colors.subInactiveColor,
-                  marginVertical: 8,
-                }}
-              />
-            )}
-            scrollEnabled={false}
-            initialNumToRender={3}
-            maxToRenderPerBatch={5}
-            removeClippedSubviews={Platform.OS === "android"}
+          <SectionHeader
+            title="Customer Reviews"
+            onShowAll={() => handleShowAll("reviews")}
+            colors={colors}
+            displayNumberOfReviews={displayNumberOfReviews}
           />
-        ) : (
-          <EmptyReviews colors={colors} />
-        )}
-      </View>
-    </ScrollView>
+
+          {people_reviews.data.length > 0 ? (
+            <FlatList
+              data={displayReviews}
+              keyExtractor={(item, index) => `review-${index}`}
+              renderItem={({ item }) => (
+                <ReviewItem review={item} colors={colors} />
+              )}
+              ItemSeparatorComponent={() => (
+                <View
+                  style={{
+                    borderBottomWidth: 0.5,
+                    borderBottomColor: colors.subInactiveColor,
+                    marginVertical: 8,
+                  }}
+                />
+              )}
+              scrollEnabled={false}
+              initialNumToRender={3}
+              maxToRenderPerBatch={5}
+              removeClippedSubviews={Platform.OS === "android"}
+            />
+          ) : (
+            <EmptyReviews colors={colors} />
+          )}
+        </View>
+      </Animated.ScrollView>
+    </View>
   );
 };
 
@@ -625,7 +679,13 @@ const styles = StyleSheet.create({
   // Layout containers
   container: {
     flex: 1,
+    position: "relative",
   },
+
+  scrollView: {
+    flex: 1,
+  },
+
   contentContainer: {
     paddingBottom: 20,
   },
@@ -663,9 +723,9 @@ const styles = StyleSheet.create({
 
   // Header styles
   headerImageContainer: {
-    position: "relative",
-    height: 120,
-    marginBottom: 5,
+    height: 110,
+    width: "100%",
+    backgroundColor: "transparent",
   },
   headerGradient: {
     position: "absolute",

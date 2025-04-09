@@ -301,7 +301,7 @@ const FavoriteProductPage = () => {
           <Link
             href={{
               pathname: "/screens/ProductDetail",
-              params: { idFromFavorite: item.products_id },
+              params: { id: item.products_id },
             }}
             asChild
           >

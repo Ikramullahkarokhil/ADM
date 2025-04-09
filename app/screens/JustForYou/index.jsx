@@ -24,7 +24,7 @@ const ProductItem = ({ item, isDarkTheme, colors }) => {
     router.navigate({
       pathname: "/screens/ProductDetail",
       params: {
-        idFromFavorite: item.products_id,
+        id: item.products_id,
       },
     });
   };

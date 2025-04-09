@@ -1,5 +1,3 @@
-"use client";
-
 import {
   useReducer,
   useEffect,

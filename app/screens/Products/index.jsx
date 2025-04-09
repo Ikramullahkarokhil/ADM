@@ -53,8 +53,7 @@ const ProductItem = memo(
           href={{
             pathname: "/screens/ProductDetail",
             params: {
-              subcategoryId: item.categories_id,
-              categoryProductId: item.products_id,
+              id: item.products_id,
             },
           }}
           asChild

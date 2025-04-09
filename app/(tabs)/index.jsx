@@ -30,16 +30,18 @@ import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 
 const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
+  // Memoize logo source to prevent unnecessary re-renders
+  const logoSource = useMemo(
+    () =>
+      !isDarkTheme
+        ? require("../../assets/images/darkLogo.png")
+        : require("../../assets/images/lightLogo.png"),
+    [isDarkTheme]
+  );
+
   return (
     <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-      <Image
-        source={
-          !isDarkTheme
-            ? require("../../assets/images/darkLogo.png")
-            : require("../../assets/images/lightLogo.png")
-        }
-        style={styles.logo}
-      />
+      <Image source={logoSource} style={styles.logo} />
       <View style={styles.iconsContainer}>
         <Link asChild href={{ pathname: "/Search" }}>
           <IconButton
@@ -76,52 +78,127 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   );
 });
 
+// Separate the content sections to allow for better performance optimization
+const ContentSections = memo(({ newArrivals, justForYou, topSellers }) => {
+  return (
+    <View>
+      <NewArrivals data={newArrivals} />
+      <JustForYou data={justForYou} />
+      <TopSellers data={topSellers} />
+    </View>
+  );
+});
+
+// Separate the categories section for better performance
+const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
+  const renderItem = useCallback(
+    ({ item }) =>
+      loading ? (
+        <CategoriesSkeleton />
+      ) : (
+        <CategoriesSectionList data={[item]} />
+      ),
+    [loading]
+  );
+
+  return (
+    <FlatList
+      data={loading ? Array(6).fill(null) : categories}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      numColumns={loading ? 2 : 1}
+      key={loading ? "skeleton" : "data"}
+      contentContainerStyle={
+        loading ? styles.skeletonContainer : styles.dataContainer
+      }
+      scrollEnabled={false}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={5}
+      windowSize={5}
+      initialNumToRender={3}
+    />
+  );
+});
+
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState([]);
+  const [justForYou, setJustForYou] = useState([]);
+  const [newArrivals, setNewArrivals] = useState([]);
+  const [topSellers, setTopSellers] = useState([]);
   const [alertVisible, setAlertVisible] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
 
   const { isDarkTheme } = useThemeStore();
-  const { user, fetchMainPageData, cartItem } = useProductStore();
+  const {
+    user,
+    fetchMainPageData,
+    cartItem,
+    fetchJustForYou,
+    fetchNewArrivals,
+    fetchTopSellers,
+  } = useProductStore();
 
+  // Set navigation bar color only when theme changes
   useEffect(() => {
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-  }, [theme]);
+  }, [theme.colors.primary]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  const fetchCategories = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setRefreshing(true);
+
     try {
-      const data = await fetchMainPageData();
-      setCategories(data);
+      // Fetch and update categories first
+      const categoriesData = await fetchMainPageData();
+      setCategories(categoriesData);
+
+      // Then fire off other fetch calls without waiting for them to complete
+      fetchNewArrivals(1)
+        .then((newArrivalsData) => {
+          setNewArrivals(newArrivalsData);
+        })
+        .catch((err) => console.error("New Arrivals fetch error:", err));
+
+      fetchJustForYou()
+        .then((justForYouData) => {
+          setJustForYou(justForYouData);
+        })
+        .catch((err) => console.error("Just For You fetch error:", err));
+
+      fetchTopSellers()
+        .then((topSellersData) => {
+          setTopSellers(topSellersData);
+        })
+        .catch((err) => console.error("Top Sellers fetch error:", err));
     } catch (err) {
-      console.error("Failed to fetch data:", err);
+      console.error("Failed to fetch categories:", err);
       setCategories([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchMainPageData]);
+  }, [fetchMainPageData, fetchNewArrivals, fetchJustForYou, fetchTopSellers]);
 
+  // Network connectivity monitoring
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) => {
       const connected = state.isConnected;
       setIsConnected(connected);
       if (connected && categories.length === 0) {
-        fetchCategories();
+        fetchData();
       }
     });
 
     return () => unsubscribe();
-  }, [fetchCategories, categories.length]);
+  }, [fetchData, categories.length]);
 
   const handleCartPress = useCallback(() => {
     if (!user?.consumer_id) {
@@ -138,14 +215,16 @@ const Home = () => {
     [loading]
   );
 
-  const renderItem = useCallback(
-    ({ item }) =>
-      loading ? (
-        <CategoriesSkeleton />
-      ) : (
-        <CategoriesSectionList data={[item]} />
-      ),
-    [loading]
+  // Memoize the refresh control to prevent unnecessary re-renders
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={fetchData}
+        colors={[theme.colors.button]}
+      />
+    ),
+    [refreshing, fetchData, theme.colors.button]
   );
 
   return (
@@ -157,33 +236,19 @@ const Home = () => {
         onCartPress={handleCartPress}
       />
 
-      <ScrollView
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={fetchCategories}
-            colors={[theme.colors.button]}
-          />
-        }
-      >
-        <FlatList
-          data={loading ? Array(6).fill(null) : categories}
-          renderItem={renderItem}
+      <ScrollView refreshControl={refreshControl}>
+        <CategoriesSection
+          loading={loading}
+          categories={categories}
           keyExtractor={keyExtractor}
-          numColumns={loading ? 2 : 1}
-          key={loading ? "skeleton" : "data"}
-          contentContainerStyle={
-            loading ? styles.skeletonContainer : styles.dataContainer
-          }
-          scrollEnabled={false}
         />
 
         {isConnected && (
-          <View>
-            <NewArrivals />
-            <JustForYou />
-            <TopSellers />
-          </View>
+          <ContentSections
+            newArrivals={newArrivals}
+            justForYou={justForYou}
+            topSellers={topSellers}
+          />
         )}
       </ScrollView>
 

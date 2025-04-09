@@ -35,50 +35,54 @@ import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import RelatedProducts from "../../../components/ui/RelatedProducts";
 import ProductDetailSkeleton from "../../../components/skeleton/ProductDetailsSkeleton";
+import { StatusBar } from "expo-status-bar";
 
 const { width: screenWidth } = Dimensions.get("window");
 
-// 1. Extract Alert state and logic into a custom hook
+// Custom hook for alert dialog
 const useAlertDialog = () => {
-  const [alertState, setAlertState] = useState({
-    visible: false,
-    title: "",
-    message: "",
-    confirmText: "Ok",
-    confirmAction: () => {},
-  });
+  const [visible, setVisible] = useState(false);
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [confirmText, setConfirmText] = useState("Ok");
+  const [confirmAction, setConfirmAction] = useState(
+    () => () => setVisible(false)
+  );
 
   const showAlert = useCallback(
     (
-      title,
-      message,
-      confirmAction = () =>
-        setAlertState((prev) => ({ ...prev, visible: false })),
-      confirmText = "Ok"
+      newTitle,
+      newMessage,
+      newConfirmAction = () => setVisible(false),
+      newConfirmText = "Ok"
     ) => {
-      setAlertState({
-        visible: true,
-        title,
-        message,
-        confirmAction,
-        confirmText,
-      });
+      setTitle(newTitle);
+      setMessage(newMessage);
+      setConfirmAction(() => newConfirmAction);
+      setConfirmText(newConfirmText);
+      setVisible(true);
     },
     []
   );
 
   const hideAlert = useCallback(() => {
-    setAlertState((prev) => ({ ...prev, visible: false }));
+    setVisible(false);
   }, []);
 
   return {
-    alertState,
+    alertState: {
+      visible,
+      title,
+      message,
+      confirmText,
+      confirmAction,
+    },
     showAlert,
     hideAlert,
   };
 };
 
-// 2. Enhanced Rating component with animations
+// Enhanced Rating component with animations
 const ProductRating = memo(
   ({ rating, colors, onRateProduct, readOnly, size }) => {
     // Animation values for each star
@@ -141,7 +145,7 @@ const ProductRating = memo(
   }
 );
 
-// 3. Extract ProductImages component
+// Product Images component
 const ProductImages = memo(({ images, isDarkTheme }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
 
@@ -181,7 +185,7 @@ const ProductImages = memo(({ images, isDarkTheme }) => {
             style={[
               styles.dot,
               currentSlide === index && {
-                backgroundColor: "#007AFF", // Will be themed in parent
+                backgroundColor: "#007AFF",
                 width: 10,
                 height: 10,
               },
@@ -193,7 +197,7 @@ const ProductImages = memo(({ images, isDarkTheme }) => {
   );
 });
 
-// 4. Extract ProductActions component
+// Product Actions component
 const ProductActions = memo(
   ({
     product,
@@ -241,7 +245,85 @@ const ProductActions = memo(
   }
 );
 
-// 5. Extract QuestionSection component
+// Question Item component
+const QuestionItem = memo(({ item, theme }) => (
+  <View
+    style={[
+      styles.questionItem,
+      {
+        backgroundColor: theme.colors.primary,
+        borderBottomColor: theme.colors.subInactiveColor,
+      },
+    ]}
+  >
+    <View style={styles.questionHeader}>
+      <Image
+        source={
+          item.online_image_url
+            ? { uri: item.online_image_url }
+            : require("../../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.questionUserPhoto}
+      />
+      <View style={styles.questionTitleContainer}>
+        <Text
+          style={[styles.questionAuthor, { color: theme.colors.textColor }]}
+        >
+          {item.consumer_name || "Anonymous"}
+        </Text>
+        <Text
+          style={[styles.questionDate, { color: theme.colors.inactiveColor }]}
+        >
+          {item.date}
+        </Text>
+      </View>
+    </View>
+    <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
+      {item.question}
+    </Text>
+    {item.answers && item.answers.length > 0 && (
+      <View style={styles.answersContainer}>
+        {item.answers.map((ans) => (
+          <View
+            key={`${item.products_qna_id}_${ans.products_ana_id}`}
+            style={styles.answerItem}
+          >
+            <Image
+              source={require("../../../assets/images/imageSkeleton.jpg")}
+              style={styles.answerSellerPhoto}
+            />
+            <View style={styles.answerContent}>
+              <Text
+                style={[
+                  styles.answerSellerName,
+                  { color: theme.colors.textColor },
+                ]}
+                numberOfLines={1}
+              >
+                {ans.seller_name}
+              </Text>
+              <Text
+                style={[
+                  styles.answerDate,
+                  { color: theme.colors.inactiveColor },
+                ]}
+              >
+                {ans.date}
+              </Text>
+              <Text
+                style={[styles.answerText, { color: theme.colors.textColor }]}
+              >
+                {ans.answer}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </View>
+    )}
+  </View>
+));
+
+// Question Section component
 const QuestionSection = memo(
   ({
     questions,
@@ -264,7 +346,7 @@ const QuestionSection = memo(
         <Text
           style={[styles.questionsTitle, { color: theme.colors.textColor }]}
         >
-          Product Questions {!totalQuestions === 0 && `(${totalQuestions})`}
+          Product Questions {totalQuestions > 0 && `(${totalQuestions})`}
         </Text>
 
         {displayedQuestions.length > 0 ? (
@@ -313,11 +395,12 @@ const QuestionSection = memo(
   }
 );
 
-// 6. Enhanced ReviewSection component with better UI
+// Review Section component
 const ReviewSection = memo(
   ({ user, theme, productId, rating, onRateProduct }) => {
     const [showLoginAlert, setShowLoginAlert] = useState(false);
     const fadeAnim = useMemo(() => new Animated.Value(0), []);
+    const router = useRouter();
 
     // Animate the review section when it appears
     useEffect(() => {
@@ -411,46 +494,27 @@ const ReviewSection = memo(
   }
 );
 
-// Main component (significantly reduced in size)
+// Main component
 const ProductDetail = () => {
-  const { id, categoryProductId, idFromFavorite } = useLocalSearchParams();
+  const { id } = useLocalSearchParams();
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();
   const { showActionSheetWithOptions } = useActionSheet();
   const { isDarkTheme } = useThemeStore();
 
-  // Use useReducer for complex state management
-  const [state, setState] = useState({
-    isFavorite: false,
-    isFavoriting: false,
-    isAddingToCart: false,
-    questions: [],
-    totalQuestions: 0,
-    totalComments: 0,
-    refreshing: false,
-    hasProduct: false,
-    userRating: 0,
-    favoriteProduct: null,
-    isLoading: false,
-    relatedProducts: null,
-  });
-
-  // Destructure state for readability
-  const {
-    isFavorite,
-    isFavoriting,
-    isAddingToCart,
-    questions,
-    totalQuestions,
-    totalComments,
-    refreshing,
-    hasProduct,
-    userRating,
-    favoriteProduct,
-    isLoading,
-    relatedProducts,
-  } = state;
+  // Separate state variables for better readability
+  const [product, setProduct] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavoriting, setIsFavoriting] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [userRating, setUserRating] = useState(0);
+  const [questions, setQuestions] = useState([]);
+  const [totalQuestions, setTotalQuestions] = useState(0);
+  const [totalComments, setTotalComments] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState(null);
 
   // Use custom hook for alert dialog
   const { alertState, showAlert, hideAlert } = useAlertDialog();
@@ -459,7 +523,6 @@ const ProductDetail = () => {
     user,
     addToFavorite,
     removeFavorite,
-    productData,
     favProducts,
     addToCart,
     cartItem,
@@ -468,29 +531,10 @@ const ProductDetail = () => {
     deleteProductQuestion,
     productQuestions,
     productComments,
-    searchFavoriteProduct,
+    fetchProductDetails,
     fetchRelatedProducts,
     rateProduct,
   } = useProductStore();
-
-  // Memoize product map to avoid recalculation
-  const productMap = useMemo(() => {
-    return productData.reduce((map, product) => {
-      map[product.products_id.toString()] = product;
-      return map;
-    }, {});
-  }, [productData]);
-
-  // Memoize product to avoid recalculation
-  const product = useMemo(() => {
-    const searchId = id || categoryProductId;
-    if (searchId) {
-      return productMap[searchId.toString()] || null;
-    } else if (favoriteProduct) {
-      return favoriteProduct;
-    }
-    return null;
-  }, [id, categoryProductId, productMap, favoriteProduct]);
 
   // Memoize isInCart to avoid recalculation
   const isInCart = useMemo(() => {
@@ -500,48 +544,72 @@ const ProductDetail = () => {
     );
   }, [cartItem, product]);
 
-  // Fetch product details if navigated from favorite page
-  useEffect(() => {
-    if (!idFromFavorite) return;
+  // Fetch product details
+  const fetchProduct = useCallback(async () => {
+    if (!id) return;
 
-    const fetchFavoriteProduct = async () => {
-      setState((prev) => ({ ...prev, isLoading: true }));
+    setIsLoading(true);
 
-      try {
-        const favoriteProductResult = await searchFavoriteProduct(
-          idFromFavorite
-        );
+    try {
+      const response = await fetchProductDetails({
+        productId: id,
+        consumerId: user?.consumer_id,
+      });
 
-        const favoriteProduct =
-          Array.isArray(favoriteProductResult) &&
-          favoriteProductResult.length > 0
-            ? favoriteProductResult[0]
-            : favoriteProductResult;
+      const productData = response.data;
 
-        if (favoriteProduct) {
-          setState((prev) => ({
-            ...prev,
-            hasProduct: true,
-            favoriteProduct: !productMap[favoriteProduct.products_id.toString()]
-              ? favoriteProduct
-              : null,
-          }));
-        } else {
-          showAlert("Error", "Product not found in favorites.");
-        }
-      } catch (err) {
-        console.error("Error fetching favorite product:", err);
-        showAlert(
-          "Error",
-          "Failed to fetch product details: " + (err.message || err)
-        );
-      } finally {
-        setState((prev) => ({ ...prev, isLoading: false }));
+      if (productData) {
+        setProduct(productData);
+        setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
+        setUserRating(productData.average_rating || 0);
       }
-    };
+    } catch (err) {
+      console.error("Error fetching product:", err);
+      showAlert(
+        "Error",
+        "Failed to fetch product details: " + (err.message || err)
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, user, fetchProductDetails, showAlert]);
 
-    fetchFavoriteProduct();
-  }, [idFromFavorite, searchFavoriteProduct, showAlert, productMap]);
+  // Fetch questions and related products
+  const fetchAdditionalData = useCallback(async () => {
+    if (!product) return;
+
+    try {
+      const [questionData, relatedProductsData] = await Promise.all([
+        getProductQuestionList(product.products_id),
+        fetchRelatedProducts(product.products_id),
+      ]);
+
+      setQuestions((questionData.questions || []).slice(0, 2));
+      setRelatedProducts(
+        relatedProductsData.length > 0 ? relatedProductsData : null
+      );
+    } catch (err) {
+      console.error("Error fetching additional data:", err);
+    }
+  }, [product, getProductQuestionList, fetchRelatedProducts]);
+
+  // Initial data loading
+  useEffect(() => {
+    fetchProduct();
+  }, [fetchProduct]);
+
+  // Load additional data when product is available
+  useEffect(() => {
+    if (product) {
+      fetchAdditionalData();
+    }
+  }, [product, fetchAdditionalData]);
+
+  // Update counts when they change
+  useEffect(() => {
+    setTotalQuestions(productQuestions);
+    setTotalComments(productComments);
+  }, [productQuestions, productComments]);
 
   // Update header
   useLayoutEffect(() => {
@@ -552,70 +620,18 @@ const ProductDetail = () => {
     });
   }, [navigation, product, theme]);
 
-  // Consolidated useEffect for product data updates
-  useEffect(() => {
-    if (!product) {
-      setState((prev) => ({ ...prev, hasProduct: false }));
-      return;
-    }
-
-    setState((prev) => ({
-      ...prev,
-      hasProduct: true,
-      userRating: product.average_rating || 0,
-      isFavorite:
-        favProducts?.some((item) => item.products_id === product.products_id) ||
-        false,
-    }));
-
-    // Fetch questions
-    const fetchQuestions = async () => {
-      try {
-        const [questionData, relatedProduct] = await Promise.all([
-          getProductQuestionList(product.products_id),
-          fetchRelatedProducts(product.products_id),
-        ]);
-
-        setState((prev) => ({
-          ...prev,
-          relatedProducts: relatedProduct.length > 0 ? relatedProduct : null,
-          questions: (questionData.questions || []).slice(0, 2),
-        }));
-      } catch (err) {
-        console.error("Error fetching data:", err);
-      }
-    };
-
-    fetchQuestions();
-  }, [product, favProducts, getProductQuestionList]);
-
-  // Update counts when they change
-  useEffect(() => {
-    setState((prev) => ({
-      ...prev,
-      totalQuestions: productQuestions,
-      totalComments: productComments,
-    }));
-  }, [productQuestions, productComments]);
-
   // Refresh questions
   const onRefresh = useCallback(async () => {
     if (!product) return;
-
-    setState((prev) => ({ ...prev, refreshing: true }));
-
+    setRefreshing(true);
     try {
-      const questionData = await getProductQuestionList(product.products_id);
-      setState((prev) => ({
-        ...prev,
-        questions: (questionData.questions || []).slice(0, 2),
-      }));
+      Promise.all([fetchProduct(), fetchAdditionalData()]);
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
-      setState((prev) => ({ ...prev, refreshing: false }));
+      setRefreshing(false);
     }
-  }, [product, getProductQuestionList]);
+  }, []);
 
   // Add to cart handler
   const handleAddToCart = useCallback(async () => {
@@ -641,7 +657,7 @@ const ProductDetail = () => {
     }
 
     try {
-      setState((prev) => ({ ...prev, isAddingToCart: true }));
+      setIsAddingToCart(true);
 
       await addToCart({
         productID: product.products_id,
@@ -652,7 +668,7 @@ const ProductDetail = () => {
     } catch (err) {
       showAlert("Error", err.message || "Failed to add to cart");
     } finally {
-      setState((prev) => ({ ...prev, isAddingToCart: false }));
+      setIsAddingToCart(false);
     }
   }, [product, user, isInCart, addToCart, showAlert, navigation, router]);
 
@@ -680,13 +696,9 @@ const ProductDetail = () => {
     if (!user) return navigation.navigate("Login");
     if (isFavoriting || !product) return;
 
-    setState((prev) => ({
-      ...prev,
-      isFavoriting: true,
-      isFavorite: !prev.isFavorite,
-    }));
-
     const previousFavorite = isFavorite;
+    setIsFavoriting(true);
+    setIsFavorite(!previousFavorite);
 
     try {
       if (!previousFavorite) {
@@ -714,10 +726,10 @@ const ProductDetail = () => {
         }
       }
     } catch (err) {
-      setState((prev) => ({ ...prev, isFavorite: previousFavorite }));
+      setIsFavorite(previousFavorite);
       showAlert("Error", err.message || "Failed to update favorite");
     } finally {
-      setState((prev) => ({ ...prev, isFavoriting: false }));
+      setIsFavoriting(false);
     }
   }, [
     user,
@@ -737,22 +749,18 @@ const ProductDetail = () => {
       if (!user || !product) return;
 
       const previousRating = userRating;
-      setState((prev) => ({ ...prev, userRating: rating }));
+      setUserRating(rating);
 
       try {
-        if (user) {
-          await rateProduct({
-            productId: product.products_id,
-            consumerId: user.consumer_id,
-            rating,
-          });
+        await rateProduct({
+          productId: product.products_id,
+          consumerId: user.consumer_id,
+          rating,
+        });
 
-          ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
-        } else {
-          ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
-        }
+        ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
       } catch (err) {
-        setState((prev) => ({ ...prev, userRating: previousRating }));
+        setUserRating(previousRating);
         showAlert("Error", err.message || "Failed to update rating");
       }
     },
@@ -779,11 +787,8 @@ const ProductDetail = () => {
 
         const updatedData = await getProductQuestionList(product.products_id);
 
-        setState((prev) => ({
-          ...prev,
-          questions: updatedData.questions || [],
-          totalQuestions: updatedData.total || 0,
-        }));
+        setQuestions(updatedData.questions || []);
+        setTotalQuestions(updatedData.total || 0);
 
         ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
       } catch (err) {
@@ -839,8 +844,13 @@ const ProductDetail = () => {
     ]
   );
 
-  if (isLoading && idFromFavorite) {
-    return <ProductDetailSkeleton />;
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1 }}>
+        <StatusBar style={isDarkTheme ? "light" : "dark"} />
+        <ProductDetailSkeleton />
+      </View>
+    );
   }
 
   if (error) {
@@ -898,6 +908,8 @@ const ProductDetail = () => {
 
   return (
     <View style={styles.mainContainer}>
+      <StatusBar style={isDarkTheme ? "light" : "dark"} />
+
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -908,7 +920,7 @@ const ProductDetail = () => {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {/* Image Carousel - Extracted to component */}
+        {/* Image Carousel */}
         <ProductImages
           images={product.product_images}
           isDarkTheme={isDarkTheme}
@@ -952,7 +964,7 @@ const ProductDetail = () => {
             </Pressable>
           </View>
 
-          {/* Rating - Extracted to component */}
+          {/* Rating */}
           <ProductRating
             rating={userRating}
             colors={theme.colors}
@@ -1048,7 +1060,7 @@ const ProductDetail = () => {
             </Pressable>
           </Link>
 
-          {/* Product Actions - Extracted to component */}
+          {/* Product Actions */}
           <ProductActions
             product={product}
             isInCart={isInCart}
@@ -1059,6 +1071,7 @@ const ProductDetail = () => {
           />
         </View>
 
+        {/* Review Section */}
         <ReviewSection
           user={user}
           theme={theme}
@@ -1067,7 +1080,7 @@ const ProductDetail = () => {
           onRateProduct={handleRate}
         />
 
-        {/* Questions Section - Extracted to component */}
+        {/* Questions Section */}
         <QuestionSection
           questions={questions}
           totalQuestions={totalQuestions}
@@ -1078,6 +1091,7 @@ const ProductDetail = () => {
           router={router}
         />
 
+        {/* Related Products */}
         {relatedProducts && (
           <RelatedProducts relatedProducts={relatedProducts} />
         )}
@@ -1099,84 +1113,6 @@ const ProductDetail = () => {
     </View>
   );
 };
-
-// QuestionItem component (unchanged)
-const QuestionItem = memo(({ item, theme }) => (
-  <View
-    style={[
-      styles.questionItem,
-      {
-        backgroundColor: theme.colors.primary,
-        borderBottomColor: theme.colors.subInactiveColor,
-      },
-    ]}
-  >
-    <View style={styles.questionHeader}>
-      <Image
-        source={
-          item.online_image_url
-            ? { uri: item.online_image_url }
-            : require("../../../assets/images/imageSkeleton.jpg")
-        }
-        style={styles.questionUserPhoto}
-      />
-      <View style={styles.questionTitleContainer}>
-        <Text
-          style={[styles.questionAuthor, { color: theme.colors.textColor }]}
-        >
-          {item.consumer_name || "Anonymous"}
-        </Text>
-        <Text
-          style={[styles.questionDate, { color: theme.colors.inactiveColor }]}
-        >
-          {item.date}
-        </Text>
-      </View>
-    </View>
-    <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
-      {item.question}
-    </Text>
-    {item.answers && item.answers.length > 0 && (
-      <View style={styles.answersContainer}>
-        {item.answers.map((ans) => (
-          <View
-            key={`${item.products_qna_id}_${ans.products_ana_id}`}
-            style={styles.answerItem}
-          >
-            <Image
-              source={require("../../../assets/images/imageSkeleton.jpg")}
-              style={styles.answerSellerPhoto}
-            />
-            <View style={styles.answerContent}>
-              <Text
-                style={[
-                  styles.answerSellerName,
-                  { color: theme.colors.textColor },
-                ]}
-                numberOfLines={1}
-              >
-                {ans.seller_name}
-              </Text>
-              <Text
-                style={[
-                  styles.answerDate,
-                  { color: theme.colors.inactiveColor },
-                ]}
-              >
-                {ans.date}
-              </Text>
-              <Text
-                style={[styles.answerText, { color: theme.colors.textColor }]}
-              >
-                {ans.answer}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </View>
-    )}
-  </View>
-));
 
 const styles = StyleSheet.create({
   container: {
@@ -1241,7 +1177,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   starButton: {
-    padding: 5, // Increase touch target
+    padding: 5,
   },
   starIcon: {
     marginRight: 2,
@@ -1400,7 +1336,6 @@ const styles = StyleSheet.create({
     marginLeft: 5,
     fontWeight: "bold",
   },
-  // Enhanced review section styles
   reviewSection: {
     padding: 20,
     borderRadius: 20,
@@ -1433,29 +1368,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginBottom: 16,
     textAlign: "center",
-  },
-  ratingInfoContainer: {
-    flexDirection: "row",
-    width: "100%",
-    marginTop: 20,
-    justifyContent: "space-around",
-    alignItems: "center",
-  },
-  ratingInfoItem: {
-    alignItems: "center",
-  },
-  ratingInfoLabel: {
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  ratingInfoValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  ratingDivider: {
-    height: 40,
-    width: 1,
-    backgroundColor: "#ddd",
   },
   loginAlertContainer: {
     marginTop: 20,

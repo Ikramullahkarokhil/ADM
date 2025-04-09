@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Pressable,
   useWindowDimensions,
+  SafeAreaView,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { useRouter, useNavigation } from "expo-router";
@@ -65,81 +66,77 @@ const ProductImage = memo(({ source, isDarkTheme, style }) => {
 });
 
 // ProductItem component with optimized press handling
-const ProductItem = memo(({ item, onPress, isDarkTheme, width }) => {
-  const { colors } = useTheme();
+const ProductItem = memo(({ item, isDarkTheme, colors }) => {
+  const router = useRouter();
 
-  // Memoize the onPress handler for each item
-  const handlePress = useCallback(() => {
-    onPress(item.id.split("-")[0]);
-  }, [item.id, onPress]);
+  const handleProductPress = useCallback(() => {
+    router.navigate({
+      pathname: "/screens/ProductDetail",
+      params: {
+        id: item.products_id,
+      },
+    });
+  }, [item.products_id, router]);
 
   return (
-    <Pressable
-      style={[styles.productCard, { width: width }]}
-      onPress={handlePress}
-      android_ripple={{
-        color: isDarkTheme ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
-      }}
-      // Add haptic feedback for better UX
-      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-    >
-      <View style={styles.imageContainer}>
-        <ProductImage
-          source={item.image ? { uri: item.image } : null}
-          isDarkTheme={isDarkTheme}
-          style={styles.productImage}
-        />
-        <View
-          style={[
-            styles.titleOverlay,
-            {
-              backgroundColor: isDarkTheme
-                ? "rgba(0, 0, 0, 0.7)"
-                : "rgba(255, 255, 255, 0.7)",
-            },
-          ]}
-        >
-          <Text
-            style={[styles.productName, { color: colors.textColor }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
+    <View style={styles.itemContainer}>
+      <Pressable
+        style={styles.product}
+        accessibilityLabel={`View product ${item.title}`}
+        android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+        onPress={handleProductPress}
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={
+              item.product_images && item.product_images.length > 0
+                ? { uri: item.product_images[0] }
+                : isDarkTheme
+                ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                : require("../../../assets/images/imageSkeleton.jpg")
+            }
+            style={styles.image}
+            resizeMode="cover"
+          />
+          <View
+            style={[
+              styles.titleOverlay,
+              {
+                backgroundColor: isDarkTheme
+                  ? "rgba(0, 0, 0, 0.7)"
+                  : "rgba(255, 255, 255, 0.7)",
+              },
+            ]}
           >
-            {item.name}
-          </Text>
-          <Text style={[styles.productPrice, { color: colors.button }]}>
-            AF {item.price}
-          </Text>
+            <Text
+              style={[styles.name, { color: colors.textColor }]}
+              numberOfLines={1}
+            >
+              {item.title}
+            </Text>
+            <Text style={[styles.price, { color: colors.button }]}>
+              AF {item.spu}
+            </Text>
+          </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 });
 
 const AllNewArrivals = () => {
-  const router = useRouter();
-  const { colors } = useTheme();
-  const { fetchNewArrivals } = useProductStore();
-  const { isDarkTheme } = useThemeStore();
+  const theme = useTheme();
   const { width } = useWindowDimensions();
-  const [products, setProducts] = useState([]);
+  const numColumns = width > 550 ? 3 : 2;
+  const { isDarkTheme } = useThemeStore();
+  const { fetchNewArrivals } = useProductStore();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const colors = theme.colors;
   const navigation = useNavigation();
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMoreData, setHasMoreData] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  // Performance optimization refs
-  const isMounted = useRef(true);
-  const isFetching = useRef(false);
-  const lastPageLoaded = useRef(0);
-  const flatListRef = useRef(null);
-  const timeoutRef = useRef(null);
-
-  // Calculate item width once
-  const itemWidth = (width - 48) / 2;
 
   useEffect(() => {
     navigation.setOptions({
@@ -147,328 +144,155 @@ const AllNewArrivals = () => {
       headerStyle: { backgroundColor: colors.primary },
       headerTintColor: colors.textColor,
     });
-
-    return () => {
-      isMounted.current = false;
-      // Clear any pending timeouts on unmount
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-    };
   }, [navigation]);
 
-  const handleProductPress = useCallback(
-    (productId) => {
-      router.navigate({
-        pathname: "/screens/ProductDetail",
-        params: { idFromFavorite: productId },
-      });
-    },
-    [router]
-  );
-
-  // Optimized data fetching with debounce
-  const loadProducts = useCallback(
-    async (page = 1, isRefreshing = false) => {
-      // Prevent duplicate requests
-      if (
-        isFetching.current ||
-        (page === lastPageLoaded.current && !isRefreshing)
-      )
-        return;
-
-      isFetching.current = true;
-
-      try {
-        if (isRefreshing) {
-          setRefreshing(true);
-        } else if (page > 1) {
-          setLoadingMore(true);
-        } else {
-          setLoading(true);
-        }
-
-        setError(null);
-
-        // Simulate network delay for testing
-        // const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-        // await delay(500);
-
-        const response = await fetchNewArrivals(page);
-
-        if (!isMounted.current) return;
-
-        if (response?.data?.length > 0) {
-          // Process data in batches for smoother UI updates
-          const formattedProducts = response.data.map((product) => ({
-            id: `${product.products_id}-${page}`, // Include page in ID to ensure uniqueness
-            name: product.title,
-            price: product.spu,
-            image: product.product_images?.[0] || null,
-          }));
-
-          // Update state with batched data
-          setProducts((prev) =>
-            isRefreshing ? formattedProducts : [...prev, ...formattedProducts]
-          );
-
-          setCurrentPage(page);
-          setHasMoreData(response.current_page < response.last_page);
-          lastPageLoaded.current = page;
-
-          // Prefetch next page if available
-          if (response.current_page < response.last_page) {
-            timeoutRef.current = setTimeout(() => {
-              fetchNewArrivals(page + 1);
-            }, 2000);
-          }
-        } else {
-          setHasMoreData(false);
-          if (isRefreshing) {
-            setProducts([]);
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching products:", err);
-        setError("Failed to load products");
-      } finally {
-        if (isMounted.current) {
-          setLoading(false);
-          setRefreshing(false);
-          setLoadingMore(false);
-
-          // Add a small delay before allowing new fetches
-          // to prevent rapid consecutive requests
-          setTimeout(() => {
-            isFetching.current = false;
-          }, 300);
-        }
-      }
-    },
-    [fetchNewArrivals]
-  );
-
-  // Optimized load more with throttling and debounce
-  const handleLoadMore = useCallback(() => {
-    if (hasMoreData && !loadingMore && !refreshing && !isFetching.current) {
-      // Debounce the load more action
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
+  const loadProducts = async (pageNum = 1, shouldRefresh = false) => {
+    try {
+      if (shouldRefresh) {
+        setRefreshing(true);
+      } else if (pageNum === 1) {
+        setLoading(true);
       }
 
-      timeoutRef.current = setTimeout(() => {
-        loadProducts(currentPage + 1);
-      }, 150);
-    }
-  }, [hasMoreData, loadingMore, refreshing, currentPage, loadProducts]);
+      const response = await fetchNewArrivals(pageNum);
 
-  const handleRefresh = useCallback(() => {
-    if (!refreshing) {
-      loadProducts(1, true);
-    }
-  }, [loadProducts, refreshing]);
+      if (pageNum === 1 || shouldRefresh) {
+        setProducts(response.data);
+      } else {
+        setProducts((prev) => [...prev, ...response.data]);
+      }
 
-  // Initial load
+      setPage(pageNum);
+      setHasMore(response.current_page < response.last_page);
+    } catch (error) {
+      console.error("Error fetching new arrivals products:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Fetch products on component mount
   useEffect(() => {
     loadProducts(1);
+  }, [fetchNewArrivals]);
+
+  // Create a unique key extractor combining products_id and spu
+  const keyExtractor = useCallback((item, index) => {
+    return `newarrivals-${item.products_id}-${item.spu}-${index}`;
   }, []);
 
-  // Memoized render functions for FlatList
-  const renderItem = useCallback(
-    ({ item }) => (
-      <ProductItem
-        item={item}
-        onPress={handleProductPress}
-        isDarkTheme={isDarkTheme}
-        width={itemWidth}
-      />
-    ),
-    [handleProductPress, isDarkTheme, itemWidth]
-  );
+  const handleLoadMore = useCallback(() => {
+    if (hasMore && !loading) {
+      loadProducts(page + 1);
+    }
+  }, [hasMore, loading, page]);
 
-  const renderEmptyComponent = useCallback(
-    () => (
-      <View style={styles.emptyContainer}>
-        <Text style={[styles.emptyText, { color: colors.textColor }]}>
-          {loading ? "Loading..." : "No new arrivals found"}
-        </Text>
-      </View>
-    ),
-    [colors.textColor, loading]
-  );
+  const handleRefresh = useCallback(() => {
+    loadProducts(1, true);
+  }, []);
 
-  const renderFooter = useCallback(() => {
-    if (!loadingMore) return null;
+  const renderFooter = () => {
+    if (!hasMore) return null;
 
     return (
-      <View style={styles.footerContainer}>
+      <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color={colors.button} />
-        <Text style={[styles.footerText, { color: colors.textColor }]}>
-          Loading more products...
-        </Text>
       </View>
     );
-  }, [loadingMore, colors]);
+  };
 
-  // Memoize key extractor
-  const keyExtractor = useCallback((item) => item.id, []);
-
-  // Memoize getItemLayout for even better performance
-  const getItemLayout = useCallback(
-    (data, index) => ({
-      length: 210,
-      offset: 210 * Math.floor(index / 2) + Math.floor(index / 2) * 16,
-      index,
-    }),
-    []
-  );
-
-  if (loading && !refreshing && products.length === 0) {
+  if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.primary }]}>
-        <View style={styles.loadingContainer}>
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: colors.primary }]}
+      >
+        <View style={styles.loaderContainer}>
           <ActivityIndicator size="large" color={colors.button} />
-        </View>
-      </View>
-    );
-  }
-
-  if (error && products.length === 0) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.background }]}>
-        <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: colors.deleteButton }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={() => loadProducts(1)}
+          <Text
+            style={{
+              marginTop: 10,
+              color: colors.textColor,
+              fontWeight: "500",
+            }}
           >
-            <Text style={[styles.retryText, { color: colors.background }]}>
-              Retry
-            </Text>
-          </TouchableOpacity>
+            Loading new arrivals...
+          </Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.fullContainer, { backgroundColor: colors.primary }]}>
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: colors.primary }]}
+    >
       <FlatList
-        ref={flatListRef}
         data={products}
-        renderItem={renderItem}
+        renderItem={({ item }) => (
+          <ProductItem item={item} isDarkTheme={isDarkTheme} colors={colors} />
+        )}
         keyExtractor={keyExtractor}
-        numColumns={2}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.productsGrid,
-          products.length === 0 && styles.emptyList,
-        ]}
-        columnWrapperStyle={styles.row}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        removeClippedSubviews={true}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-        ListEmptyComponent={renderEmptyComponent}
+        numColumns={numColumns}
+        contentContainerStyle={styles.productsContainer}
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={5}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
         ListFooterComponent={renderFooter}
-        getItemLayout={getItemLayout}
-        // Improve scrolling performance
-        scrollEventThrottle={16}
-        maintainVisibleContentPosition={{
-          minIndexForVisible: 0,
-        }}
-      />
-
-      {error && products.length > 0 && (
-        <View style={styles.errorOverlay}>
-          <Text style={[styles.errorText, { color: colors.deleteButton }]}>
-            {error}
-          </Text>
-          <TouchableOpacity
-            style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={() => loadProducts(currentPage + 1)}
-          >
-            <Text style={[styles.retryText, { color: colors.background }]}>
-              Retry Loading More
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={[styles.emptyText, { color: colors.textColor }]}>
+              No new arrivals found
             </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+          </View>
+        }
+      />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  fullContainer: {
+  safeArea: {
     flex: 1,
   },
-  container: {
+  loaderContainer: {
     flex: 1,
-  },
-  headerContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  backButton: {
-    padding: 8,
-  },
-  sectionTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  productsGrid: {
-    padding: 16,
-  },
-  row: {
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  emptyList: {
-    flex: 1,
     justifyContent: "center",
-    alignItems: "center",
+    padding: 20,
   },
-  productCard: {
-    height: 210,
+  productsContainer: {
+    padding: 10,
+    paddingBottom: 20,
+  },
+  itemContainer: {
+    flex: 1,
+    margin: 6,
+    borderRadius: 16,
+    overflow: "hidden",
+    elevation: 10,
+  },
+  product: {
     borderRadius: 16,
     overflow: "hidden",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5, // Reduced elevation for better performance
-    backgroundColor: "transparent", // Add transparent background for ripple effect
+    elevation: 2,
   },
   imageContainer: {
     position: "relative",
     borderRadius: 16,
     overflow: "hidden",
-    height: "100%",
   },
-  imageWrapper: {
-    overflow: "hidden",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    height: "100%",
-  },
-  productImage: {
+  image: {
     width: "100%",
-    height: "100%",
+    height: 180,
     borderRadius: 16,
-  },
-  placeholderImage: {
-    width: "100%",
-    borderRadius: 16,
-    height: "100%",
   },
   titleOverlay: {
     position: "absolute",
@@ -479,75 +303,30 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 16,
     borderBottomRightRadius: 16,
   },
-  productName: {
+  name: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 4,
     textShadowColor: "rgba(0, 0, 0, 0.2)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 16,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 16,
-  },
-  errorText: {
-    fontSize: 16,
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  retryButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-  },
-  retryText: {
+  price: {
     fontSize: 14,
-    fontWeight: "600",
+    marginTop: 4,
+    fontWeight: "800",
+  },
+  footerLoader: {
+    padding: 20,
+    alignItems: "center",
   },
   emptyContainer: {
-    width: "100%",
-    flex: 1,
-    justifyContent: "center",
+    padding: 40,
     alignItems: "center",
-    minHeight: 300,
+    justifyContent: "center",
   },
   emptyText: {
     fontSize: 16,
     fontWeight: "500",
-  },
-  footerContainer: {
-    padding: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    flexDirection: "row",
-  },
-  footerText: {
-    fontSize: 14,
-    marginLeft: 8,
-  },
-  errorOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    padding: 16,
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#ddd",
   },
 });
 
