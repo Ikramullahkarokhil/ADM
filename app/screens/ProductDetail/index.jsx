@@ -623,7 +623,8 @@ const ProductDetail = () => {
     if (!product) return;
     setRefreshing(true);
     try {
-      Promise.all([fetchProduct(), fetchAdditionalData()]);
+      fetchProduct();
+      fetchAdditionalData();
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {

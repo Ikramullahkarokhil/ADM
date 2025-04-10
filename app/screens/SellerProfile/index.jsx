@@ -1,23 +1,16 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  memo,
-  useMemo,
-  useRef,
-} from "react";
+import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
   ActivityIndicator,
   Platform,
   Image,
   TouchableOpacity,
   FlatList,
-  Animated,
+  RefreshControl,
+  ScrollView,
 } from "react-native";
 import { useLocalSearchParams, useNavigation, router } from "expo-router";
 import {
@@ -213,15 +206,13 @@ const SellerProfile = () => {
   const { sellerId, sellerTitle } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [sellerData, setSellerData] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const { fetchSellerProfile, user, followSeller, sellerVisitCount } =
     useProductStore();
   const { colors } = useTheme();
   const { isDarkTheme } = useThemeStore();
-
-  // Add this for the animated scroll
-  const scrollY = useRef(new Animated.Value(0)).current;
 
   // Set navigation options
   useEffect(() => {
@@ -234,43 +225,33 @@ const SellerProfile = () => {
   }, [sellerTitle, navigation, colors]);
 
   // Load seller data with error handling
-  useEffect(() => {
-    let isMounted = true;
-    let retryCount = 0;
-    const maxRetries = 3;
-
-    const loadSellerData = async () => {
+  const loadSellerData = useCallback(
+    async (isRefreshing = false) => {
       if (!sellerId || !user?.consumer_id) return;
 
       try {
-        setLoading(true);
+        if (!isRefreshing) setLoading(true);
         const data = await fetchSellerProfile({
           sellerId,
           consumerId: user.consumer_id,
         });
 
-        if (isMounted) {
-          setSellerData(data);
-          setIsFollowing(data.do_i_follow === 1);
-          setLoading(false);
-        }
+        setSellerData(data);
+        setIsFollowing(data.do_i_follow === 1);
       } catch (error) {
         console.error("Error fetching seller data:", error);
-
-        if (retryCount < maxRetries && isMounted) {
-          retryCount++;
-          setTimeout(loadSellerData, 1000 * retryCount);
-        } else if (isMounted) {
-          setLoading(false);
-        }
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
       }
-    };
+    },
+    [sellerId, fetchSellerProfile, user?.consumer_id]
+  );
 
+  // Initial data load
+  useEffect(() => {
     loadSellerData();
-    return () => {
-      isMounted = false;
-    };
-  }, [sellerId, fetchSellerProfile, user?.consumer_id]);
+  }, [loadSellerData]);
 
   // Track seller visit
   useEffect(() => {
@@ -278,6 +259,12 @@ const SellerProfile = () => {
       sellerVisitCount({ sellerId, consumerId: user.consumer_id });
     }
   }, [sellerData, sellerId, user?.consumer_id, sellerVisitCount]);
+
+  // Handle pull to refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadSellerData();
+  }, [loadSellerData]);
 
   // Memoized handlers
   const handleFollowToggle = useCallback(() => {
@@ -297,66 +284,52 @@ const SellerProfile = () => {
   const handleShowAll = useCallback(
     (type) => {
       if (!sellerData || !user?.consumer_id) return;
-      if (type === "newArrivals") {
-        // Navigate to a screen showing all new arrivals or expand the list
-        router.push({
-          pathname: "/screens/SellerProducts",
-          params: {
-            sellerId,
-            listType: "newArrivals",
-            title: "New Arrivals",
-            sellerName: sellerData?.seller.store_name,
-          },
-        });
-      } else if (type === "allProducts") {
-        // Navigate to a screen showing all products or expand the list
-        router.push({
-          pathname: "/screens/SellerProducts",
-          params: {
-            sellerId,
-            listType: "allProducts",
-            title: "All Products",
-            sellerName: sellerData?.seller.store_name,
-          },
-        });
-      } else if (type === "reviews") {
-        // Navigate to a screen showing all reviews or expand the list
-        router.push({
-          pathname: "/screens/SellerReviews",
-          params: {
-            sellerId,
-            title: "Customer Reviews",
-            sellerName: sellerData?.seller.store_name,
-          },
-        });
-      }
+
+      router.push({
+        pathname: `/screens/Seller${
+          type === "reviews" ? "Reviews" : "Products"
+        }`,
+        params: {
+          sellerId,
+          listType: type === "newArrivals" ? "newArrivals" : "allProducts",
+          title:
+            type === "newArrivals"
+              ? "New Arrivals"
+              : type === "reviews"
+              ? "Customer Reviews"
+              : "All Products",
+          sellerName: sellerData?.seller.store_name,
+        },
+      });
     },
-    [sellerId, sellerData]
+    [sellerId, sellerData, user?.consumer_id]
   );
 
   // Memoized data
-  const displayNewArrivals = useMemo(() => {
-    if (!sellerData?.new_arrivals?.data) return [];
-    return sellerData.new_arrivals.data;
-  }, [sellerData?.new_arrivals?.data]);
+  const displayNewArrivals = useMemo(
+    () => sellerData?.new_arrivals?.data || [],
+    [sellerData?.new_arrivals?.data]
+  );
 
-  const displayNewArrivalsCount = useMemo(() => {
-    if (!sellerData?.new_arrivals?.total) return [];
-    return sellerData.new_arrivals.total;
-  }, [sellerData?.new_arrivals]);
+  const displayNewArrivalsCount = useMemo(
+    () => sellerData?.new_arrivals?.total || 0,
+    [sellerData?.new_arrivals?.total]
+  );
 
-  const displayAllProducts = useMemo(() => {
-    if (!sellerData?.all_products.data) return [];
-    return sellerData.all_products.data;
-  }, [sellerData?.all_products.data]);
+  const displayAllProducts = useMemo(
+    () => sellerData?.all_products?.data || [],
+    [sellerData?.all_products?.data]
+  );
 
-  const displayReviews = useMemo(() => {
-    return sellerData?.people_reviews?.data || [];
-  }, [sellerData?.people_reviews?.data]);
+  const displayReviews = useMemo(
+    () => sellerData?.people_reviews?.data || [],
+    [sellerData?.people_reviews?.data]
+  );
 
-  const displayNumberOfReviews = useMemo(() => {
-    return sellerData?.people_reviews?.total;
-  }, [sellerData?.people_reviews]);
+  const displayNumberOfReviews = useMemo(
+    () => sellerData?.people_reviews?.total || 0,
+    [sellerData?.people_reviews?.total]
+  );
 
   // Render login prompt if user not logged in
   if (!user) {
@@ -374,9 +347,7 @@ const SellerProfile = () => {
         </Text>
         <Pressable
           style={[styles.backButton, { borderColor: colors.inactiveColor }]}
-          onPress={() => {
-            router.replace("/Login");
-          }}
+          onPress={() => router.replace("/Login")}
         >
           <Text style={[styles.backButtonText, { color: colors.textColor }]}>
             Login
@@ -432,29 +403,18 @@ const SellerProfile = () => {
     followers_count,
     average_rating,
     total_visits,
-    people_reviews,
     all_products,
   } = sellerData;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
-      {/* Sticky Header Section */}
-      <Animated.View
+      {/* Header Section */}
+      <View
         style={[
           styles.headerImageContainer,
-          {
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            zIndex: 999,
-            elevation: 5,
-          },
+          { backgroundColor: colors.button },
         ]}
       >
-        <View
-          style={[styles.headerGradient, { backgroundColor: colors.button }]}
-        />
         <View style={styles.profileSection}>
           <View
             style={[
@@ -482,15 +442,9 @@ const SellerProfile = () => {
             </Text>
             <View style={styles.ratingSection}>
               <RatingStars rating={parseFloat(average_rating)} color="yellow" />
-              {average_rating ? (
-                <Text style={[styles.ratingText, { color: colors.buttonText }]}>
-                  {parseFloat(average_rating).toFixed(1)}
-                </Text>
-              ) : (
-                <Text style={[styles.ratingText, { color: colors.buttonText }]}>
-                  0
-                </Text>
-              )}
+              <Text style={[styles.ratingText, { color: colors.buttonText }]}>
+                {parseFloat(average_rating || 0).toFixed(1)}
+              </Text>
             </View>
             <View style={styles.ratingSection}>
               <Text style={{ color: colors.buttonText }}>Since:</Text>
@@ -500,25 +454,23 @@ const SellerProfile = () => {
             </View>
           </View>
         </View>
-      </Animated.View>
+      </View>
 
-      <Animated.ScrollView
-        style={[
-          styles.scrollView,
-          { backgroundColor: colors.primary, marginTop: 120 },
-        ]}
-        showsVerticalScrollIndicator={false}
+      <ScrollView
+        style={[styles.scrollView, { backgroundColor: colors.primary }]}
         contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
         removeClippedSubviews={Platform.OS === "android"}
-        scrollEventThrottle={16}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: false }
-        )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.button]}
+            tintColor={colors.button}
+            progressBackgroundColor={colors.primary}
+          />
+        }
       >
-        {/* Empty space to account for the sticky header */}
-        <View style={{ height: 5 }} />
-
         {/* Stats Section */}
         <View style={styles.statsSection}>
           {[
@@ -585,7 +537,7 @@ const SellerProfile = () => {
               title="New Arrivals"
               onShowAll={() => handleShowAll("newArrivals")}
               colors={colors}
-              count={sellerData.new_arrivals.total}
+              count={displayNewArrivalsCount}
             />
 
             <View style={styles.productsGrid}>
@@ -644,32 +596,26 @@ const SellerProfile = () => {
             displayNumberOfReviews={displayNumberOfReviews}
           />
 
-          {people_reviews.data.length > 0 ? (
-            <FlatList
-              data={displayReviews}
-              keyExtractor={(item, index) => `review-${index}`}
-              renderItem={({ item }) => (
-                <ReviewItem review={item} colors={colors} />
-              )}
-              ItemSeparatorComponent={() => (
-                <View
-                  style={{
-                    borderBottomWidth: 0.5,
-                    borderBottomColor: colors.subInactiveColor,
-                    marginVertical: 8,
-                  }}
-                />
-              )}
-              scrollEnabled={false}
-              initialNumToRender={3}
-              maxToRenderPerBatch={5}
-              removeClippedSubviews={Platform.OS === "android"}
-            />
+          {displayReviews.length > 0 ? (
+            displayReviews.map((review, index) => (
+              <React.Fragment key={`review-${index}`}>
+                <ReviewItem review={review} colors={colors} />
+                {index < displayReviews.length - 1 && (
+                  <View
+                    style={{
+                      borderBottomWidth: 0.5,
+                      borderBottomColor: colors.subInactiveColor,
+                      marginVertical: 8,
+                    }}
+                  />
+                )}
+              </React.Fragment>
+            ))
           ) : (
             <EmptyReviews colors={colors} />
           )}
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
     </View>
   );
 };
@@ -679,7 +625,6 @@ const styles = StyleSheet.create({
   // Layout containers
   container: {
     flex: 1,
-    position: "relative",
   },
 
   scrollView: {
@@ -725,23 +670,12 @@ const styles = StyleSheet.create({
   headerImageContainer: {
     height: 110,
     width: "100%",
-    backgroundColor: "transparent",
-  },
-  headerGradient: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 120,
   },
   profileSection: {
     flexDirection: "row",
     padding: 16,
     alignItems: "center",
-    position: "absolute",
-    bottom: -5,
-    left: 0,
-    right: 0,
+    position: "relative",
   },
   profileImageContainer: {
     width: 80,

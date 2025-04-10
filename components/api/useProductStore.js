@@ -321,7 +321,7 @@ const useProductStore = create(
 
       getProductQuestionList: async (productID) => {
         const response = await get().apiRequest(
-          `/questions/list?product_id=${productID}`
+          `/questions/list?product_id=${productID}&sort=recent`
         );
         set({ productQuestions: response.total || [] });
         return response || [];
@@ -449,7 +449,7 @@ const useProductStore = create(
 
       fetchComments: async ({ productID, page, limitData }) => {
         const response = await get().apiRequest(
-          `/comment/list?product_id=${productID}&page=${page}&limitData=${limitData}`
+          `/comment/list?product_id=${productID}&page=${page}&limitData=${limitData}&sort=recent`
         );
         set({ productComments: response.comments.total });
         return response;
@@ -460,20 +460,12 @@ const useProductStore = create(
           method: "POST",
           data: commentData,
         });
-        await get().fetchComments({
-          productID: commentData.product_id,
-          limitData: 1,
-        });
       },
 
       deleteComment: async ({ commentId, consumerID, productId }) => {
         const data = await get().apiRequest("/comment/delete", {
           method: "DELETE",
           params: { comment_id: commentId, consumer_id: consumerID },
-        });
-        await get().fetchComments({
-          productID: productId,
-          limitData: 1,
         });
         return data;
       },

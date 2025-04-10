@@ -94,7 +94,7 @@ const Comments = () => {
     onConfirm: () => {},
   });
   const [editingComment, setEditingComment] = useState(null);
-  const [initialScrollDone, setInitialScrollDone] = useState(false);
+  const [hasMoreComments, setHasMoreComments] = useState(true);
 
   const { user, fetchComments, addComment, deleteComment, editComment } =
     useProductStore();
@@ -111,7 +111,7 @@ const Comments = () => {
   // Fetch comments with proper handling of the API response structure
   const loadComments = useCallback(
     async (page = 1, isLoadingMoreComments = false) => {
-      if (isLoading || isLoadingMore || page > totalPages) return;
+      if (isLoading || isLoadingMore || !hasMoreComments) return;
 
       if (page === 1) {
         setIsLoading(true);
@@ -128,12 +128,19 @@ const Comments = () => {
 
         if (response && response.comments) {
           const { comments: commentsData } = response;
+          const newCommentsData = commentsData.data || [];
+
+          // Check if we've reached the end
+          if (newCommentsData.length === 0 || page >= commentsData.last_page) {
+            setHasMoreComments(false);
+          }
 
           if (page === 1) {
-            setComments(commentsData.data || []);
+            // Reverse the array to show newest first
+            setComments([...newCommentsData]);
           } else {
-            // Filter out any duplicates (just in case)
-            const newComments = commentsData.data.filter(
+            // Filter out duplicates and add to the end (since we're showing newest first)
+            const newComments = newCommentsData.filter(
               (newComment) =>
                 !comments.some(
                   (existingComment) =>
@@ -146,19 +153,6 @@ const Comments = () => {
 
           setCurrentPage(commentsData.current_page);
           setTotalPages(commentsData.last_page);
-
-          // Scroll to bottom after initial load
-          if (
-            page === 1 &&
-            commentsData.data?.length > 0 &&
-            listRef.current &&
-            !initialScrollDone
-          ) {
-            setTimeout(() => {
-              listRef.current?.scrollToEnd({ animated: false });
-              setInitialScrollDone(true);
-            }, 100);
-          }
         }
       } catch (err) {
         console.error("Error fetching comments:", err);
@@ -181,9 +175,8 @@ const Comments = () => {
       showAlert,
       isLoading,
       isLoadingMore,
+      hasMoreComments,
       comments,
-      totalPages,
-      initialScrollDone,
     ]
   );
 
@@ -204,127 +197,128 @@ const Comments = () => {
 
   // Handle infinite scroll
   const handleEndReached = useCallback(() => {
-    if (!isLoadingMore && !isLoading && currentPage < totalPages) {
+    if (
+      !isLoadingMore &&
+      !isLoading &&
+      currentPage < totalPages &&
+      hasMoreComments
+    ) {
       loadComments(currentPage + 1, true);
     }
-  }, [isLoadingMore, isLoading, currentPage, totalPages, loadComments]);
+  }, [
+    isLoadingMore,
+    isLoading,
+    currentPage,
+    totalPages,
+    hasMoreComments,
+    loadComments,
+  ]);
 
   const handleAddComment = useCallback(async () => {
+    const trimmedComment = newComment.trim();
+    if (!trimmedComment) {
+      showAlert(
+        "Empty Comment",
+        "Please write a comment before submitting.",
+        () => {}
+      );
+      return;
+    }
+
+    if (!user?.consumer_id) {
+      showAlert("Login Required", "Please login to add a comment.", () => {});
+      return;
+    }
+
+    // Set adding state
+    setIsAddingComment(true);
+
+    // Create the local comment object for optimistic update
+    const tempComment = {
+      product_comments_id: `temp_${Date.now()}`,
+      product_id: productId,
+      comment: trimmedComment,
+      consumer_id: user.consumer_id,
+      date: new Date().toISOString(),
+      consumer_name: user.name || "Anonymous",
+      consumer_photo: user.photo || null,
+      isPending: true,
+    };
+
+    // Add new comment at the beginning (since we're showing newest first)
+    setComments((prev) => [tempComment, ...prev]);
+    setNewComment("");
+    Keyboard.dismiss();
+
     try {
-      const trimmedComment = newComment.trim();
-      if (!trimmedComment) {
-        showAlert(
-          "Empty Comment",
-          "Please write a comment before submitting.",
-          () => {}
-        );
-        return;
-      }
-      if (!user?.consumer_id) {
-        showAlert("Login Required", "Please login to add a comment.", () => {});
-        return;
-      }
-
-      // Set adding state
-      setIsAddingComment(true);
-
-      // Create the local comment object for optimistic update
-      const tempComment = {
-        product_comments_id: `temp_${Date.now()}`,
+      // Send to server
+      const response = await addComment({
         product_id: productId,
         comment: trimmedComment,
         consumer_id: user.consumer_id,
-        date: new Date().toISOString(),
-        consumer_name: user.name || "Anonymous",
-        consumer_photo: user.photo || null,
-        isPending: true,
-      };
+      });
 
-      // Update UI immediately
-      setComments((prev) => [...prev, tempComment]);
-      setNewComment("");
-      Keyboard.dismiss();
+      // Update the comment with the server response data
+      setComments((prev) =>
+        prev.map((comment) =>
+          comment.product_comments_id === tempComment.product_comments_id
+            ? {
+                ...comment,
+                product_comments_id:
+                  response?.comment_id || comment.product_comments_id,
+                isPending: false,
+              }
+            : comment
+        )
+      );
 
-      try {
-        // Send to server
-        const response = await addComment({
-          product_id: productId,
-          comment: trimmedComment,
-          consumer_id: user.consumer_id,
-        });
-
-        // Update the comment with the server response data
-        setComments((prev) =>
-          prev.map((comment) =>
-            comment.product_comments_id === tempComment.product_comments_id
-              ? {
-                  ...comment,
-                  product_comments_id:
-                    response?.comment_id || comment.product_comments_id,
-                  isPending: false,
-                }
-              : comment
-          )
-        );
-
-        // Scroll to the new comment
-        setTimeout(() => {
-          listRef.current?.scrollToEnd({ animated: true });
-        }, 100);
-
-        ToastAndroid.show("Comment added successfully", ToastAndroid.SHORT);
-      } catch (err) {
-        console.error("Error adding comment:", err);
-
-        // Remove the temporary comment on failure
-        setComments((prev) =>
-          prev.filter(
-            (comment) =>
-              comment.product_comments_id !== tempComment.product_comments_id
-          )
-        );
-
-        ToastAndroid.show("Failed to add comment", ToastAndroid.SHORT);
-      }
+      ToastAndroid.show("Comment added successfully", ToastAndroid.SHORT);
     } catch (err) {
-      console.error("An unexpected error occurred:", err);
+      console.error("Error adding comment:", err);
+
+      // Remove the temporary comment on failure
+      setComments((prev) =>
+        prev.filter(
+          (comment) =>
+            comment.product_comments_id !== tempComment.product_comments_id
+        )
+      );
+
+      ToastAndroid.show("Failed to add comment", ToastAndroid.SHORT);
     } finally {
       setIsAddingComment(false);
     }
   }, [newComment, user, addComment, productId, showAlert]);
 
-  const handleEditComment = useCallback(
-    (comment) => {
-      if (Platform.OS === "ios") {
-        // iOS specific alert with prompt
-        Alert.prompt(
-          "Edit Comment",
-          "Modify your comment below:",
-          [
-            { text: "Cancel", style: "cancel" },
-            {
-              text: "Save",
-              onPress: (newText) => {
-                if (newText && newText.trim()) {
-                  updateComment(comment, newText.trim());
-                }
-              },
+  const handleEditComment = useCallback((comment) => {
+    if (Platform.OS === "ios") {
+      // iOS specific alert with prompt
+      Alert.prompt(
+        "Edit Comment",
+        "Modify your comment below:",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Save",
+            onPress: (newText) => {
+              if (newText && newText.trim()) {
+                updateComment(comment, newText.trim());
+              }
             },
-          ],
-          "plain-text",
-          comment.comment
-        );
-      } else {
-        // Android - use the input field
-        setNewComment(comment.comment);
-        if (inputRef.current) {
-          inputRef.current.focus();
-        }
-        setEditingComment(comment);
+          },
+        ],
+        "plain-text",
+        comment.comment
+      );
+    } else {
+      // Android - use the input field
+      setNewComment(comment.comment);
+      if (inputRef.current) {
+        inputRef.current.focus();
       }
-    },
-    [editComment, user]
-  );
+      setEditingComment(comment);
+    }
+  }, []);
 
   const updateComment = useCallback(
     (comment, newText) => {
@@ -572,7 +566,7 @@ const Comments = () => {
     [isLoading, theme.colors]
   );
 
-  // Footer component for the list (now shows loading indicator at bottom)
+  // Footer component for the list (shows loading indicator at bottom)
   const ListFooterComponent = useCallback(() => {
     if (isLoadingMore) {
       return (
@@ -605,7 +599,6 @@ const Comments = () => {
           windowSize={5}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
-          inverted={false}
           ItemSeparatorComponent={() => (
             <View
               style={[
