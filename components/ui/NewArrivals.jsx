@@ -278,19 +278,21 @@ const NewArrivals = ({ data }) => {
         <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
           New Arrivals
         </Text>
-        <TouchableOpacity
-          style={styles.viewAllButton}
-          onPress={handleViewAllPress}
-        >
-          <Text style={[styles.viewAllText, { color: colors.button }]}>
-            View All
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.button} />
-        </TouchableOpacity>
+        {data.total > 10 && (
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={handleViewAllPress}
+          >
+            <Text style={[styles.viewAllText, { color: colors.button }]}>
+              View All
+            </Text>
+            <Feather name="chevron-right" size={16} color={colors.button} />
+          </TouchableOpacity>
+        )}
       </View>
       <FlashList
         horizontal
-        data={dataWithViewAll}
+        data={data.total > 10 ? dataWithViewAll : newArrivalProducts}
         renderItem={renderItem}
         keyExtractor={(item) =>
           typeof item === "string" ? "view-all" : `product-${item.id}`

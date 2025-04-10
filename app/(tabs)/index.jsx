@@ -82,9 +82,9 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
 const ContentSections = memo(({ newArrivals, justForYou, topSellers }) => {
   return (
     <View>
-      <NewArrivals data={newArrivals} />
-      <JustForYou data={justForYou} />
-      <TopSellers data={topSellers} />
+      {newArrivals.total > 10 && <NewArrivals data={newArrivals} />}
+      {justForYou.total_rows > 0 && <JustForYou data={justForYou} />}
+      {topSellers.total > 0 && <TopSellers data={topSellers} />}
     </View>
   );
 });

@@ -192,7 +192,7 @@ const useProductStore = create(
           const data = await get().apiRequest("/get-product-details", {
             params: { products_id: productId, consumer_id: consumerId },
           });
-          return data?.data || [];
+          return data || [];
         } catch (err) {
           set({ error: err.message, loading: false });
           throw err;
@@ -452,7 +452,7 @@ const useProductStore = create(
           `/comment/list?product_id=${productID}&page=${page}&limitData=${limitData}`
         );
         set({ productComments: response.comments.total });
-        return response.comments.data;
+        return response;
       },
 
       addComment: async (commentData) => {

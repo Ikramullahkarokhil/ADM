@@ -228,7 +228,6 @@ const TopSellers = ({ data }) => {
   // Prepare data with View All card at the end
   const dataWithViewAll = useMemo(() => {
     if (sellers.length === 0) return [];
-    // Limit to 5 sellers + view all card
     return [...sellers, "viewAll"];
   }, [sellers]);
 
@@ -284,19 +283,21 @@ const TopSellers = ({ data }) => {
             Top Sellers
           </Text>
         </View>
-        <TouchableOpacity
-          style={styles.viewAllButton}
-          onPress={handleViewAllPress}
-        >
-          <Text style={[styles.viewAllText, { color: colors.button }]}>
-            View All
-          </Text>
-          <Feather name="chevron-right" size={16} color={colors.button} />
-        </TouchableOpacity>
+        {data.total > 5 && (
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={handleViewAllPress}
+          >
+            <Text style={[styles.viewAllText, { color: colors.button }]}>
+              View All
+            </Text>
+            <Feather name="chevron-right" size={16} color={colors.button} />
+          </TouchableOpacity>
+        )}
       </View>
       <FlatList
         horizontal
-        data={dataWithViewAll}
+        data={data.total > 5 ? dataWithViewAll : sellers}
         renderItem={renderItem}
         keyExtractor={(item) =>
           typeof item === "string" ? "view-all" : `seller-${item.accounts_id}`
@@ -310,7 +311,7 @@ const TopSellers = ({ data }) => {
         maxToRenderPerBatch={5}
         windowSize={3}
         removeClippedSubviews={true}
-        getItemLayout={(data, index) => ({
+        getItemLayout={(index) => ({
           length: itemWidth + 12,
           offset: (itemWidth + 12) * index,
           index,

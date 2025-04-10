@@ -504,7 +504,7 @@ const ProductDetail = () => {
   const { isDarkTheme } = useThemeStore();
 
   // Separate state variables for better readability
-  const [product, setProduct] = useState(null);
+  const [product, setProduct] = useState();
   const [isLoading, setIsLoading] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
@@ -555,9 +555,7 @@ const ProductDetail = () => {
         productId: id,
         consumerId: user?.consumer_id,
       });
-
       const productData = response.data;
-
       if (productData) {
         setProduct(productData);
         setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
@@ -1055,7 +1053,7 @@ const ProductDetail = () => {
                   { color: theme.colors.textColor },
                 ]}
               >
-                {(totalComments || product.total_comments) + " Comments"}
+                {product.total_comments + " Comments"}
               </Text>
             </Pressable>
           </Link>
