@@ -11,6 +11,7 @@ import * as SplashScreen from "expo-splash-screen";
 import { ActivityIndicator, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import * as BackgroundFetch from "expo-background-fetch";
+import { enableScreens } from "react-native-screens";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
@@ -23,6 +24,8 @@ import Constants from "expo-constants";
 import { checkForUpdate } from "../utils/VersionUtils";
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
+
+enableScreens(); // Enable optimized screen management
 
 const Layout = () => {
   // Theme & styling setup

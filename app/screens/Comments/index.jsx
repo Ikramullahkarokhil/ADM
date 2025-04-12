@@ -17,6 +17,7 @@ import {
   Platform,
   Keyboard,
   TouchableOpacity,
+  Alert,
 } from "react-native";
 import { useLocalSearchParams, useNavigation } from "expo-router";
 import { useTheme } from "react-native-paper";
@@ -95,6 +96,7 @@ const Comments = () => {
   });
   const [editingComment, setEditingComment] = useState(null);
   const [hasMoreComments, setHasMoreComments] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { user, fetchComments, addComment, deleteComment, editComment } =
     useProductStore();
@@ -110,10 +112,13 @@ const Comments = () => {
 
   // Fetch comments with proper handling of the API response structure
   const loadComments = useCallback(
-    async (page = 1, isLoadingMoreComments = false) => {
-      if (isLoading || isLoadingMore || !hasMoreComments) return;
+    async (page = 1, isLoadingMoreComments = false, isRefresh = false) => {
+      if ((isLoading || isLoadingMore) && !isRefresh) return;
+      if (!hasMoreComments && page > 1) return;
 
-      if (page === 1) {
+      if (isRefresh) {
+        setIsRefreshing(true);
+      } else if (page === 1) {
         setIsLoading(true);
       } else {
         setIsLoadingMore(true);
@@ -133,13 +138,15 @@ const Comments = () => {
           // Check if we've reached the end
           if (newCommentsData.length === 0 || page >= commentsData.last_page) {
             setHasMoreComments(false);
+          } else {
+            setHasMoreComments(true);
           }
 
-          if (page === 1) {
-            // Reverse the array to show newest first
+          if (page === 1 || isRefresh) {
+            // Reset comments for first page or refresh
             setComments([...newCommentsData]);
           } else {
-            // Filter out duplicates and add to the end (since we're showing newest first)
+            // Filter out duplicates and add to the end
             const newComments = newCommentsData.filter(
               (newComment) =>
                 !comments.some(
@@ -162,7 +169,9 @@ const Comments = () => {
           () => {}
         );
       } finally {
-        if (page === 1) {
+        if (isRefresh) {
+          setIsRefreshing(false);
+        } else if (page === 1) {
           setIsLoading(false);
         } else {
           setIsLoadingMore(false);
@@ -195,11 +204,18 @@ const Comments = () => {
     loadComments(1);
   }, []);
 
+  // Handle refresh
+  const handleRefresh = useCallback(() => {
+    setHasMoreComments(true);
+    loadComments(1, false, true);
+  }, [loadComments]);
+
   // Handle infinite scroll
   const handleEndReached = useCallback(() => {
     if (
       !isLoadingMore &&
       !isLoading &&
+      !isRefreshing &&
       currentPage < totalPages &&
       hasMoreComments
     ) {
@@ -208,6 +224,7 @@ const Comments = () => {
   }, [
     isLoadingMore,
     isLoading,
+    isRefreshing,
     currentPage,
     totalPages,
     hasMoreComments,
@@ -599,6 +616,8 @@ const Comments = () => {
           windowSize={5}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
+          refreshing={isRefreshing}
+          onRefresh={handleRefresh}
           ItemSeparatorComponent={() => (
             <View
               style={[

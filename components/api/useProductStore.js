@@ -319,9 +319,9 @@ const useProductStore = create(
         return data;
       },
 
-      getProductQuestionList: async (productID) => {
+      getProductQuestionList: async ({ productId, page, limitData = 10 }) => {
         const response = await get().apiRequest(
-          `/questions/list?product_id=${productID}&sort=recent`
+          `/questions/list?product_id=${productId}&sort=recent&page=${page}&limitData=${limitData}`
         );
         set({ productQuestions: response.total || [] });
         return response || [];
@@ -424,13 +424,21 @@ const useProductStore = create(
 
       uploadConsumerImage: async (formData) => {
         set({ loading: true, error: null });
+
         try {
+          // Logging for debugging - ensure formData contains the expected parts
+          console.log(formData._parts || formData);
+
+          // Axios will set the Content-Type for FormData automatically
           const response = await api.post("/consumer/upload-image", formData);
-          console.log("API Response:", response.data);
+
+          console.log("Image upload response:", response.data);
           return response.data;
         } catch (error) {
-          set({ error: error, loading: false });
-          throw new Error(error);
+          const errorMessage = error.response?.data?.message || error.message;
+          console.error("Image upload error:", errorMessage);
+          set({ error: errorMessage, loading: false });
+          throw new Error(errorMessage);
         } finally {
           set({ loading: false });
         }

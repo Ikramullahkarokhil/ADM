@@ -121,7 +121,6 @@ const UpdateModal = ({ visible, onClose, currentVersion, versionData }) => {
         animationInTiming={500}
         animationOutTiming={50}
         useNativeDriver={true}
-        statusBarTranslucent
         style={styles.modal}
       >
         <View

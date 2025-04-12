@@ -131,7 +131,10 @@ const Questions = () => {
   const loadQuestions = useCallback(
     async (page = 1, isLoadingMoreQuestions = false) => {
       // Prevent multiple simultaneous requests
-      if (isLoading || isLoadingMore || (!hasMoreQuestions && page > 1)) return;
+      if (isLoading || isLoadingMore || (!hasMoreQuestions && page > 1)) {
+        console.log("Skipping request due to loading state or no more data");
+        return;
+      }
 
       // Set appropriate loading state
       if (page === 1) {
@@ -141,18 +144,20 @@ const Questions = () => {
       }
 
       try {
-        const response = await getProductQuestionList(productId, page);
+        const response = await getProductQuestionList({
+          productId: productId,
+          page: page,
+        });
 
         if (response && response.questions) {
           const questionsData = response.questions || [];
-          const calculatedTotalPages = Math.ceil(
-            (response.total || 0) / (response.perPage || 10)
-          );
+          const total = response.total || 0;
+          const perPage = response.perPage || 10;
+          const calculatedTotalPages = Math.ceil(total / perPage);
 
           // Check if we've reached the end
-          setHasMoreQuestions(
-            questionsData.length > 0 && page < calculatedTotalPages
-          );
+          const hasMore = page < calculatedTotalPages;
+          setHasMoreQuestions(hasMore);
 
           // Update questions list
           setQuestions((prev) => {
@@ -167,11 +172,12 @@ const Questions = () => {
                       existingQ.products_qna_id === newQ.products_qna_id
                   )
               );
+
               return [...prev, ...newQuestions];
             }
           });
 
-          setCurrentPage(response.currentPage || page);
+          setCurrentPage(Number(response.currentPage) || page);
           setTotalPages(calculatedTotalPages || 1);
         }
       } catch (err) {
@@ -202,12 +208,17 @@ const Questions = () => {
 
   // Handle infinite scroll with optimized conditions
   const handleEndReached = useCallback(() => {
+    console.log(
+      `End reached. Loading more? ${isLoadingMore}, Loading? ${isLoading}, Has more? ${hasMoreQuestions}, Current page: ${currentPage}, Total pages: ${totalPages}`
+    );
+
     if (
       !isLoadingMore &&
       !isLoading &&
       hasMoreQuestions &&
       currentPage < totalPages
     ) {
+      console.log(`Loading more questions for page ${currentPage + 1}`);
       loadQuestions(currentPage + 1, true);
     }
   }, [
@@ -241,7 +252,7 @@ const Questions = () => {
       question: trimmedQuestion,
       consumer_id: user.consumer_id,
       consumer_name: user.name || "Anonymous",
-      date: new Date().toISOString().replace("T", " ").split(".")[0],
+      date: new Date().toISOString(),
       online_image_url: user.photo || null,
       answers: [],
       isTemporary: true,
@@ -627,6 +638,9 @@ const Questions = () => {
       return (
         <View style={styles.loadingMoreContainer}>
           <ActivityIndicator size="small" color={theme.colors.textColor} />
+          <Text style={{ color: theme.colors.textColor, marginTop: 8 }}>
+            Loading more questions...
+          </Text>
         </View>
       );
     }
@@ -667,7 +681,7 @@ const Questions = () => {
           maxToRenderPerBatch={10}
           windowSize={5}
           onEndReached={handleEndReached}
-          onEndReachedThreshold={0.5}
+          onEndReachedThreshold={0.7}
         />
       </View>
 

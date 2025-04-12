@@ -82,64 +82,54 @@ const useAlertDialog = () => {
   };
 };
 
-// Enhanced Rating component with animations
 const ProductRating = memo(
-  ({ rating, colors, onRateProduct, readOnly, size }) => {
-    // Animation values for each star
-    const starAnimations = useMemo(
-      () => [...Array(5)].map(() => new Animated.Value(1)),
-      []
-    );
-
-    // Handle star press with animation
+  ({ rating, colors, onRateProduct, readOnly, size, numberOfRating }) => {
+    // Handle star press only if the component is not in read-only mode.
     const handleStarPress = useCallback(
       (index) => {
         if (readOnly) return;
-
-        // Animate the pressed star
-        Animated.sequence([
-          Animated.timing(starAnimations[index], {
-            toValue: 1.5,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-          Animated.timing(starAnimations[index], {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]).start();
-
         onRateProduct(index + 1);
       },
-      [readOnly, onRateProduct, starAnimations]
+      [readOnly, onRateProduct]
     );
 
     return (
       <View style={styles.ratingContainer}>
+        {/* Conditionally render the rating text in read-only mode */}
+        {readOnly && rating >= 1 && (
+          <Text
+            style={[
+              styles.ratingText,
+              { color: colors.textColor, marginRight: 5 },
+            ]}
+          >
+            {rating}
+          </Text>
+        )}
         {[...Array(5)].map((_, index) => (
           <Pressable
             key={index}
             onPress={() => handleStarPress(index)}
             style={styles.starButton}
+            accessibilityRole={readOnly ? "text" : "button"}
+            accessibilityLabel={`Rate product ${index + 1} star${
+              index + 1 > 1 ? "s" : ""
+            }`}
           >
-            <Animated.View
-              style={{
-                transform: [{ scale: starAnimations[index] }],
-              }}
-            >
-              <FontAwesome
-                name={index < rating ? "star" : "star-o"}
-                size={size}
-                color={index < rating ? "#FFD700" : colors.inactiveColor}
-                style={styles.starIcon}
-              />
-            </Animated.View>
+            <FontAwesome
+              name={index < rating ? "star" : "star-o"}
+              size={size}
+              color={index < rating ? "#FFD700" : colors.inactiveColor}
+              style={styles.starIcon}
+            />
           </Pressable>
         ))}
-        <Text style={[styles.ratingText, { color: colors.textColor }]}>
-          {rating}
-        </Text>
+
+        {numberOfRating >= 1 && (
+          <Text style={[styles.ratingText, { color: colors.textColor }]}>
+            ({numberOfRating})
+          </Text>
+        )}
       </View>
     );
   }
@@ -334,8 +324,6 @@ const QuestionSection = memo(
     productId,
     router,
   }) => {
-    const displayedQuestions = questions.slice(0, 3);
-
     return (
       <View
         style={[
@@ -349,8 +337,8 @@ const QuestionSection = memo(
           Product Questions {totalQuestions > 0 && `(${totalQuestions})`}
         </Text>
 
-        {displayedQuestions.length > 0 ? (
-          displayedQuestions.map((q) => {
+        {questions.length > 0 ? (
+          questions.map((q) => {
             const isUserQuestion = user && q.consumer_id === user.consumer_id;
             const canEditOrDelete =
               isUserQuestion && (!q.answers || q.answers.length === 0);
@@ -510,6 +498,7 @@ const ProductDetail = () => {
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [userRating, setUserRating] = useState(0);
+  const [totalRating, setTotalRating] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [totalComments, setTotalComments] = useState(0);
@@ -559,7 +548,8 @@ const ProductDetail = () => {
       if (productData) {
         setProduct(productData);
         setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
-        setUserRating(productData.average_rating || 0);
+        setUserRating(Number(productData?.average_rating) || 0);
+        setTotalRating(Number(productData.total_rating) || 0);
       }
     } catch (err) {
       console.error("Error fetching product:", err);
@@ -578,11 +568,15 @@ const ProductDetail = () => {
 
     try {
       const [questionData, relatedProductsData] = await Promise.all([
-        getProductQuestionList(product.products_id),
+        getProductQuestionList({
+          productId: product.products_id,
+          page: 1,
+          limitData: 3,
+        }),
         fetchRelatedProducts(product.products_id),
       ]);
 
-      setQuestions((questionData.questions || []).slice(0, 2));
+      setQuestions(questionData.questions || []);
       setRelatedProducts(
         relatedProductsData.length > 0 ? relatedProductsData : null
       );
@@ -623,8 +617,10 @@ const ProductDetail = () => {
     if (!product) return;
     setRefreshing(true);
     try {
-      fetchProduct();
-      fetchAdditionalData();
+      console.log("refreshing data");
+      await fetchProduct();
+      await fetchAdditionalData();
+      console.log("data refreshed");
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
@@ -967,9 +963,9 @@ const ProductDetail = () => {
           <ProductRating
             rating={userRating}
             colors={theme.colors}
-            onRateProduct={handleRate}
             readOnly={true} // Read-only in the product info section
             size={16}
+            numberOfRating={totalRating}
           />
 
           <Text style={[styles.price, { color: theme.colors.button }]}>
@@ -1176,7 +1172,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   starButton: {
-    padding: 5,
+    padding: 2,
   },
   starIcon: {
     marginRight: 2,

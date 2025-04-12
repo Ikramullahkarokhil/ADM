@@ -14,6 +14,7 @@ import {
   Image,
   ScrollView,
   RefreshControl,
+  Platform,
 } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
@@ -29,13 +30,28 @@ import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 
+// Pre-load images to prevent loading delays
+const DARK_LOGO = require("../../assets/images/darkLogo.png");
+const LIGHT_LOGO = require("../../assets/images/lightLogo.png");
+
+// Cart icon as a separate component to prevent re-renders
+const CartIcon = memo(({ count, onPress, color }) => (
+  <Pressable
+    onPress={onPress}
+    android_ripple={{ color }}
+    style={styles.iconButton}
+  >
+    <IconButton icon="cart" size={24} iconColor={color} />
+    {count > 0 && (
+      <Badge style={[styles.badge, { backgroundColor: color }]}>{count}</Badge>
+    )}
+  </Pressable>
+));
+
 const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   // Memoize logo source to prevent unnecessary re-renders
   const logoSource = useMemo(
-    () =>
-      !isDarkTheme
-        ? require("../../assets/images/darkLogo.png")
-        : require("../../assets/images/lightLogo.png"),
+    () => (!isDarkTheme ? DARK_LOGO : LIGHT_LOGO),
     [isDarkTheme]
   );
 
@@ -55,49 +71,57 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
             style={styles.searchBar}
           />
         </Link>
-        <Pressable
+        <CartIcon
+          count={cartItemCount}
           onPress={onCartPress}
-          android_ripple={{ color: theme.colors.ripple }}
-          style={styles.iconButton}
-        >
-          <IconButton
-            icon="cart"
-            size={24}
-            iconColor={theme.colors.textColor}
-          />
-          {cartItemCount > 0 && (
-            <Badge
-              style={[styles.badge, { backgroundColor: theme.colors.button }]}
-            >
-              {cartItemCount}
-            </Badge>
-          )}
-        </Pressable>
+          color={theme.colors.button}
+        />
       </View>
     </View>
   );
 });
 
+// Optimize each content section component
+const NewArrivalsSection = memo(({ data }) => {
+  if (!data || data.total <= 10) return null;
+  return <NewArrivals data={data} />;
+});
+
+const JustForYouSection = memo(({ data }) => {
+  if (!data || data.total_rows <= 0) return null;
+  return <JustForYou data={data} />;
+});
+
+const TopSellersSection = memo(({ data }) => {
+  if (!data || data.total <= 0) return null;
+  return <TopSellers data={data} />;
+});
+
 // Separate the content sections to allow for better performance optimization
-const ContentSections = memo(({ newArrivals, justForYou, topSellers }) => {
-  return (
-    <View>
-      {newArrivals.total > 10 && <NewArrivals data={newArrivals} />}
-      {justForYou.total_rows > 0 && <JustForYou data={justForYou} />}
-      {topSellers.total > 0 && <TopSellers data={topSellers} />}
-    </View>
-  );
+const ContentSections = memo(
+  ({ newArrivals, justForYou, topSellers, isConnected }) => {
+    if (!isConnected) return null;
+
+    return (
+      <View>
+        <NewArrivalsSection data={newArrivals} />
+        <JustForYouSection data={justForYou} />
+        <TopSellersSection data={topSellers} />
+      </View>
+    );
+  }
+);
+
+// Optimize category item rendering
+const CategoryItem = memo(({ item, loading }) => {
+  if (loading) return <CategoriesSkeleton />;
+  return <CategoriesSectionList data={[item]} />;
 });
 
 // Separate the categories section for better performance
 const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
   const renderItem = useCallback(
-    ({ item }) =>
-      loading ? (
-        <CategoriesSkeleton />
-      ) : (
-        <CategoriesSectionList data={[item]} />
-      ),
+    ({ item }) => <CategoryItem item={item} loading={loading} />,
     [loading]
   );
 
@@ -113,9 +137,15 @@ const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
       }
       scrollEnabled={false}
       removeClippedSubviews={true}
-      maxToRenderPerBatch={5}
-      windowSize={5}
-      initialNumToRender={3}
+      maxToRenderPerBatch={3}
+      windowSize={3}
+      initialNumToRender={2}
+      updateCellsBatchingPeriod={50}
+      getItemLayout={(data, index) => ({
+        length: loading ? 150 : 200,
+        offset: (loading ? 150 : 200) * index,
+        index,
+      })}
     />
   );
 });
@@ -126,9 +156,9 @@ const Home = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [categories, setCategories] = useState([]);
-  const [justForYou, setJustForYou] = useState([]);
-  const [newArrivals, setNewArrivals] = useState([]);
-  const [topSellers, setTopSellers] = useState([]);
+  const [justForYou, setJustForYou] = useState({ total_rows: 0, data: [] });
+  const [newArrivals, setNewArrivals] = useState({ total: 0, data: [] });
+  const [topSellers, setTopSellers] = useState({ total: 0, data: [] });
   const [alertVisible, setAlertVisible] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
 
@@ -144,40 +174,37 @@ const Home = () => {
 
   // Set navigation bar color only when theme changes
   useEffect(() => {
-    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+    if (Platform.OS === "android") {
+      NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+    }
   }, [theme.colors.primary]);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  // Optimize data fetching with Promise.all for parallel requests
   const fetchData = useCallback(async () => {
+    if (!isConnected) return;
+
     setLoading(true);
     setRefreshing(true);
 
     try {
-      // Fetch and update categories first
+      // Fetch categories first as it's critical
       const categoriesData = await fetchMainPageData();
       setCategories(categoriesData);
 
-      // Then fire off other fetch calls without waiting for them to complete
-      fetchNewArrivals(1)
-        .then((newArrivalsData) => {
-          setNewArrivals(newArrivalsData);
+      // Fetch other data in parallel
+      Promise.all([fetchNewArrivals(1), fetchJustForYou(), fetchTopSellers()])
+        .then(([newArrivalsData, justForYouData, topSellersData]) => {
+          setNewArrivals(newArrivalsData || { total: 0, data: [] });
+          setJustForYou(justForYouData || { total_rows: 0, data: [] });
+          setTopSellers(topSellersData || { total: 0, data: [] });
         })
-        .catch((err) => console.error("New Arrivals fetch error:", err));
-
-      fetchJustForYou()
-        .then((justForYouData) => {
-          setJustForYou(justForYouData);
-        })
-        .catch((err) => console.error("Just For You fetch error:", err));
-
-      fetchTopSellers()
-        .then((topSellersData) => {
-          setTopSellers(topSellersData);
-        })
-        .catch((err) => console.error("Top Sellers fetch error:", err));
+        .catch((err) => {
+          console.error("Error fetching content sections:", err);
+        });
     } catch (err) {
       console.error("Failed to fetch categories:", err);
       setCategories([]);
@@ -185,20 +212,43 @@ const Home = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [fetchMainPageData, fetchNewArrivals, fetchJustForYou, fetchTopSellers]);
+  }, [
+    fetchMainPageData,
+    fetchNewArrivals,
+    fetchJustForYou,
+    fetchTopSellers,
+    isConnected,
+  ]);
 
-  // Network connectivity monitoring
+  // Network connectivity monitoring with debounce
   useEffect(() => {
+    let timeoutId;
+
     const unsubscribe = NetInfo.addEventListener((state) => {
       const connected = state.isConnected;
-      setIsConnected(connected);
-      if (connected && categories.length === 0) {
-        fetchData();
-      }
+
+      // Debounce connectivity changes to prevent rapid toggling
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        setIsConnected(connected);
+        if (connected && categories.length === 0) {
+          fetchData();
+        }
+      }, 300);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, [fetchData, categories.length]);
+
+  // Initial data fetch
+  useEffect(() => {
+    if (categories.length === 0 && isConnected && !loading) {
+      fetchData();
+    }
+  }, [categories.length, isConnected, fetchData, loading]);
 
   const handleCartPress = useCallback(() => {
     if (!user?.consumer_id) {
@@ -211,7 +261,8 @@ const Home = () => {
   const cartItemCount = useMemo(() => cartItem.length, [cartItem]);
 
   const keyExtractor = useCallback(
-    (item, index) => `category-${index}-${loading ? "skeleton" : "data"}`,
+    (item, index) =>
+      `category-${item?.id || index}-${loading ? "skeleton" : "data"}`,
     [loading]
   );
 
@@ -222,36 +273,15 @@ const Home = () => {
         refreshing={refreshing}
         onRefresh={fetchData}
         colors={[theme.colors.button]}
+        tintColor={theme.colors.button}
       />
     ),
     [refreshing, fetchData, theme.colors.button]
   );
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
-      <Header
-        theme={theme}
-        isDarkTheme={isDarkTheme}
-        cartItemCount={cartItemCount}
-        onCartPress={handleCartPress}
-      />
-
-      <ScrollView refreshControl={refreshControl}>
-        <CategoriesSection
-          loading={loading}
-          categories={categories}
-          keyExtractor={keyExtractor}
-        />
-
-        {isConnected && (
-          <ContentSections
-            newArrivals={newArrivals}
-            justForYou={justForYou}
-            topSellers={topSellers}
-          />
-        )}
-      </ScrollView>
-
+  // Memoize the alert dialog to prevent unnecessary re-renders
+  const alertDialog = useMemo(
+    () => (
       <AlertDialog
         visible={alertVisible}
         title="Login Required"
@@ -264,6 +294,39 @@ const Home = () => {
         confirmText="Login"
         cancelText="Cancel"
       />
+    ),
+    [alertVisible, navigation]
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
+      <Header
+        theme={theme}
+        isDarkTheme={isDarkTheme}
+        cartItemCount={cartItemCount}
+        onCartPress={handleCartPress}
+      />
+
+      <ScrollView
+        refreshControl={refreshControl}
+        removeClippedSubviews={true}
+        contentInsetAdjustmentBehavior="automatic"
+      >
+        <CategoriesSection
+          loading={loading}
+          categories={categories}
+          keyExtractor={keyExtractor}
+        />
+
+        <ContentSections
+          newArrivals={newArrivals}
+          justForYou={justForYou}
+          topSellers={topSellers}
+          isConnected={isConnected}
+        />
+      </ScrollView>
+
+      {alertDialog}
     </View>
   );
 };
@@ -272,7 +335,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
     paddingHorizontal: 15,
-    paddingTop: 40,
+    paddingTop: Platform.OS === "ios" ? 50 : 40,
     paddingVertical: 4,
     elevation: 4,
     flexDirection: "row",
@@ -287,12 +350,18 @@ const styles = StyleSheet.create({
     left: 25,
     color: "white",
   },
-  logo: { height: 30, width: 120 },
+  logo: { height: 30, width: 120, resizeMode: "contain" },
   skeletonContainer: {
     marginTop: 50,
     marginHorizontal: 10,
   },
   dataContainer: {},
+  searchBar: {
+    margin: 0,
+  },
+  sectionContainer: {
+    marginBottom: 10,
+  },
 });
 
 export default memo(Home);

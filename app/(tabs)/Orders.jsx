@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,12 +13,142 @@ import { useRouter } from "expo-router";
 import useProductStore from "../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 
-// Status types definition
+// Status types definition - moved outside component to prevent recreation
 const statusTypes = [
   { key: "all", title: "All Orders" },
   { key: "Delivered", title: "Delivered" },
   { key: "Cancelled", title: "Cancelled" },
 ];
+
+// Extracted to prevent recreation on each render
+const ProductRow = React.memo(({ product, index, getStatusColor, colors }) => (
+  <View
+    key={`${product.product_id || `item-${index}`}_${
+      product.status || "unknown"
+    }`}
+    style={styles.productRow}
+  >
+    <Text
+      style={[styles.productName, { color: colors.textColor }]}
+      numberOfLines={1}
+      ellipsizeMode="tail"
+    >
+      {product.product_name || "Unknown Product"}
+    </Text>
+    <View
+      style={[
+        styles.productStatusBadge,
+        { backgroundColor: getStatusColor(product.status) },
+      ]}
+    >
+      <Text style={styles.productStatusText}>
+        {product.status || "Unknown"}
+      </Text>
+    </View>
+  </View>
+));
+
+// Extracted to prevent recreation on each render
+const OrderCard = React.memo(({ item, colors, router, getStatusColor }) => (
+  <TouchableOpacity
+    style={[
+      styles.card,
+      {
+        backgroundColor: colors.primary,
+        borderWidth: 1,
+        borderColor:
+          item.status === "Cancelled" || item.status === "Rejected"
+            ? colors.deleteButton
+            : item.status === "Delivered"
+            ? colors.button
+            : "transparent",
+      },
+    ]}
+    onPress={() =>
+      router.navigate({
+        pathname: "/screens/OrderDetails",
+        params: { orderId: item.consumer_orders_id },
+      })
+    }
+    activeOpacity={0.7}
+  >
+    <View
+      style={[
+        styles.cardHeader,
+        { borderBottomColor: colors.activeIndicatorStyle },
+      ]}
+    >
+      <Text
+        style={[
+          styles.orderNumber,
+          {
+            color:
+              item.status === "Cancelled" || item.status === "Rejected"
+                ? colors.deleteButton
+                : item.status === "Delivered"
+                ? colors.button
+                : colors.textColor,
+          },
+        ]}
+      >
+        Order #{item.order_no}
+      </Text>
+    </View>
+
+    <View style={styles.cardBody}>
+      <View style={styles.infoRow}>
+        <MaterialIcons name="payment" size={20} color={colors.inactiveColor} />
+        <Text style={[styles.infoText, { color: colors.textColor }]}>
+          Payment Type: {item.payment_type || "N/A"}
+        </Text>
+      </View>
+      <View style={styles.infoRow}>
+        <MaterialIcons
+          name="calendar-today"
+          size={20}
+          color={colors.inactiveColor}
+        />
+        <Text style={[styles.infoText, { color: colors.textColor }]}>
+          Ordered On: {item.date || "N/A"}
+        </Text>
+      </View>
+
+      {item.status !== "Cancelled" &&
+        item.status !== "Rejected" &&
+        item.status !== "Delivered" &&
+        item.product_statuses &&
+        item.product_statuses.length > 0 && (
+          <View style={styles.productsContainer}>
+            {item.product_statuses.map((product, index) => (
+              <ProductRow
+                key={`${product.product_id || `item-${index}`}_${
+                  product.status || "unknown"
+                }`}
+                product={product}
+                index={index}
+                getStatusColor={getStatusColor}
+                colors={colors}
+              />
+            ))}
+          </View>
+        )}
+    </View>
+  </TouchableOpacity>
+));
+
+// Extracted to prevent recreation on each render
+const EmptyStateComponent = React.memo(({ index, colors }) => (
+  <View style={styles.emptyState}>
+    <MaterialIcons
+      name="remove-shopping-cart"
+      size={80}
+      color={colors.subInactiveColor}
+    />
+    <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
+      No {index === 0 ? "Orders" : statusTypes[index].title}
+    </Text>
+  </View>
+));
 
 const Orders = () => {
   const [index, setIndex] = useState(0);
@@ -54,23 +184,6 @@ const Orders = () => {
     // For other tabs, filter as usual
     return orders.filter((order) => order.status === statusKey);
   }, [orders, index]);
-
-  // Memoize the empty state component
-  const EmptyState = useCallback(
-    () => (
-      <View style={styles.emptyState}>
-        <MaterialIcons
-          name="remove-shopping-cart"
-          size={80}
-          color={colors.subInactiveColor}
-        />
-        <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
-          No {index === 0 ? "Orders" : statusTypes[index].title}
-        </Text>
-      </View>
-    ),
-    [index, colors.subInactiveColor, colors.textColor, colors.inactiveColor]
-  );
 
   // Helper function to get status color
   const getStatusColor = useCallback(
@@ -108,117 +221,14 @@ const Orders = () => {
 
   // Memoize the item renderer for better FlatList performance
   const renderItem = useCallback(
-    ({ item }) => {
-      return (
-        <TouchableOpacity
-          style={[
-            styles.card,
-            {
-              backgroundColor: colors.primary,
-              borderWidth: 1,
-              borderColor:
-                item.status === "Cancelled" || item.status === "Rejected"
-                  ? colors.deleteButton
-                  : item.status === "Delivered"
-                  ? colors.button
-                  : "transparent",
-            },
-          ]}
-          onPress={() =>
-            router.navigate({
-              pathname: "/screens/OrderDetails",
-              params: { orderId: item.consumer_orders_id },
-            })
-          }
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.cardHeader,
-              { borderBottomColor: colors.activeIndicatorStyle },
-            ]}
-          >
-            <Text
-              style={[
-                styles.orderNumber,
-                {
-                  color:
-                    item.status === "Cancelled" || item.status === "Rejected"
-                      ? colors.deleteButton
-                      : item.status === "Delivered"
-                      ? colors.button
-                      : colors.textColor,
-                },
-              ]}
-            >
-              Order #{item.order_no}
-            </Text>
-          </View>
-
-          <View style={styles.cardBody}>
-            <View style={styles.infoRow}>
-              <MaterialIcons
-                name="payment"
-                size={20}
-                color={colors.inactiveColor}
-              />
-              <Text style={[styles.infoText, { color: colors.textColor }]}>
-                Payment Type: {item.payment_type || "N/A"}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <MaterialIcons
-                name="calendar-today"
-                size={20}
-                color={colors.inactiveColor}
-              />
-              <Text style={[styles.infoText, { color: colors.textColor }]}>
-                Ordered On: {item.date || "N/A"}
-              </Text>
-            </View>
-
-            {item.status !== "Cancelled" &&
-              item.status !== "Rejected" &&
-              item.status !== "Delivered" &&
-              item.product_statuses &&
-              item.product_statuses.length > 0 && (
-                <View style={styles.productsContainer}>
-                  {item.product_statuses.map((product, index) => (
-                    <View
-                      // Fix for duplicate keys - use index as fallback if product_id is undefined
-                      key={`${product.product_id || `item-${index}`}_${
-                        product.status || "unknown"
-                      }`}
-                      style={styles.productRow}
-                    >
-                      <Text
-                        style={[
-                          styles.productName,
-                          { color: colors.textColor },
-                        ]}
-                        numberOfLines={1}
-                        ellipsizeMode="tail"
-                      >
-                        {product.product_name || "Unknown Product"}
-                      </Text>
-                      <View
-                        style={[
-                          styles.productStatusBadge,
-                          { backgroundColor: getStatusColor(product.status) },
-                        ]}
-                      >
-                        <Text style={styles.productStatusText}>
-                          {product.status || "Unknown"}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-          </View>
-        </TouchableOpacity>
-      );
-    },
+    ({ item }) => (
+      <OrderCard
+        item={item}
+        colors={colors}
+        router={router}
+        getStatusColor={getStatusColor}
+      />
+    ),
     [colors, router, getStatusColor]
   );
 
@@ -237,6 +247,25 @@ const Orders = () => {
           : colors.button,
     }),
     [index, colors.deleteButton, colors.button]
+  );
+
+  // Memoize the EmptyState component
+  const EmptyState = useCallback(
+    () => <EmptyStateComponent index={index} colors={colors} />,
+    [index, colors]
+  );
+
+  // Memoize the RefreshControl component
+  const refreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+        colors={[colors.button]}
+        tintColor={colors.button}
+      />
+    ),
+    [refreshing, onRefresh, colors.button]
   );
 
   return (
@@ -266,19 +295,18 @@ const Orders = () => {
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListEmptyComponent={EmptyState}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.button]}
-            tintColor={colors.button}
-          />
-        }
+        refreshControl={refreshControl}
         contentContainerStyle={styles.listContentContainer}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={10}
-        windowSize={10}
-        initialNumToRender={8}
+        maxToRenderPerBatch={5}
+        windowSize={5}
+        initialNumToRender={5}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={(data, index) => ({
+          length: 150,
+          offset: 150 * index,
+          index,
+        })}
       />
     </View>
   );
@@ -379,4 +407,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Orders;
+export default React.memo(Orders);

@@ -1,5 +1,3 @@
-"use client";
-
 import { useLayoutEffect, useState, useEffect } from "react";
 import {
   StyleSheet,
@@ -68,7 +66,7 @@ const UpdateProfile = () => {
   useEffect(() => {
     if (profileData?.updated_at) {
       const lastUpdate = new Date(profileData.updated_at);
-      const nextUpdate = new Date(lastUpdate.getTime() + 60 * 60 * 1000);
+      const nextUpdate = new Date(lastUpdate.getTime());
       const now = new Date();
 
       const diffMs = nextUpdate - now;
@@ -134,7 +132,7 @@ const UpdateProfile = () => {
       }
 
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: "images",
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
