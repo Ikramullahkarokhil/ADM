@@ -30,11 +30,11 @@ import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 
-// Pre-load images to prevent loading delays
+// Pre-load images once so they aren’t reloaded on each render.
 const DARK_LOGO = require("../../assets/images/darkLogo.png");
 const LIGHT_LOGO = require("../../assets/images/lightLogo.png");
 
-// Cart icon as a separate component to prevent re-renders
+// Cart icon wrapped in memo to prevent unnecessary re-renders.
 const CartIcon = memo(({ count, onPress, color }) => (
   <Pressable onPress={onPress} style={styles.iconButton}>
     <IconButton icon="cart" size={24} iconColor={color.textColor} />
@@ -46,9 +46,10 @@ const CartIcon = memo(({ count, onPress, color }) => (
   </Pressable>
 ));
 
+// Header component is also memoized and uses useMemo to compute its logo.
 const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   const logoSource = useMemo(
-    () => (!isDarkTheme ? DARK_LOGO : LIGHT_LOGO),
+    () => (isDarkTheme ? LIGHT_LOGO : DARK_LOGO),
     [isDarkTheme]
   );
 
@@ -78,7 +79,7 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   );
 });
 
-// Optimize each content section component
+// Each content section is wrapped in React.memo so they only re-render when their props change.
 const NewArrivalsSection = memo(({ data }) => {
   if (!data || data.total <= 10) return null;
   return <NewArrivals data={data} />;
@@ -94,11 +95,10 @@ const TopSellersSection = memo(({ data }) => {
   return <TopSellers data={data} />;
 });
 
-// Separate the content sections to allow for better performance optimization
+// Grouping content sections together
 const ContentSections = memo(
   ({ newArrivals, justForYou, topSellers, isConnected }) => {
     if (!isConnected) return null;
-
     return (
       <View>
         <NewArrivalsSection data={newArrivals} />
@@ -109,13 +109,13 @@ const ContentSections = memo(
   }
 );
 
-// Optimize category item rendering
+// Optimize category item rendering with memoization.
 const CategoryItem = memo(({ item, loading }) => {
   if (loading) return <CategoriesSkeleton />;
   return <CategoriesSectionList data={[item]} />;
 });
 
-// Separate the categories section for better performance
+// Categories section with optimized FlatList parameters for better performance.
 const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
   const renderItem = useCallback(
     ({ item }) => <CategoryItem item={item} loading={loading} />,
@@ -169,7 +169,7 @@ const Home = () => {
     fetchTopSellers,
   } = useProductStore();
 
-  // Set navigation bar color only when theme changes
+  // Set Android navigation bar color when theme changes.
   useEffect(() => {
     if (Platform.OS === "android") {
       NavigationBar.setBackgroundColorAsync(theme.colors.primary);
@@ -180,7 +180,7 @@ const Home = () => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // Optimize data fetching with Promise.all for parallel requests
+  // Consolidated data fetching with Promise.all to get data in parallel.
   const fetchData = useCallback(async () => {
     if (!isConnected) return;
 
@@ -188,22 +188,23 @@ const Home = () => {
     setRefreshing(true);
 
     try {
-      // Fetch categories first as it's critical
+      // Fetch categories first (critical data)
       const categoriesData = await fetchMainPageData();
       setCategories(categoriesData);
 
-      // Fetch other data in parallel
-      Promise.all([fetchNewArrivals(1), fetchJustForYou(), fetchTopSellers()])
-        .then(([newArrivalsData, justForYouData, topSellersData]) => {
-          setNewArrivals(newArrivalsData || { total: 0, data: [] });
-          setJustForYou(justForYouData || { total_rows: 0, data: [] });
-          setTopSellers(topSellersData || { total: 0, data: [] });
-        })
-        .catch((err) => {
-          console.error("Error fetching content sections:", err);
-        });
+      // Fetch additional content sections concurrently.
+      const [newArrivalsData, justForYouData, topSellersData] =
+        await Promise.all([
+          fetchNewArrivals(1),
+          fetchJustForYou(),
+          fetchTopSellers(),
+        ]);
+      setNewArrivals(newArrivalsData || { total: 0, data: [] });
+      setJustForYou(justForYouData || { total_rows: 0, data: [] });
+      setTopSellers(topSellersData || { total: 0, data: [] });
     } catch (err) {
-      console.error("Failed to fetch categories:", err);
+      console.error("Error fetching data:", err);
+      // In case of failure, ensure categories is reset.
       setCategories([]);
     } finally {
       setLoading(false);
@@ -217,17 +218,16 @@ const Home = () => {
     isConnected,
   ]);
 
-  // Network connectivity monitoring with debounce
+  // Network connectivity monitoring with debouncing.
   useEffect(() => {
     let timeoutId;
 
     const unsubscribe = NetInfo.addEventListener((state) => {
       const connected = state.isConnected;
-
-      // Debounce connectivity changes to prevent rapid toggling
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         setIsConnected(connected);
+        // Fetch data if connection is restored.
         if (connected && categories.length === 0) {
           fetchData();
         }
@@ -240,13 +240,14 @@ const Home = () => {
     };
   }, [fetchData, categories.length]);
 
-  // Initial data fetch
+  // Initial data fetch when component mounts.
   useEffect(() => {
     if (categories.length === 0 && isConnected && !loading) {
       fetchData();
     }
   }, [categories.length, isConnected, fetchData, loading]);
 
+  // Handle cart icon press: if user is not logged in, show alert.
   const handleCartPress = useCallback(() => {
     if (!user?.consumer_id) {
       setAlertVisible(true);
@@ -255,6 +256,7 @@ const Home = () => {
     }
   }, [user]);
 
+  // Compute cart items count to prevent unnecessary computations.
   const cartItemCount = useMemo(() => cartItem.length, [cartItem]);
 
   const keyExtractor = useCallback(
@@ -263,7 +265,7 @@ const Home = () => {
     [loading]
   );
 
-  // Memoize the refresh control to prevent unnecessary re-renders
+  // Memoize the RefreshControl to prevent re-renders.
   const refreshControl = useMemo(
     () => (
       <RefreshControl
@@ -276,7 +278,7 @@ const Home = () => {
     [refreshing, fetchData, theme.colors.button]
   );
 
-  // Memoize the alert dialog to prevent unnecessary re-renders
+  // Memoize the AlertDialog to avoid rendering it unnecessarily.
   const alertDialog = useMemo(
     () => (
       <AlertDialog
@@ -303,7 +305,6 @@ const Home = () => {
         cartItemCount={cartItemCount}
         onCartPress={handleCartPress}
       />
-
       <ScrollView
         refreshControl={refreshControl}
         removeClippedSubviews={true}
@@ -314,7 +315,6 @@ const Home = () => {
           categories={categories}
           keyExtractor={keyExtractor}
         />
-
         <ContentSections
           newArrivals={newArrivals}
           justForYou={justForYou}
@@ -322,7 +322,6 @@ const Home = () => {
           isConnected={isConnected}
         />
       </ScrollView>
-
       {alertDialog}
     </View>
   );
@@ -353,12 +352,8 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
   },
   dataContainer: {},
-  searchBar: {
-    margin: 0,
-  },
-  sectionContainer: {
-    marginBottom: 10,
-  },
+  searchBar: { margin: 0 },
+  sectionContainer: { marginBottom: 10 },
 });
 
 export default memo(Home);

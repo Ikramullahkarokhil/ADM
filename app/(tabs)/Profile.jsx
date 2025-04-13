@@ -14,7 +14,7 @@ import {
   ActivityIndicator,
   useColorScheme,
   ToastAndroid,
-  Image,
+  Switch,
 } from "react-native";
 import {
   Divider,
@@ -22,11 +22,12 @@ import {
   Avatar,
   Surface,
   useTheme,
-  Button,
 } from "react-native-paper";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useNavigation, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as LocalAuthentication from "expo-local-authentication";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import useThemeStore from "../../components/store/useThemeStore";
 import useProductStore from "../../components/api/useProductStore";
 import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
@@ -97,6 +98,10 @@ const MenuItem = ({
   theme,
   special = false,
   isLast = false,
+  isSwitch = false,
+  switchValue = false,
+  onSwitchChange = () => {},
+  disabled = false,
 }) => (
   <>
     <TouchableRipple
@@ -104,6 +109,7 @@ const MenuItem = ({
       accessibilityLabel={label}
       accessibilityRole="button"
       rippleColor={theme.colors.ripple}
+      disabled={isSwitch}
     >
       <View style={styles.menuItem}>
         <View style={styles.menuIconContainer}>
@@ -120,17 +126,33 @@ const MenuItem = ({
               color: special
                 ? theme.colors.deleteButton
                 : theme.colors.textColor,
+              opacity: disabled ? 0.5 : 1,
             },
           ]}
         >
           {label}
         </Text>
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={22}
-          color={theme.colors.inactiveColor}
-          style={styles.menuArrow}
-        />
+        {isSwitch ? (
+          <Switch
+            value={switchValue}
+            onValueChange={onSwitchChange}
+            disabled={disabled}
+            thumbColor={
+              switchValue ? theme.colors.button : theme.colors.background
+            }
+            trackColor={{
+              false: theme.colors.subInactiveColor,
+              true: theme.colors.button,
+            }}
+          />
+        ) : (
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={theme.colors.inactiveColor}
+            style={styles.menuArrow}
+          />
+        )}
       </View>
     </TouchableRipple>
     {!isLast && (
@@ -157,13 +179,58 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState(false);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
   const colorScheme = useColorScheme();
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  // Actual deletion logic
+  useEffect(() => {
+    const checkBiometricSupport = async () => {
+      const compatible = await LocalAuthentication.hasHardwareAsync();
+      setIsBiometricSupported(compatible);
+
+      const savedPreference = await AsyncStorage.getItem(
+        "biometricAuthEnabled"
+      );
+      if (savedPreference !== null) {
+        setIsBiometricEnabled(savedPreference === "true");
+      }
+    };
+
+    checkBiometricSupport();
+  }, []);
+
+  const toggleBiometricAuth = async () => {
+    if (!isBiometricSupported) {
+      ToastAndroid.show(
+        "Biometric authentication not supported on this device",
+        ToastAndroid.SHORT
+      );
+      return;
+    }
+
+    if (!isBiometricEnabled) {
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Authenticate to enable fingerprint login",
+      });
+
+      if (result.success) {
+        await AsyncStorage.setItem("biometricAuthEnabled", "true");
+        setIsBiometricEnabled(true);
+        ToastAndroid.show("Fingerprint login enabled", ToastAndroid.SHORT);
+      } else {
+        ToastAndroid.show("Authentication failed", ToastAndroid.SHORT);
+      }
+    } else {
+      await AsyncStorage.setItem("biometricAuthEnabled", "false");
+      setIsBiometricEnabled(false);
+      ToastAndroid.show("Fingerprint login disabled", ToastAndroid.SHORT);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     try {
       setIsLoading(true);
@@ -181,7 +248,6 @@ const Profile = () => {
     }
   };
 
-  // Show the confirmation dialog when delete is requested
   const showDeleteDialog = () => {
     setIsDeleteDialogVisible(true);
   };
@@ -278,10 +344,17 @@ const Profile = () => {
       })`,
       onPress: handleThemeSelect,
     },
+    {
+      icon: "fingerprint",
+      label: "Unlock with fingerprint",
+      isSwitch: true,
+      switchValue: isBiometricEnabled,
+      onSwitchChange: toggleBiometricAuth,
+      disabled: !isBiometricSupported,
+    },
     { icon: "apps", label: "More Features", screen: "screens/MoreFeatures" },
   ];
 
-  // Modify the delete account action to show the delete confirmation dialog
   const accountActions = [
     { icon: "logout", label: "Logout", onPress: handleLogout, special: true },
     {
@@ -309,6 +382,10 @@ const Profile = () => {
             theme={theme}
             special={item.special}
             isLast={index === items.length - 1}
+            isSwitch={item.isSwitch}
+            switchValue={item.switchValue}
+            onSwitchChange={item.onSwitchChange}
+            disabled={item.disabled}
           />
         ))}
       </Surface>
@@ -355,7 +432,6 @@ const Profile = () => {
         />
       </ScrollView>
 
-      {/* AlertDialog for account deletion confirmation */}
       <AlertDialog
         visible={isDeleteDialogVisible}
         title="Delete Account"
@@ -371,8 +447,6 @@ const Profile = () => {
     </SafeAreaView>
   );
 };
-
-export default Profile;
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -460,3 +534,5 @@ const styles = StyleSheet.create({
     zIndex: 999,
   },
 });
+
+export default Profile;

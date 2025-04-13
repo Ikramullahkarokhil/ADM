@@ -157,7 +157,6 @@ const Orders = () => {
   const { orders, listOrders, user } = useProductStore();
   const { colors } = useTheme();
 
-  // Memoize the onRefresh callback to prevent unnecessary re-renders
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {

@@ -1,4 +1,9 @@
-import { BackHandler, useColorScheme } from "react-native";
+import {
+  BackHandler,
+  useColorScheme,
+  ActivityIndicator,
+  View,
+} from "react-native";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
@@ -8,10 +13,10 @@ import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
-import { ActivityIndicator, View } from "react-native";
 import NetInfo from "@react-native-community/netinfo";
 import * as BackgroundFetch from "expo-background-fetch";
 import { enableScreens } from "react-native-screens";
+import Constants from "expo-constants";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
@@ -20,15 +25,15 @@ import TermsModal from "./screens/ConsentScreen/index";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import { registerBackgroundNotifications } from "../notification-services";
 import UpdateModal from "../components/ui/UpdateModal";
-import Constants from "expo-constants";
 import { checkForUpdate } from "../utils/VersionUtils";
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
-enableScreens(); // Enable optimized screen management
+// Move enableScreens to outside of component (if not done already)
+enableScreens();
 
 const Layout = () => {
-  // Theme & styling setup
+  // 1. Theme & styling setup
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = useMemo(
@@ -36,7 +41,7 @@ const Layout = () => {
     [isDarkTheme]
   );
 
-  // Product and user related hooks
+  // 2. Product & user related hooks
   const {
     fetchProfile,
     logout,
@@ -47,18 +52,17 @@ const Layout = () => {
     getAppVersions,
   } = useProductStore();
 
-  // Local state variables
+  // 3. Local state variables
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
-  const [isConnected, setIsConnected] = useState(true);
   const [showAlert, setShowAlert] = useState(false);
   const [versionData, setVersionData] = useState([]);
-  const router = useRouter();
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
   const [latestVersion, setLatestVersion] = useState(null);
+  const router = useRouter();
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
-  // Memoized loading view and screen options
+  // 4. Memoized loading view and screen options
   const loadingView = useMemo(
     () => (
       <View style={styles.loadingContainer}>
@@ -72,11 +76,12 @@ const Layout = () => {
     () => ({
       headerTitleAlign: "center",
       headerStyle: { backgroundColor: theme.colors.primary },
+      detachInactiveScreens: true,
     }),
     [theme.colors.primary]
   );
 
-  // Initialize background tasks (memoized to prevent re-creation)
+  // 5. Initialize background tasks (using useCallback to avoid re-creation)
   const initBackgroundTasks = useCallback(async () => {
     try {
       await registerBackgroundNotifications();
@@ -94,7 +99,7 @@ const Layout = () => {
     };
   }, [initBackgroundTasks]);
 
-  // Check for app version updates
+  // 6. Check for app version updates
   useEffect(() => {
     const checkVersion = async () => {
       try {
@@ -117,7 +122,7 @@ const Layout = () => {
     checkVersion();
   }, [getAppVersions, currentVersion]);
 
-  // Check acceptance of terms and manage splash screen visibility
+  // 7. Check acceptance of terms and manage splash screen visibility.
   useEffect(() => {
     SplashScreen.preventAutoHideAsync();
     const checkTerms = async () => {
@@ -133,13 +138,13 @@ const Layout = () => {
     checkTerms();
   }, []);
 
-  // Initialize theme and set navigation bar color
+  // 8. Initialize theme and navigation bar color on change.
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
   }, [colorScheme, initializeTheme, theme.colors.primary]);
 
-  // Fetch user data (only when authenticated)
+  // 9. Fetch user data only when authenticated
   const fetchUserData = useCallback(async () => {
     if (user?.consumer_id) {
       try {
@@ -161,7 +166,7 @@ const Layout = () => {
     listOrders,
   ]);
 
-  // Handle authentication and routing after all checks
+  // 10. Handle authentication & routing (grouping logic ensures checks fire when all data is ready)
   useEffect(() => {
     const checkAuthentication = async () => {
       if (!isLoading && hasAcceptedTerms !== null) {
@@ -180,21 +185,28 @@ const Layout = () => {
     checkAuthentication();
   }, [hasAcceptedTerms, user, logout, isLoading, router]);
 
-  // Monitor network connectivity and trigger data refresh if needed
+  // 11. Optimize network connectivity listener
   useEffect(() => {
+    let lastConnectedStatus = null; // Local variable to avoid unnecessary state updates
+
     const unsubscribe = NetInfo.addEventListener((state) => {
       const connected = Boolean(state.isInternetReachable);
-      setIsConnected(connected);
-      setShowAlert(!connected);
-      if (connected && hasAcceptedTerms && !isLoading) {
-        router.replace(user ? "/(tabs)" : "/Login");
-        fetchUserData();
+      if (lastConnectedStatus !== connected) {
+        lastConnectedStatus = connected;
+        setShowAlert(!connected);
+        // Refresh data only when connection is restored.
+        if (connected && hasAcceptedTerms && !isLoading) {
+          router.replace(user ? "/(tabs)" : "/Login");
+          fetchUserData();
+        }
       }
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+    };
   }, [user, router, fetchUserData, hasAcceptedTerms, isLoading]);
 
-  // Handlers memoized to prevent unnecessary re-renders
+  // 12. Memoized handlers to prevent unnecessary re-creation
   const handleAcceptTerms = useCallback(async () => {
     try {
       await AsyncStorage.setItem("hasAcceptedTerms", "true");
@@ -207,12 +219,11 @@ const Layout = () => {
   const handleRefresh = useCallback(() => {
     NetInfo.fetch().then((state) => {
       const connected = Boolean(state.isConnected);
-      setIsConnected(connected);
       setShowAlert(!connected);
     });
   }, []);
 
-  // Show loading view until checks are complete
+  // 13. Show loading view until all checks are complete
   if (hasAcceptedTerms === null || isLoading) {
     return loadingView;
   }

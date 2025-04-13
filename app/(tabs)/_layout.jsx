@@ -1,12 +1,12 @@
-import React, { useState, useCallback, memo, forwardRef } from "react";
+import React, { useState, useCallback, memo, forwardRef, useMemo } from "react";
 import { TouchableOpacity } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useTheme } from "react-native-paper";
 import useProductStore from "../../components/api/useProductStore";
-import AlertDialog from "../../components/ui/AlertDialog"; // adjust if needed
+import AlertDialog from "../../components/ui/AlertDialog";
 
-// Icon Renderer Memoized
+// Pure icon renderer function (remains stateless)
 const renderIcon = ({ name, focused, color, size }) => (
   <Ionicons
     name={`${name}${focused ? "" : "-outline"}`}
@@ -15,7 +15,7 @@ const renderIcon = ({ name, focused, color, size }) => (
   />
 );
 
-// Custom tab button with auth check
+// Custom tab button with authentication check using forwardRef and memo
 const CustomTabButton = memo(
   forwardRef(({ onPress, style, requireAuth, user, ...rest }, ref) => {
     const handlePress = useCallback(
@@ -46,23 +46,45 @@ const Layout = () => {
   const router = useRouter();
   const [alertVisible, setAlertVisible] = useState(false);
 
-  // Navigate to login screen
+  // Memoize screen options to avoid re-creation on every render.
+  const screenOptions = useMemo(
+    () => ({
+      headerTitleAlign: "center",
+      headerStyle: { backgroundColor: theme.colors.primary },
+      headerTintColor: theme.colors.textColor,
+      tabBarStyle: { backgroundColor: theme.colors.primary },
+      tabBarActiveTintColor: theme.colors.textColor,
+      tabBarInactiveTintColor: theme.colors.textColor + "80",
+      tabBarAllowFontScaling: true,
+      headerTitleAllowFontScaling: true,
+      tabBarHideOnKeyboard: true,
+    }),
+    [theme.colors.primary, theme.colors.textColor]
+  );
+
+  // Memoized login handler to navigate to Login screen
   const handleLogin = useCallback(() => {
     setAlertVisible(false);
     router.replace("/Login");
   }, [router]);
 
-  const screenOptions = {
-    headerTitleAlign: "center",
-    headerStyle: { backgroundColor: theme.colors.primary },
-    headerTintColor: theme.colors.textColor,
-    tabBarStyle: { backgroundColor: theme.colors.primary },
-    tabBarActiveTintColor: theme.colors.textColor,
-    tabBarInactiveTintColor: theme.colors.textColor + "80",
-    tabBarAllowFontScaling: true,
-    headerTitleAllowFontScaling: true,
-    tabBarHideOnKeyboard: true,
-  };
+  // Memoized tab icon renderers for each tab
+  const homeIcon = useCallback(
+    (props) => renderIcon({ name: "home", ...props }),
+    []
+  );
+  const searchIcon = useCallback(
+    (props) => renderIcon({ name: "search-circle", ...props }),
+    []
+  );
+  const ordersIcon = useCallback(
+    (props) => renderIcon({ name: "bag-check", ...props }),
+    []
+  );
+  const profileIcon = useCallback(
+    (props) => renderIcon({ name: "person-circle", ...props }),
+    []
+  );
 
   return (
     <>
@@ -70,7 +92,7 @@ const Layout = () => {
         <Tabs.Screen
           name="index"
           options={{
-            tabBarIcon: (props) => renderIcon({ name: "home", ...props }),
+            tabBarIcon: homeIcon,
             tabBarLabel: "Home",
             tabBarButton: (props) => (
               <CustomTabButton
@@ -84,8 +106,7 @@ const Layout = () => {
         <Tabs.Screen
           name="Search"
           options={{
-            tabBarIcon: (props) =>
-              renderIcon({ name: "search-circle", ...props }),
+            tabBarIcon: searchIcon,
             tabBarButton: (props) => (
               <CustomTabButton
                 {...props}
@@ -99,7 +120,7 @@ const Layout = () => {
           name="Orders"
           options={{
             lazy: false,
-            tabBarIcon: (props) => renderIcon({ name: "bag-check", ...props }),
+            tabBarIcon: ordersIcon,
             tabBarButton: (props) => (
               <CustomTabButton
                 {...props}
@@ -114,8 +135,7 @@ const Layout = () => {
           name="Profile"
           options={{
             lazy: false,
-            tabBarIcon: (props) =>
-              renderIcon({ name: "person-circle", ...props }),
+            tabBarIcon: profileIcon,
             tabBarButton: (props) => (
               <CustomTabButton
                 {...props}

@@ -28,7 +28,7 @@ import {
   useRouter,
 } from "expo-router";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { Button, useTheme } from "react-native-paper";
+import { Button, PaperProvider, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import useProductStore from "../../../components/api/useProductStore";
@@ -66,18 +66,10 @@ const useAlertDialog = () => {
     []
   );
 
-  const hideAlert = useCallback(() => {
-    setVisible(false);
-  }, []);
+  const hideAlert = useCallback(() => setVisible(false), []);
 
   return {
-    alertState: {
-      visible,
-      title,
-      message,
-      confirmText,
-      confirmAction,
-    },
+    alertState: { visible, title, message, confirmText, confirmAction },
     showAlert,
     hideAlert,
   };
@@ -85,18 +77,13 @@ const useAlertDialog = () => {
 
 const ProductRating = memo(
   ({ rating, colors, onRateProduct, readOnly, size, numberOfRating }) => {
-    // Handle star press only if the component is not in read-only mode.
     const handleStarPress = useCallback(
-      (index) => {
-        if (readOnly) return;
-        onRateProduct(index + 1);
-      },
+      (index) => !readOnly && onRateProduct?.(index + 1),
       [readOnly, onRateProduct]
     );
 
     return (
       <View style={styles.ratingContainer}>
-        {/* Conditionally render the rating text in read-only mode */}
         {readOnly && rating >= 1 && (
           <Text
             style={[
@@ -113,19 +100,14 @@ const ProductRating = memo(
             onPress={() => handleStarPress(index)}
             style={styles.starButton}
             accessibilityRole={readOnly ? "text" : "button"}
-            accessibilityLabel={`Rate product ${index + 1} star${
-              index + 1 > 1 ? "s" : ""
-            }`}
           >
             <FontAwesome
               name={index < rating ? "star" : "star-o"}
               size={size}
               color={index < rating ? "#FFD700" : colors.inactiveColor}
-              style={styles.starIcon}
             />
           </Pressable>
         ))}
-
         {numberOfRating >= 1 && (
           <Text style={[styles.ratingText, { color: colors.textColor }]}>
             ({numberOfRating})
@@ -136,19 +118,19 @@ const ProductRating = memo(
   }
 );
 
-// Product Images component
 const ProductImages = memo(({ images, isDarkTheme }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
-
-  const displayImages = useMemo(() => {
-    return images?.length > 0
-      ? images
-      : [
-          isDarkTheme
-            ? require("../../../assets/images/darkImagePlaceholder.jpg")
-            : require("../../../assets/images/imageSkeleton.jpg"),
-        ];
-  }, [images, isDarkTheme]);
+  const displayImages = useMemo(
+    () =>
+      images?.length > 0
+        ? images
+        : [
+            isDarkTheme
+              ? require("../../../assets/images/darkImagePlaceholder.jpg")
+              : require("../../../assets/images/imageSkeleton.jpg"),
+          ],
+    [images, isDarkTheme]
+  );
 
   return (
     <View style={styles.carouselContainer}>
@@ -173,14 +155,7 @@ const ProductImages = memo(({ images, isDarkTheme }) => {
         {displayImages.map((_, index) => (
           <View
             key={index}
-            style={[
-              styles.dot,
-              currentSlide === index && {
-                backgroundColor: "#007AFF",
-                width: 10,
-                height: 10,
-              },
-            ]}
+            style={[styles.dot, currentSlide === index && styles.activeDot]}
           />
         ))}
       </View>
@@ -188,7 +163,6 @@ const ProductImages = memo(({ images, isDarkTheme }) => {
   );
 });
 
-// Product Actions component
 const ProductActions = memo(
   ({
     product,
@@ -212,9 +186,8 @@ const ProductActions = memo(
           ]}
           disabled={isAddingToCart || isInCart}
           loading={isAddingToCart}
-          accessibilityLabel={isInCart ? "In Cart" : "Add to cart"}
         >
-          {isInCart === true ? "In Cart" : "Add to cart"}
+          {isInCart ? "In Cart" : "Add to cart"}
         </Button>
         <Button
           onPress={handleShare}
@@ -227,7 +200,6 @@ const ProductActions = memo(
               color={theme.colors.button}
             />
           )}
-          accessibilityLabel="Share product"
         >
           Share
         </Button>
@@ -236,16 +208,9 @@ const ProductActions = memo(
   }
 );
 
-// Question Item component
 const QuestionItem = memo(({ item, theme }) => (
   <View
-    style={[
-      styles.questionItem,
-      {
-        backgroundColor: theme.colors.primary,
-        borderBottomColor: theme.colors.subInactiveColor,
-      },
-    ]}
+    style={[styles.questionItem, { backgroundColor: theme.colors.primary }]}
   >
     <View style={styles.questionHeader}>
       <Image
@@ -272,49 +237,35 @@ const QuestionItem = memo(({ item, theme }) => (
     <Text style={[styles.questionContent, { color: theme.colors.textColor }]}>
       {item.question}
     </Text>
-    {item.answers && item.answers.length > 0 && (
-      <View style={styles.answersContainer}>
-        {item.answers.map((ans) => (
-          <View
-            key={`${item.products_qna_id}_${ans.products_ana_id}`}
-            style={styles.answerItem}
+    {item.answers?.map((ans) => (
+      <View
+        key={`${item.products_qna_id}_${ans.products_ana_id}`}
+        style={styles.answerItem}
+      >
+        <Image
+          source={require("../../../assets/images/imageSkeleton.jpg")}
+          style={styles.answerSellerPhoto}
+        />
+        <View style={styles.answerContent}>
+          <Text
+            style={[styles.answerSellerName, { color: theme.colors.textColor }]}
           >
-            <Image
-              source={require("../../../assets/images/imageSkeleton.jpg")}
-              style={styles.answerSellerPhoto}
-            />
-            <View style={styles.answerContent}>
-              <Text
-                style={[
-                  styles.answerSellerName,
-                  { color: theme.colors.textColor },
-                ]}
-                numberOfLines={1}
-              >
-                {ans.seller_name}
-              </Text>
-              <Text
-                style={[
-                  styles.answerDate,
-                  { color: theme.colors.inactiveColor },
-                ]}
-              >
-                {ans.date}
-              </Text>
-              <Text
-                style={[styles.answerText, { color: theme.colors.textColor }]}
-              >
-                {ans.answer}
-              </Text>
-            </View>
-          </View>
-        ))}
+            {ans.seller_name}
+          </Text>
+          <Text
+            style={[styles.answerDate, { color: theme.colors.inactiveColor }]}
+          >
+            {ans.date}
+          </Text>
+          <Text style={[styles.answerText, { color: theme.colors.textColor }]}>
+            {ans.answer}
+          </Text>
+        </View>
       </View>
-    )}
+    ))}
   </View>
 ));
 
-// Question Section component
 const QuestionSection = memo(
   ({
     questions,
@@ -343,6 +294,7 @@ const QuestionSection = memo(
             const isUserQuestion = user && q.consumer_id === user.consumer_id;
             const canEditOrDelete =
               isUserQuestion && (!q.answers || q.answers.length === 0);
+
             return (
               <Pressable
                 onPress={
@@ -369,7 +321,6 @@ const QuestionSection = memo(
           textColor={theme.colors.button}
           style={[styles.askQuestion, { borderColor: theme.colors.button }]}
           icon="comment-question-outline"
-          accessibilityLabel="Ask a question"
           onPress={() =>
             router.navigate({
               pathname: "screens/Questions",
@@ -384,14 +335,12 @@ const QuestionSection = memo(
   }
 );
 
-// Review Section component
 const ReviewSection = memo(
   ({ user, theme, productId, rating, onRateProduct }) => {
     const [showLoginAlert, setShowLoginAlert] = useState(false);
-    const fadeAnim = useMemo(() => new Animated.Value(0), []);
+    const fadeAnim = useRef(new Animated.Value(0)).current;
     const router = useRouter();
 
-    // Animate the review section when it appears
     useEffect(() => {
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -400,13 +349,16 @@ const ReviewSection = memo(
       }).start();
     }, [fadeAnim]);
 
-    const handleRatingPress = (selectedRating) => {
-      if (user) {
-        onRateProduct(selectedRating);
-      } else {
-        setShowLoginAlert(true);
-      }
-    };
+    const handleRatingPress = useCallback(
+      (selectedRating) => {
+        if (user) {
+          onRateProduct(selectedRating);
+        } else {
+          setShowLoginAlert(true);
+        }
+      },
+      [user, onRateProduct]
+    );
 
     return (
       <Animated.View
@@ -483,7 +435,6 @@ const ReviewSection = memo(
   }
 );
 
-// Main component
 const ProductDetail = () => {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
@@ -491,10 +442,11 @@ const ProductDetail = () => {
   const router = useRouter();
   const { showActionSheetWithOptions } = useActionSheet();
   const { isDarkTheme } = useThemeStore();
+  const scrollViewRef = useRef();
 
-  // Separate state variables for better readability
-  const [product, setProduct] = useState();
-  const [isLoading, setIsLoading] = useState(false);
+  // State
+  const [product, setProduct] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [isFavorite, setIsFavorite] = useState(false);
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
@@ -502,14 +454,10 @@ const ProductDetail = () => {
   const [totalRating, setTotalRating] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
-  const [totalComments, setTotalComments] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState(null);
-  const scrollViewRef = useRef();
 
-  // Use custom hook for alert dialog
-  const { alertState, showAlert, hideAlert } = useAlertDialog();
-
+  // Store hooks
   const {
     user,
     addToFavorite,
@@ -521,91 +469,81 @@ const ProductDetail = () => {
     getProductQuestionList,
     deleteProductQuestion,
     productQuestions,
-    productComments,
     fetchProductDetails,
     fetchRelatedProducts,
     rateProduct,
   } = useProductStore();
 
-  // Memoize isInCart to avoid recalculation
+  // Alert dialog
+  const { alertState, showAlert, hideAlert } = useAlertDialog();
+
+  // Memoized derived state
   const isInCart = useMemo(() => {
-    if (!product || !cartItem || cartItem.length === 0) return false;
-    return cartItem.some(
-      (item) => item.products_id.toString() === product.products_id.toString()
+    return (
+      product &&
+      cartItem?.some(
+        (item) => item.products_id.toString() === product.products_id.toString()
+      )
     );
   }, [cartItem, product]);
 
-  // Fetch product details
-  const fetchProduct = useCallback(async () => {
+  // Data fetching functions
+  const fetchAllData = useCallback(async () => {
     if (!id) return;
 
-    setIsLoading(true);
-
     try {
-      const response = await fetchProductDetails({
+      setIsLoading(true);
+
+      // Fetch product details
+      const productResponse = await fetchProductDetails({
         productId: id,
         consumerId: user?.consumer_id,
       });
-      const productData = response.data;
-      if (productData) {
+
+      if (productResponse?.data) {
+        const productData = productResponse.data;
         setProduct(productData);
-        setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
+        setIsFavorite(Number(productResponse?.is_fav?.is_favourite) === 1);
         setUserRating(Number(productData?.average_rating) || 0);
         setTotalRating(Number(productData.total_rating) || 0);
+
+        // Fetch related data in parallel
+        const [questionsData, relatedProductsData] = await Promise.all([
+          getProductQuestionList({
+            productId: productData.products_id,
+            page: 1,
+            limitData: 3,
+          }),
+          fetchRelatedProducts(productData.products_id),
+        ]);
+
+        setQuestions(questionsData.questions || []);
+        setRelatedProducts(
+          relatedProductsData?.length > 0 ? relatedProductsData : null
+        );
+        setTotalQuestions(productQuestions);
       }
     } catch (err) {
-      console.error("Error fetching product:", err);
-      showAlert(
-        "Error",
-        "Failed to fetch product details: " + (err.message || err)
-      );
+      console.error("Error fetching data:", err);
+      showAlert("Error", "Failed to load product data");
     } finally {
       setIsLoading(false);
     }
-  }, [id, user, fetchProductDetails, showAlert]);
+  }, [
+    id,
+    user,
+    fetchProductDetails,
+    getProductQuestionList,
+    fetchRelatedProducts,
+    showAlert,
+  ]);
 
-  // Fetch questions and related products
-  const fetchAdditionalData = useCallback(async () => {
-    if (!product) return;
-
-    try {
-      const [questionData, relatedProductsData] = await Promise.all([
-        getProductQuestionList({
-          productId: product.products_id,
-          page: 1,
-          limitData: 3,
-        }),
-        fetchRelatedProducts(product.products_id),
-      ]);
-
-      setQuestions(questionData.questions || []);
-      setRelatedProducts(
-        relatedProductsData.length > 0 ? relatedProductsData : null
-      );
-    } catch (err) {
-      console.error("Error fetching additional data:", err);
-    }
-  }, [product, getProductQuestionList, fetchRelatedProducts]);
-
-  // Initial data loading
+  // Initial data load
   useEffect(() => {
-    fetchProduct();
-  }, [id, fetchProduct]);
+    fetchAllData();
+  }, [fetchAllData]);
 
-  // Load additional data when product is available
-  useEffect(() => {
-    if (product) {
-      fetchAdditionalData();
-    }
-  }, [product, fetchAdditionalData]);
-
-  // Update counts when they change
-  useEffect(() => {
-    setTotalQuestions(productQuestions);
-    setTotalComments(productComments);
-  }, [productQuestions, productComments]);
-
-  // Update header
+  // Header update
   useLayoutEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
@@ -614,23 +552,19 @@ const ProductDetail = () => {
     });
   }, [navigation, product, theme]);
 
-  // Refresh questions
+  // Refresh control
   const onRefresh = useCallback(async () => {
-    if (!product) return;
     setRefreshing(true);
     try {
-      console.log("refreshing data");
-      await fetchProduct();
-      await fetchAdditionalData();
-      console.log("data refreshed");
+      await fetchAllData();
     } catch (err) {
       console.error("Refresh error:", err);
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [fetchAllData]);
 
-  // Add to cart handler
+  // Handlers
   const handleAddToCart = useCallback(async () => {
     if (!product) return;
 
@@ -638,7 +572,7 @@ const ProductDetail = () => {
       showAlert(
         "Login Required",
         "Please login to add products to your cart.",
-        () => navigation.navigate("Login")
+        () => router.navigate("/Login")
       );
       return;
     }
@@ -655,21 +589,18 @@ const ProductDetail = () => {
 
     try {
       setIsAddingToCart(true);
-
       await addToCart({
         productID: product.products_id,
         consumerID: user.consumer_id,
       });
-
       ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
     } catch (err) {
       showAlert("Error", err.message || "Failed to add to cart");
     } finally {
       setIsAddingToCart(false);
     }
-  }, [product, user, isInCart, addToCart, showAlert, navigation, router]);
+  }, [product, user, isInCart, addToCart, showAlert, router]);
 
-  // Share handler
   const handleShare = useCallback(async () => {
     if (!product) return;
 
@@ -677,7 +608,6 @@ const ProductDetail = () => {
       const deepLink = Linking.createURL(
         `/screens/ProductDetails/${product.products_id}`
       );
-
       await Share.share({
         message: `Check out ${product.title}: ${deepLink}`,
         title: product.title,
@@ -688,9 +618,8 @@ const ProductDetail = () => {
     }
   }, [product]);
 
-  // Toggle favorite handler
   const handleToggleFavorite = useCallback(async () => {
-    if (!user) return navigation.navigate("Login");
+    if (!user) return router.navigate("/screens/Login");
     if (isFavoriting || !product) return;
 
     const previousFavorite = isFavorite;
@@ -703,7 +632,6 @@ const ProductDetail = () => {
           productID: product.products_id,
           consumerID: user.consumer_id,
         });
-
         ToastAndroid.show("Product added to favorite", ToastAndroid.SHORT);
       } else {
         const favItem = favProducts.find(
@@ -715,7 +643,6 @@ const ProductDetail = () => {
             favId: favItem.product_fav_id,
             consumerID: user.consumer_id,
           });
-
           ToastAndroid.show(
             "Product removed from favorite",
             ToastAndroid.SHORT
@@ -737,10 +664,9 @@ const ProductDetail = () => {
     addToFavorite,
     removeFavorite,
     showAlert,
-    navigation,
+    router,
   ]);
 
-  // Handle rating updates
   const handleRate = useCallback(
     async (rating) => {
       if (!user || !product) return;
@@ -754,7 +680,6 @@ const ProductDetail = () => {
           consumerId: user.consumer_id,
           rating,
         });
-
         ToastAndroid.show("Rating updated", ToastAndroid.SHORT);
       } catch (err) {
         setUserRating(previousRating);
@@ -764,14 +689,13 @@ const ProductDetail = () => {
     [user, product, userRating, rateProduct, showAlert]
   );
 
-  // Delete question handler
   const handleDeleteQuestion = useCallback(
     async (questionId) => {
       if (!user) {
         showAlert(
           "Login Required",
           "Please login to delete your question.",
-          () => navigation.navigate("Login")
+          () => router.navigate("/screens/Login")
         );
         return;
       }
@@ -782,11 +706,14 @@ const ProductDetail = () => {
           questionId,
         });
 
-        const updatedData = await getProductQuestionList(product.products_id);
+        const updatedData = await getProductQuestionList({
+          productId: product.products_id,
+          page: 1,
+          limitData: 3,
+        });
 
         setQuestions(updatedData.questions || []);
         setTotalQuestions(updatedData.total || 0);
-
         ToastAndroid.show("Question deleted", ToastAndroid.SHORT);
       } catch (err) {
         showAlert("Error", err.message || "Failed to delete question");
@@ -798,19 +725,10 @@ const ProductDetail = () => {
       deleteProductQuestion,
       getProductQuestionList,
       showAlert,
-      navigation,
+      router,
     ]
   );
 
-  // Update question handler (placeholder)
-  const handleUpdateQuestion = useCallback((questionId) => {
-    ToastAndroid.show(
-      "Update functionality not implemented",
-      ToastAndroid.SHORT
-    );
-  }, []);
-
-  // Show action sheet for a question
   const showQuestionActionSheet = useCallback(
     (questionId) => {
       const options = ["Edit", "Delete", "Cancel"];
@@ -826,21 +744,35 @@ const ProductDetail = () => {
         },
         (buttonIndex) => {
           if (buttonIndex === 0) {
-            handleUpdateQuestion(questionId);
+            ToastAndroid.show(
+              "Update functionality not implemented",
+              ToastAndroid.SHORT
+            );
           } else if (buttonIndex === 1) {
             handleDeleteQuestion(questionId);
           }
         }
       );
     },
-    [
-      showActionSheetWithOptions,
-      handleUpdateQuestion,
-      handleDeleteQuestion,
-      theme.colors.button,
-    ]
+    [showActionSheetWithOptions, handleDeleteQuestion, theme.colors.button]
   );
 
+  const handleRelatedProductSelect = useCallback(
+    async (productId) => {
+      setIsLoading(true);
+      try {
+        router.setParams({ id: productId });
+      } catch (err) {
+        console.error("Error fetching product:", err);
+        showAlert("Error", "Failed to fetch product details");
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [user, showAlert]
+  );
+
+  // Loading state
   if (isLoading) {
     return (
       <View style={{ flex: 1 }}>
@@ -850,6 +782,7 @@ const ProductDetail = () => {
     );
   }
 
+  // Error state
   if (error) {
     return (
       <View
@@ -862,7 +795,6 @@ const ProductDetail = () => {
         <Pressable
           style={[styles.retryButton, { backgroundColor: theme.colors.button }]}
           onPress={() => navigation.goBack()}
-          android_ripple={{ color: theme.colors.ripple }}
         >
           <Text
             style={[styles.retryButtonText, { color: theme.colors.textColor }]}
@@ -874,6 +806,7 @@ const ProductDetail = () => {
     );
   }
 
+  // No product state
   if (!product) {
     return (
       <View
@@ -891,7 +824,6 @@ const ProductDetail = () => {
             { backgroundColor: theme.colors.background },
           ]}
           onPress={() => navigation.goBack()}
-          android_ripple={{ color: theme.colors.ripple }}
         >
           <Text
             style={[styles.retryButtonText, { color: theme.colors.textColor }]}
@@ -903,6 +835,7 @@ const ProductDetail = () => {
     );
   }
 
+  // Main render
   return (
     <View style={styles.mainContainer}>
       <StatusBar style={isDarkTheme ? "light" : "dark"} />
@@ -915,15 +848,19 @@ const ProductDetail = () => {
         ]}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[theme.colors.button]}
+            tintColor={theme.colors.button}
+          />
         }
       >
-        {/* Image Carousel */}
         <ProductImages
           images={product.product_images}
           isDarkTheme={isDarkTheme}
         />
-        {/* Product Information */}
+
         <View
           style={[
             styles.infoContainer,
@@ -941,9 +878,6 @@ const ProductDetail = () => {
               onPress={handleToggleFavorite}
               disabled={isFavoriting}
               android_ripple={{ color: theme.colors.ripple }}
-              accessibilityLabel={
-                isFavorite ? "Remove from favorites" : "Add to favorites"
-              }
             >
               <Ionicons
                 name={isFavorite ? "heart" : "heart-outline"}
@@ -953,19 +887,15 @@ const ProductDetail = () => {
                     ? theme.colors.deleteButton
                     : theme.colors.inactiveColor
                 }
-                style={[
-                  isFavoriting && { opacity: 0.5 },
-                  { borderColor: theme.colors.inactiveColor },
-                ]}
+                style={isFavoriting && { opacity: 0.5 }}
               />
             </Pressable>
           </View>
 
-          {/* Rating */}
           <ProductRating
             rating={userRating}
             colors={theme.colors}
-            readOnly={true} // Read-only in the product info section
+            readOnly={true}
             size={16}
             numberOfRating={totalRating}
           />
@@ -1007,10 +937,7 @@ const ProductDetail = () => {
             }}
             asChild
           >
-            <Pressable
-              style={styles.detailsRow}
-              android_ripple={{ color: theme.colors.ripple }}
-            >
+            <Pressable style={styles.detailsRow}>
               <Text
                 style={[styles.detailLabel, { color: theme.colors.textColor }]}
               >
@@ -1037,10 +964,7 @@ const ProductDetail = () => {
             }}
             asChild
           >
-            <Pressable
-              style={styles.detailsRow}
-              android_ripple={{ color: theme.colors.ripple }}
-            >
+            <Pressable style={styles.detailsRow}>
               <Text
                 style={[styles.detailLabel, { color: theme.colors.textColor }]}
               >
@@ -1052,12 +976,11 @@ const ProductDetail = () => {
                   { color: theme.colors.textColor },
                 ]}
               >
-                {product.total_comments + " Comments"}
+                {product.total_comments} Comments
               </Text>
             </Pressable>
           </Link>
 
-          {/* Product Actions */}
           <ProductActions
             product={product}
             isInCart={isInCart}
@@ -1067,15 +990,16 @@ const ProductDetail = () => {
             theme={theme}
           />
         </View>
-        {/* Review Section */}
-        <ReviewSection
-          user={user}
-          theme={theme}
-          productId={product.products_id}
-          rating={userRating}
-          onRateProduct={handleRate}
-        />
-        {/* Questions Section */}
+        {user && (
+          <ReviewSection
+            user={user}
+            theme={theme}
+            productId={product.products_id}
+            rating={userRating}
+            onRateProduct={handleRate}
+          />
+        )}
+
         <QuestionSection
           questions={questions}
           totalQuestions={totalQuestions}
@@ -1089,58 +1013,24 @@ const ProductDetail = () => {
         {relatedProducts && (
           <RelatedProducts
             relatedProducts={relatedProducts}
-            onProductSelect={async (productId) => {
-              setIsLoading(true);
-              try {
-                const response = await fetchProductDetails({
-                  productId,
-                  consumerId: user?.consumer_id,
-                });
-                const productData = response.data;
-                if (productData) {
-                  setProduct(productData);
-                  setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
-                  setUserRating(Number(productData?.average_rating) || 0);
-                  setTotalRating(Number(productData.total_rating) || 0);
-
-                  // Fetch new related products for the selected product
-                  const relatedProductsData = await fetchRelatedProducts(
-                    productId
-                  );
-                  setRelatedProducts(
-                    relatedProductsData.length > 0 ? relatedProductsData : null
-                  );
-
-                  // Scroll to top
-                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
-                }
-              } catch (err) {
-                console.error("Error fetching product:", err);
-                showAlert(
-                  "Error",
-                  "Failed to fetch product details: " + (err.message || err)
-                );
-              } finally {
-                setIsLoading(false);
-              }
-            }}
+            onProductSelect={handleRelatedProductSelect}
           />
         )}
       </ScrollView>
-
-      {/* Alert Dialog */}
-      <AlertDialog
-        visible={alertState.visible}
-        title={alertState.title}
-        message={alertState.message}
-        onDismiss={hideAlert}
-        onConfirm={() => {
-          alertState.confirmAction();
-          hideAlert();
-        }}
-        confirmText={alertState.confirmText}
-        cancelText="Cancel"
-      />
+      <PaperProvider theme={theme}>
+        <AlertDialog
+          visible={alertState.visible}
+          title={alertState.title}
+          message={alertState.message}
+          onDismiss={hideAlert}
+          onConfirm={() => {
+            alertState.confirmAction();
+            hideAlert();
+          }}
+          confirmText={alertState.confirmText}
+          cancelText="Cancel"
+        />
+      </PaperProvider>
     </View>
   );
 };
@@ -1148,6 +1038,7 @@ const ProductDetail = () => {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
+    paddingBottom: 20,
   },
   mainContainer: {
     flex: 1,
@@ -1172,6 +1063,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#ccc",
     marginHorizontal: 4,
   },
+  activeDot: {
+    backgroundColor: "#007AFF",
+    width: 10,
+    height: 10,
+  },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
@@ -1179,16 +1075,11 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   infoContainer: {
-    backgroundColor: "#fff",
     borderRadius: 20,
     padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
     marginHorizontal: 16,
     marginBottom: 24,
+    elevation: 5,
   },
   titleRow: {
     flexDirection: "row",
@@ -1209,9 +1100,6 @@ const styles = StyleSheet.create({
   },
   starButton: {
     padding: 2,
-  },
-  starIcon: {
-    marginRight: 2,
   },
   ratingText: {
     marginLeft: 5,
@@ -1273,9 +1161,9 @@ const styles = StyleSheet.create({
   questionsSection: {
     padding: 20,
     borderRadius: 20,
-    elevation: 5,
     marginHorizontal: 16,
     marginBottom: 24,
+    elevation: 5,
   },
   questionsTitle: {
     fontSize: 20,
@@ -1352,27 +1240,12 @@ const styles = StyleSheet.create({
   askQuestion: {
     marginTop: 10,
   },
-  favoriteTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#ff6b6b",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-    alignSelf: "flex-start",
-    marginBottom: 16,
-  },
-  favoriteTagText: {
-    color: "#fff",
-    marginLeft: 5,
-    fontWeight: "bold",
-  },
   reviewSection: {
     padding: 20,
     borderRadius: 20,
-    elevation: 5,
     marginHorizontal: 16,
     marginBottom: 24,
+    elevation: 5,
   },
   reviewHeader: {
     flexDirection: "row",
@@ -1389,7 +1262,6 @@ const styles = StyleSheet.create({
   },
   ratingCard: {
     width: "100%",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
     padding: 16,
     alignItems: "center",
@@ -1403,7 +1275,6 @@ const styles = StyleSheet.create({
   loginAlertContainer: {
     marginTop: 20,
     padding: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
     width: "100%",
   },

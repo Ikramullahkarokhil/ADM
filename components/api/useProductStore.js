@@ -331,7 +331,6 @@ const useProductStore = create(
         await api.post(
           `/question/add?question=${question}&product_id=${productID}&consumer_id=${consumerID}`
         );
-        await get().getProductQuestionList(productID);
       },
 
       editQuestion: async (questionData) => {

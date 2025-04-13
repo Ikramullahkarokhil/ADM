@@ -1,12 +1,12 @@
-// Optimized ProductList.tsx
-
+// Optimized ProductList.tsx (without reducers)
 import React, {
   useEffect,
   useCallback,
-  useReducer,
   useLayoutEffect,
   useRef,
   memo,
+  useMemo,
+  useState,
 } from "react";
 import {
   View,
@@ -26,14 +26,14 @@ import {
   useNavigation,
   useRouter,
 } from "expo-router";
-import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import { FontAwesome, Feather, MaterialIcons } from "@expo/vector-icons";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import AlertDialog from "../../../components/ui/AlertDialog";
+import useProductStore from "../../../components/api/useProductStore";
 import useThemeStore from "../../../components/store/useThemeStore";
 
-// 1. Extract and memoize ProductItem component
+// --- Product Item Component ---
 const ProductItem = memo(
   ({
     item,
@@ -47,14 +47,19 @@ const ProductItem = memo(
   }) => {
     if (!item) return null;
 
+    const imageSource =
+      item.product_images && item.product_images.length
+        ? { uri: item.product_images[0] }
+        : isDarkTheme
+        ? require("../../../assets/images/darkImagePlaceholder.jpg")
+        : require("../../../assets/images/imageSkeleton.jpg");
+
     return (
       <View style={styles.itemContainer}>
         <Link
           href={{
             pathname: "/screens/ProductDetail",
-            params: {
-              id: item.products_id,
-            },
+            params: { id: item.products_id },
           }}
           asChild
         >
@@ -66,23 +71,14 @@ const ProductItem = memo(
             <View
               style={[
                 styles.listItem,
-                {
-                  backgroundColor: theme.colors.primary,
-                },
+                { backgroundColor: theme.colors.primary },
               ]}
             >
               <Image
-                source={
-                  item.product_images && item.product_images.length > 0
-                    ? { uri: item.product_images[0] }
-                    : isDarkTheme
-                    ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                    : require("../../../assets/images/imageSkeleton.jpg")
-                }
+                source={imageSource}
                 style={styles.productImage}
                 resizeMode="cover"
               />
-
               <View style={styles.productInfo}>
                 <Text
                   style={[
@@ -93,7 +89,6 @@ const ProductItem = memo(
                 >
                   {item.title}
                 </Text>
-
                 <View style={styles.brandContainer}>
                   <Text
                     style={[styles.brand, { color: theme.colors.textColor }]}
@@ -102,7 +97,6 @@ const ProductItem = memo(
                     Brand: {item.brand_title}
                   </Text>
                 </View>
-
                 <View style={styles.bottomRow}>
                   <Text
                     style={[
@@ -115,7 +109,6 @@ const ProductItem = memo(
                   {renderRatingStars(item)}
                 </View>
               </View>
-
               <View style={styles.actionButtons}>
                 <TouchableOpacity
                   style={[
@@ -127,9 +120,7 @@ const ProductItem = memo(
                   ]}
                   onPress={(e) => {
                     e.stopPropagation();
-                    if (!isInCart) {
-                      onAddToCart(item);
-                    }
+                    if (!isInCart) onAddToCart(item);
                   }}
                   activeOpacity={0.7}
                   disabled={isInCart}
@@ -140,7 +131,6 @@ const ProductItem = memo(
                     <Feather name="shopping-cart" size={16} color="white" />
                   )}
                 </TouchableOpacity>
-
                 <TouchableOpacity
                   style={[
                     styles.iconButton,
@@ -163,23 +153,15 @@ const ProductItem = memo(
   }
 );
 
-// 2. Extract and memoize ListSkeleton component
+// --- List Skeleton Component ---
 const ListSkeleton = memo(({ theme }) => (
-  <View
-    style={[
-      styles.listItem,
-      {
-        backgroundColor: theme.colors.primary,
-      },
-    ]}
-  >
+  <View style={[styles.listItem, { backgroundColor: theme.colors.primary }]}>
     <View
       style={[
         styles.productImage,
         { backgroundColor: theme.colors.background },
       ]}
     />
-
     <View style={styles.productInfo}>
       <View
         style={[
@@ -202,7 +184,6 @@ const ListSkeleton = memo(({ theme }) => (
         />
       </View>
     </View>
-
     <View style={styles.actionButtons}>
       <View
         style={[
@@ -220,9 +201,9 @@ const ListSkeleton = memo(({ theme }) => (
   </View>
 ));
 
-// 3. Create a custom hook for alert dialog
+// --- Custom Hook for Alert Dialog ---
 const useAlertDialog = () => {
-  const [alertState, setAlertState] = React.useState({
+  const [alertState, setAlertState] = useState({
     visible: false,
     title: "",
     message: "",
@@ -230,72 +211,27 @@ const useAlertDialog = () => {
     confirmAction: () => {},
   });
 
+  const hideAlert = useCallback(
+    () => setAlertState((prev) => ({ ...prev, visible: false })),
+    []
+  );
   const showAlert = useCallback(
     (title, message, confirmAction, confirmText = "Ok") => {
       setAlertState({
         visible: true,
         title,
         message,
-        confirmAction: confirmAction || (() => hideAlert()),
+        confirmAction: confirmAction || hideAlert,
         confirmText,
       });
     },
-    []
+    [hideAlert]
   );
 
-  const hideAlert = useCallback(() => {
-    setAlertState((prev) => ({ ...prev, visible: false }));
-  }, []);
-
-  return {
-    alertState,
-    showAlert,
-    hideAlert,
-  };
+  return { alertState, showAlert, hideAlert };
 };
 
-// 4. Create a reducer for state management
-const initialState = {
-  products: [],
-  isLoading: true,
-  refreshing: false,
-  addingToCart: [],
-  error: null,
-};
-
-function reducer(state, action) {
-  switch (action.type) {
-    case "FETCH_START":
-      return { ...state, isLoading: true };
-    case "FETCH_SUCCESS":
-      return {
-        ...state,
-        isLoading: false,
-        products: action.payload,
-        error: null,
-      };
-    case "FETCH_ERROR":
-      return { ...state, isLoading: false, error: action.payload };
-    case "REFRESH_START":
-      return { ...state, refreshing: true };
-    case "REFRESH_END":
-      return { ...state, refreshing: false };
-    case "ADD_TO_CART_START":
-      return {
-        ...state,
-        addingToCart: [...state.addingToCart, action.payload],
-      };
-    case "ADD_TO_CART_END":
-      return {
-        ...state,
-        addingToCart: state.addingToCart.filter((id) => id !== action.payload),
-      };
-    default:
-      return state;
-  }
-}
-
-// Main component
+// --- MAIN COMPONENT ---
 const ProductList = () => {
   const navigation = useNavigation();
   const { subcategoryId, subCategorieName } = useLocalSearchParams();
@@ -306,54 +242,71 @@ const ProductList = () => {
     cartItem,
     error: storeError,
   } = useProductStore();
-  const [state, dispatch] = useReducer(reducer, initialState);
   const { isDarkTheme } = useThemeStore();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
   const router = useRouter();
   const flatListRef = useRef(null);
-
-  // Use custom hook for alert dialog
   const { alertState, showAlert, hideAlert } = useAlertDialog();
 
-  // Destructure state for readability
-  const { products, isLoading, refreshing, addingToCart, error } = state;
+  // Local states (no reducers)
+  const [products, setProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [addingToCart, setAddingToCart] = useState([]);
+  const [error, setError] = useState(null);
 
-  // Update header
+  // Set header options
   useLayoutEffect(() => {
     navigation.setOptions({
       title: subCategorieName,
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
+      headerStyle: { backgroundColor: theme.colors.primary },
       headerTintColor: theme.colors.textColor,
     });
   }, [navigation, subCategorieName, theme]);
 
-  // Load products
+  // Load products helper
   const loadProducts = useCallback(async () => {
-    dispatch({ type: "FETCH_START" });
+    setIsLoading(true);
+    setError(null);
     try {
       const data = await fetchProductsBySubcategory(subcategoryId);
-      dispatch({ type: "FETCH_SUCCESS", payload: data });
+      setProducts(data);
     } catch (err) {
       console.error("Failed to fetch products:", err);
-      dispatch({
-        type: "FETCH_ERROR",
-        payload: err.message || "Failed to load products",
-      });
+      setError(err.message || "Failed to load products");
+    } finally {
+      setIsLoading(false);
     }
   }, [subcategoryId, fetchProductsBySubcategory]);
 
-  // Check if product is in cart
+  // Refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const data = await fetchProductsBySubcategory(subcategoryId);
+      setProducts(data);
+    } catch (err) {
+      console.error("Failed to refresh products:", err);
+      setError(err.message || "Failed to refresh products");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [subcategoryId, fetchProductsBySubcategory]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  // Check if product is in cart or being added
   const isInCart = useCallback(
     (item) => {
       if (!item) return false;
       return (
         (cartItem &&
           cartItem.some(
-            (cartItem) =>
-              cartItem.products_id.toString() === item.products_id.toString()
+            (ci) => ci.products_id.toString() === item.products_id.toString()
           )) ||
         addingToCart.includes(item.products_id)
       );
@@ -361,126 +314,87 @@ const ProductList = () => {
     [cartItem, addingToCart]
   );
 
-  // Refresh products
-  const onRefresh = useCallback(async () => {
-    dispatch({ type: "REFRESH_START" });
-    try {
-      const data = await fetchProductsBySubcategory(subcategoryId);
-      dispatch({ type: "FETCH_SUCCESS", payload: data });
-    } catch (err) {
-      console.error("Failed to refresh products:", err);
-      dispatch({
-        type: "FETCH_ERROR",
-        payload: err.message || "Failed to refresh products",
-      });
-    } finally {
-      dispatch({ type: "REFRESH_END" });
-    }
-  }, [subcategoryId, fetchProductsBySubcategory]);
-
-  // Load products on mount
-  useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
-
-  // Add to cart handler
+  // Handler for adding a product to the cart
   const handleAddToCart = useCallback(
     async (product) => {
       if (!user) {
-        showAlert(
+        return showAlert(
           "Login Required",
           "Please log in to add products to your cart.",
           () => router.replace("Login"),
           "Log In"
         );
-        return;
       }
 
-      // Check if the product is already in the cart
-      if (cartItem.some((item) => item.products_id === product.products_id)) {
-        showAlert(
+      if (cartItem.some((i) => i.products_id === product.products_id)) {
+        return showAlert(
           "Product already in cart",
           "This product is already in your cart.",
           () => router.navigate("screens/Cart"),
           "Go to Cart"
         );
-        return;
       }
 
       try {
-        // Mark this product as being added to cart
-        dispatch({ type: "ADD_TO_CART_START", payload: product.products_id });
-
-        // Show success message
+        setAddingToCart((prev) => [...prev, product.products_id]);
         ToastAndroid.show("Product added to cart", ToastAndroid.SHORT);
-
         await addToCart({
           productID: product.products_id,
           consumerID: user.consumer_id,
         });
-      } catch (error) {
+      } catch (err) {
         showAlert(
           "Error",
-          error.message || "Error adding product to cart",
-          null,
+          err.message || "Error adding product to cart",
+          undefined,
           "Ok"
         );
       } finally {
-        dispatch({ type: "ADD_TO_CART_END", payload: product.products_id });
+        setAddingToCart((prev) =>
+          prev.filter((id) => id !== product.products_id)
+        );
       }
     },
     [user, cartItem, addToCart, router, showAlert]
   );
 
-  // Share product handler
+  // Handler to share a product
   const shareProduct = useCallback(async (product) => {
     try {
       await Share.share({
         message: `Check out this product: ${product.title}`,
         url: product.product_url,
       });
-    } catch (error) {
-      console.error("Error sharing product:", error);
+    } catch (err) {
+      console.error("Error sharing product:", err);
     }
   }, []);
 
-  // Show product options
+  // Show action sheet with product options
   const showProductOptions = useCallback(
     (product) => {
       const options = ["Add to Cart", "Share", "Cancel"];
-      const cancelButtonIndex = 2;
-
       showActionSheetWithOptions(
         {
           options,
-          cancelButtonIndex,
+          cancelButtonIndex: 2,
           tintColor: theme.colors.button,
-          containerStyle: {
-            backgroundColor: theme.colors.primary,
-          },
-          textStyle: {
-            color: theme.colors.textColor,
-          },
+          containerStyle: { backgroundColor: theme.colors.primary },
+          textStyle: { color: theme.colors.textColor },
         },
         (buttonIndex) => {
-          switch (buttonIndex) {
-            case 0:
-              handleAddToCart(product);
-              break;
-            case 1:
-              shareProduct(product);
-              break;
-          }
+          if (buttonIndex === 0) handleAddToCart(product);
+          else if (buttonIndex === 1) shareProduct(product);
         }
       );
     },
     [handleAddToCart, shareProduct, theme, showActionSheetWithOptions]
   );
 
-  // Render rating stars
+  // Render rating stars for a product
   const renderRatingStars = useCallback(
     (item) => {
-      if (!item?.average_rating || item.average_rating === 0) return null;
+      if (!item?.average_rating) return null;
       return (
         <View style={styles.ratingContainer}>
           <FontAwesome
@@ -504,23 +418,21 @@ const ProductList = () => {
     [theme]
   );
 
-  // Scroll to top
+  // Scroll to top handler
   const scrollToTop = useCallback(() => {
     flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
   }, []);
 
-  // Optimize FlatList rendering
+  // FlatList key extractor
   const keyExtractor = useCallback(
     (item, index) => (item ? item.products_id.toString() : `skeleton-${index}`),
     []
   );
 
+  // Render each product or skeleton if loading
   const renderItem = useCallback(
-    ({ item, index }) => {
-      if (isLoading) {
-        return <ListSkeleton theme={theme} />;
-      }
-
+    ({ item }) => {
+      if (isLoading) return <ListSkeleton theme={theme} />;
       return (
         <ProductItem
           item={item}
@@ -546,7 +458,7 @@ const ProductList = () => {
     ]
   );
 
-  // Handle error state
+  // Render error state if needed
   if (error || storeError) {
     return (
       <View
@@ -580,9 +492,9 @@ const ProductList = () => {
         initialNumToRender={8}
         maxToRenderPerBatch={5}
         windowSize={5}
-        removeClippedSubviews={true}
-        getItemLayout={(data, index) => ({
-          length: 110, // item height + margin
+        removeClippedSubviews
+        getItemLayout={(_, index) => ({
+          length: 110,
           offset: 110 * index,
           index,
         })}
@@ -596,14 +508,11 @@ const ProductList = () => {
           />
         }
       />
-
       {products.length > 15 && (
         <TouchableOpacity
           style={[
             styles.scrollTopButton,
-            {
-              backgroundColor: theme.colors.button,
-            },
+            { backgroundColor: theme.colors.button },
           ]}
           onPress={scrollToTop}
           activeOpacity={0.8}
@@ -611,7 +520,6 @@ const ProductList = () => {
           <MaterialIcons name="keyboard-arrow-up" size={24} color="white" />
         </TouchableOpacity>
       )}
-
       <AlertDialog
         visible={alertState.visible}
         title={alertState.title}
@@ -628,45 +536,22 @@ const ProductList = () => {
   );
 };
 
+export default memo(ProductList);
+
+// --- STYLES ---
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 40,
   },
-  errorText: {
-    fontSize: 16,
-    marginTop: 16,
-    marginBottom: 24,
-    textAlign: "center",
-  },
-  messageText: {
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  retryButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  listContent: {
-    paddingHorizontal: 12,
-    paddingTop: 12,
-    paddingBottom: 20,
-  },
-  itemContainer: {
-    // marginBottom: 8,
-  },
+  errorText: { fontSize: 16, marginVertical: 16, textAlign: "center" },
+  retryButton: { paddingVertical: 10, paddingHorizontal: 20, borderRadius: 8 },
+  retryButtonText: { color: "#fff", fontWeight: "600" },
+  listContent: { paddingHorizontal: 12, paddingTop: 12, paddingBottom: 20 },
+  itemContainer: {},
   listItem: {
     flexDirection: "row",
     borderRadius: 12,
@@ -679,16 +564,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10,
   },
-  productImage: {
-    width: 90,
-    height: 100,
-    overflow: "hidden",
-  },
+  productImage: { width: 90, height: 100 },
   productInfo: {
     flex: 1,
     marginLeft: 12,
     justifyContent: "space-between",
-    height: "100%",
     paddingVertical: 15,
   },
   productTitle: {
@@ -697,34 +577,25 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 18,
   },
-  brandContainer: {
-    marginVertical: 2,
-  },
-  brand: {
-    fontSize: 12,
-  },
+  brandContainer: { marginVertical: 2 },
+  brand: { fontSize: 12 },
   bottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginTop: 4,
   },
-  productPrice: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
+  productPrice: { fontSize: 14, fontWeight: "bold" },
   ratingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 215, 0, 0.1)",
+    backgroundColor: "rgba(255,215,0,0.1)",
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
     marginRight: 10,
   },
-  starIcon: {
-    marginRight: 2,
-  },
+  starIcon: { marginRight: 2 },
   actionButtons: {
     flexDirection: "column",
     justifyContent: "space-between",
@@ -753,23 +624,12 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   // Skeleton styles
-  skeletonText: {
-    height: 14,
-    width: "80%",
-    borderRadius: 4,
-    marginBottom: 8,
-  },
+  skeletonText: { height: 14, width: "80%", borderRadius: 4, marginBottom: 8 },
   skeletonTextSmall: {
     height: 12,
     width: "50%",
     borderRadius: 4,
     marginBottom: 8,
   },
-  skeletonPrice: {
-    height: 14,
-    width: 60,
-    borderRadius: 4,
-  },
+  skeletonPrice: { height: 14, width: 60, borderRadius: 4 },
 });
-
-export default memo(ProductList);
