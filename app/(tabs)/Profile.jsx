@@ -1,9 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useCallback,
-} from "react";
+import React, { useState, useLayoutEffect, useCallback } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -26,8 +21,6 @@ import {
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useNavigation, useRouter } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import * as LocalAuthentication from "expo-local-authentication";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import useThemeStore from "../../components/store/useThemeStore";
 import useProductStore from "../../components/api/useProductStore";
 import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
@@ -176,64 +169,16 @@ const Profile = () => {
   const router = useRouter();
   const [isChangePasswordModalVisible, setChangePasswordModalVisible] =
     useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDeleteDialogVisible, setIsDeleteDialogVisible] = useState(false);
-  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
-  const [isBiometricEnabled, setIsBiometricEnabled] = useState(false);
+
   const colorScheme = useColorScheme();
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
-  useEffect(() => {
-    const checkBiometricSupport = async () => {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      setIsBiometricSupported(compatible);
-
-      const savedPreference = await AsyncStorage.getItem(
-        "biometricAuthEnabled"
-      );
-      if (savedPreference !== null) {
-        setIsBiometricEnabled(savedPreference === "true");
-      }
-    };
-
-    checkBiometricSupport();
-  }, []);
-
-  const toggleBiometricAuth = async () => {
-    if (!isBiometricSupported) {
-      ToastAndroid.show(
-        "Biometric authentication not supported on this device",
-        ToastAndroid.SHORT
-      );
-      return;
-    }
-
-    if (!isBiometricEnabled) {
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: "Authenticate to enable fingerprint login",
-      });
-
-      if (result.success) {
-        await AsyncStorage.setItem("biometricAuthEnabled", "true");
-        setIsBiometricEnabled(true);
-        ToastAndroid.show("Fingerprint login enabled", ToastAndroid.SHORT);
-      } else {
-        ToastAndroid.show("Authentication failed", ToastAndroid.SHORT);
-      }
-    } else {
-      await AsyncStorage.setItem("biometricAuthEnabled", "false");
-      setIsBiometricEnabled(false);
-      ToastAndroid.show("Fingerprint login disabled", ToastAndroid.SHORT);
-    }
-  };
-
   const handleDeleteAccount = async () => {
     try {
-      setIsLoading(true);
       await deleteConsumerAccount(profileData.consumer_id);
       ToastAndroid.show(
         `Account ${profileData.name} has deleted successfully`,
@@ -243,8 +188,6 @@ const Profile = () => {
       router.replace("/Login");
     } catch (error) {
       Alert.alert("Error", "Failed to delete account. Please try again.");
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -286,13 +229,10 @@ const Profile = () => {
 
   const handleLogout = useCallback(async () => {
     try {
-      setIsLoading(true);
       await logout();
       router.replace("/Login");
     } catch (error) {
       Alert.alert("Error", "Failed to logout. Please try again.");
-    } finally {
-      setIsLoading(false);
     }
   }, [logout, router]);
 
@@ -344,14 +284,7 @@ const Profile = () => {
       })`,
       onPress: handleThemeSelect,
     },
-    {
-      icon: "fingerprint",
-      label: "Unlock with fingerprint",
-      isSwitch: true,
-      switchValue: isBiometricEnabled,
-      onSwitchChange: toggleBiometricAuth,
-      disabled: !isBiometricSupported,
-    },
+
     { icon: "apps", label: "More Features", screen: "screens/MoreFeatures" },
   ];
 
@@ -396,17 +329,6 @@ const Profile = () => {
     <SafeAreaView
       style={[styles.safeArea, { backgroundColor: theme.colors.primary }]}
     >
-      {isRefreshing && (
-        <View
-          style={[
-            styles.loadingContainer,
-            { backgroundColor: theme.colors.background },
-          ]}
-        >
-          <ActivityIndicator color={theme.colors.button} size="large" />
-        </View>
-      )}
-
       <ScrollView
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
