@@ -27,21 +27,20 @@ import { registerBackgroundNotifications } from "../notification-services";
 import UpdateModal from "../components/ui/UpdateModal";
 import { checkForUpdate } from "../utils/VersionUtils";
 
+enableScreens();
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
-// Move enableScreens to outside of component (if not done already)
-enableScreens();
-
 const Layout = () => {
-  // 1. Theme & styling setup
+  // Theme & state initialization
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = useMemo(
     () => (isDarkTheme ? darkTheme : lightTheme),
     [isDarkTheme]
   );
+  const router = useRouter();
 
-  // 2. Product & user related hooks
+  // Product store hooks
   const {
     fetchProfile,
     logout,
@@ -52,24 +51,19 @@ const Layout = () => {
     getAppVersions,
   } = useProductStore();
 
-  // 3. Local state variables
+  // State management
   const [isLoading, setIsLoading] = useState(true);
   const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
   const [showAlert, setShowAlert] = useState(false);
-  const [versionData, setVersionData] = useState([]);
   const [updateModalVisible, setUpdateModalVisible] = useState(false);
   const [latestVersion, setLatestVersion] = useState(null);
-  const router = useRouter();
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
-  // 4. Memoized loading view and screen options
-  const loadingView = useMemo(
-    () => (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    ),
-    [theme.colors.primary]
+  // Memoized components and styles
+  const loadingView = (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="large" color={theme.colors.primary} />
+    </View>
   );
 
   const screenOptions = useMemo(
@@ -81,70 +75,66 @@ const Layout = () => {
     [theme.colors.primary]
   );
 
-  // 5. Initialize background tasks (using useCallback to avoid re-creation)
+  // Background tasks initialization
   const initBackgroundTasks = useCallback(async () => {
     try {
       await registerBackgroundNotifications();
     } catch (error) {
-      console.error("Error initializing background tasks:", error);
+      console.error("Background tasks error:", error);
     }
   }, []);
 
+  // Effects
   useEffect(() => {
-    initBackgroundTasks();
-    return () => {
-      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch((err) =>
-        console.error("Failed to unregister background task:", err)
-      );
-    };
-  }, [initBackgroundTasks]);
-
-  // 6. Check for app version updates
-  useEffect(() => {
-    const checkVersion = async () => {
+    const initApp = async () => {
       try {
-        const netState = await NetInfo.fetch();
-        if (netState.isConnected) {
-          const versions = await getAppVersions();
-          setVersionData(versions);
-          if (versions?.length > 0) {
-            const updateNeeded = checkForUpdate(currentVersion, versions);
-            if (updateNeeded) {
-              setLatestVersion(updateNeeded);
-              setUpdateModalVisible(true);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching version data:", error);
-      }
-    };
-    checkVersion();
-  }, [getAppVersions, currentVersion]);
-
-  // 7. Check acceptance of terms and manage splash screen visibility.
-  useEffect(() => {
-    SplashScreen.preventAutoHideAsync();
-    const checkTerms = async () => {
-      try {
-        const value = await AsyncStorage.getItem("hasAcceptedTerms");
-        setHasAcceptedTerms(value === "true");
-      } catch (error) {
-        console.error("Error checking terms acceptance:", error);
+        SplashScreen.preventAutoHideAsync();
+        await Promise.all([
+          checkTermsAcceptance(),
+          initializeTheme(colorScheme === "dark"),
+          NavigationBar.setBackgroundColorAsync(theme.colors.primary),
+          initBackgroundTasks(),
+          checkVersionUpdates(),
+        ]);
       } finally {
         setIsLoading(false);
       }
     };
-    checkTerms();
+
+    initApp();
+
+    return () => {
+      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch((err) =>
+        console.error("Background task unregister error:", err)
+      );
+    };
   }, []);
 
-  // 8. Initialize theme and navigation bar color on change.
-  useEffect(() => {
-    initializeTheme(colorScheme === "dark");
-    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-  }, [colorScheme, initializeTheme, theme.colors.primary]);
+  const checkTermsAcceptance = async () => {
+    try {
+      const value = await AsyncStorage.getItem("hasAcceptedTerms");
+      setHasAcceptedTerms(value === "true");
+    } catch (error) {
+      console.error("Terms check error:", error);
+    }
+  };
 
-  // 9. Fetch user data only when authenticated
+  const checkVersionUpdates = async () => {
+    try {
+      const netState = await NetInfo.fetch();
+      if (netState.isConnected) {
+        const versions = await getAppVersions();
+        const updateNeeded = checkForUpdate(currentVersion, versions);
+        if (updateNeeded) {
+          setLatestVersion(updateNeeded);
+          setUpdateModalVisible(true);
+        }
+      }
+    } catch (error) {
+      console.error("Version check error:", error);
+    }
+  };
+
   const fetchUserData = useCallback(async () => {
     if (user?.consumer_id) {
       try {
@@ -155,76 +145,52 @@ const Layout = () => {
           listOrders(user.consumer_id),
         ]);
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error("User data fetch error:", error);
       }
     }
-  }, [
-    user?.consumer_id,
-    fetchProfile,
-    listCart,
-    fetchBillingAddresses,
-    listOrders,
-  ]);
+  }, [user?.consumer_id]);
 
-  // 10. Handle authentication & routing (grouping logic ensures checks fire when all data is ready)
   useEffect(() => {
-    const checkAuthentication = async () => {
-      if (!isLoading && hasAcceptedTerms !== null) {
-        if (hasAcceptedTerms) {
-          const isLoggedIn = user?.timestamp
-            ? Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000
-            : false;
-          if (!isLoggedIn && user) await logout();
-          SplashScreen.hideAsync();
-          router.replace(isLoggedIn ? "/(tabs)" : "/Login");
-        } else {
-          SplashScreen.hideAsync();
-        }
-      }
-    };
-    checkAuthentication();
-  }, [hasAcceptedTerms, user, logout, isLoading, router]);
+    if (!isLoading && hasAcceptedTerms !== null) {
+      handleAuthAndNetwork();
+    }
+  }, [hasAcceptedTerms, user, isLoading]);
 
-  // 11. Optimize network connectivity listener
-  useEffect(() => {
-    let lastConnectedStatus = null; // Local variable to avoid unnecessary state updates
+  const handleAuthAndNetwork = async () => {
+    const isLoggedIn =
+      user?.timestamp && Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000;
 
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = Boolean(state.isInternetReachable);
-      if (lastConnectedStatus !== connected) {
-        lastConnectedStatus = connected;
-        setShowAlert(!connected);
-        // Refresh data only when connection is restored.
-        if (connected && hasAcceptedTerms && !isLoading) {
-          router.replace(user ? "/(tabs)" : "/Login");
-          fetchUserData();
-        }
-      }
-    });
-    return () => {
-      unsubscribe();
-    };
-  }, [user, router, fetchUserData, hasAcceptedTerms, isLoading]);
+    if (hasAcceptedTerms) {
+      if (!isLoggedIn && user) await logout();
+      SplashScreen.hideAsync();
+      router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+    } else {
+      SplashScreen.hideAsync();
+    }
 
-  // 12. Memoized handlers to prevent unnecessary re-creation
+    const netState = await NetInfo.fetch();
+    setShowAlert(!netState.isConnected);
+
+    if (netState.isConnected && hasAcceptedTerms) {
+      fetchUserData();
+    }
+  };
+
+  // Handlers
   const handleAcceptTerms = useCallback(async () => {
     try {
       await AsyncStorage.setItem("hasAcceptedTerms", "true");
       setHasAcceptedTerms(true);
     } catch (error) {
-      console.error("Error setting terms acceptance:", error);
+      console.error("Terms acceptance error:", error);
     }
   }, []);
 
   const handleRefresh = useCallback(() => {
-    NetInfo.fetch().then((state) => {
-      const connected = Boolean(state.isConnected);
-      setShowAlert(!connected);
-    });
+    NetInfo.fetch().then((state) => setShowAlert(!state.isConnected));
   }, []);
 
-  // 13. Show loading view until all checks are complete
-  if (hasAcceptedTerms === null || isLoading) {
+  if (isLoading || hasAcceptedTerms === null) {
     return loadingView;
   }
 
@@ -235,10 +201,11 @@ const Layout = () => {
       <ActionSheetProvider>
         <PaperProvider theme={theme}>
           <StatusBar style={isDarkTheme ? "light" : "dark"} />
+
           {!hasAcceptedTerms ? (
             <TermsModal
               onAccept={handleAcceptTerms}
-              onDecline={() => BackHandler.exitApp()}
+              onDecline={BackHandler.exitApp}
             />
           ) : (
             <Stack screenOptions={screenOptions}>
@@ -246,22 +213,21 @@ const Layout = () => {
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
           )}
-          {hasAcceptedTerms && (
-            <AlertDialog
-              visible={showAlert}
-              title="No Internet Connection"
-              message="Please check your internet connection and try again."
-              onConfirm={handleRefresh}
-              confirmText="Try again"
-            />
-          )}
+
+          <AlertDialog
+            visible={showAlert}
+            title="No Internet Connection"
+            message="Please check your internet connection and try again."
+            onConfirm={handleRefresh}
+            confirmText="Try again"
+          />
+
           {latestVersion && (
             <UpdateModal
               visible={updateModalVisible}
               onClose={() => setUpdateModalVisible(false)}
               latestVersion={latestVersion.version}
               currentVersion={currentVersion}
-              versionData={versionData}
             />
           )}
         </PaperProvider>
