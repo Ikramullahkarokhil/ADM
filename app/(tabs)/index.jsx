@@ -36,20 +36,17 @@ const LIGHT_LOGO = require("../../assets/images/lightLogo.png");
 
 // Cart icon as a separate component to prevent re-renders
 const CartIcon = memo(({ count, onPress, color }) => (
-  <Pressable
-    onPress={onPress}
-    android_ripple={{ color }}
-    style={styles.iconButton}
-  >
-    <IconButton icon="cart" size={24} iconColor={color} />
+  <Pressable onPress={onPress} style={styles.iconButton}>
+    <IconButton icon="cart" size={24} iconColor={color.textColor} />
     {count > 0 && (
-      <Badge style={[styles.badge, { backgroundColor: color }]}>{count}</Badge>
+      <Badge style={[styles.badge, { backgroundColor: color.button }]}>
+        {count}
+      </Badge>
     )}
   </Pressable>
 ));
 
 const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
-  // Memoize logo source to prevent unnecessary re-renders
   const logoSource = useMemo(
     () => (!isDarkTheme ? DARK_LOGO : LIGHT_LOGO),
     [isDarkTheme]
@@ -74,7 +71,7 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
         <CartIcon
           count={cartItemCount}
           onPress={onCartPress}
-          color={theme.colors.button}
+          color={theme.colors}
         />
       </View>
     </View>

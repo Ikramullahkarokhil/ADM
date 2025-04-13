@@ -5,6 +5,7 @@ import {
   useCallback,
   useState,
   memo,
+  useRef,
 } from "react";
 import {
   StyleSheet,
@@ -504,6 +505,7 @@ const ProductDetail = () => {
   const [totalComments, setTotalComments] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState(null);
+  const scrollViewRef = useRef();
 
   // Use custom hook for alert dialog
   const { alertState, showAlert, hideAlert } = useAlertDialog();
@@ -588,7 +590,7 @@ const ProductDetail = () => {
   // Initial data loading
   useEffect(() => {
     fetchProduct();
-  }, [fetchProduct]);
+  }, [id, fetchProduct]);
 
   // Load additional data when product is available
   useEffect(() => {
@@ -906,6 +908,7 @@ const ProductDetail = () => {
       <StatusBar style={isDarkTheme ? "light" : "dark"} />
 
       <ScrollView
+        ref={scrollViewRef}
         contentContainerStyle={[
           styles.container,
           { backgroundColor: theme.colors.primary },
@@ -920,7 +923,6 @@ const ProductDetail = () => {
           images={product.product_images}
           isDarkTheme={isDarkTheme}
         />
-
         {/* Product Information */}
         <View
           style={[
@@ -1065,7 +1067,6 @@ const ProductDetail = () => {
             theme={theme}
           />
         </View>
-
         {/* Review Section */}
         <ReviewSection
           user={user}
@@ -1074,7 +1075,6 @@ const ProductDetail = () => {
           rating={userRating}
           onRateProduct={handleRate}
         />
-
         {/* Questions Section */}
         <QuestionSection
           questions={questions}
@@ -1086,9 +1086,45 @@ const ProductDetail = () => {
           router={router}
         />
 
-        {/* Related Products */}
         {relatedProducts && (
-          <RelatedProducts relatedProducts={relatedProducts} />
+          <RelatedProducts
+            relatedProducts={relatedProducts}
+            onProductSelect={async (productId) => {
+              setIsLoading(true);
+              try {
+                const response = await fetchProductDetails({
+                  productId,
+                  consumerId: user?.consumer_id,
+                });
+                const productData = response.data;
+                if (productData) {
+                  setProduct(productData);
+                  setIsFavorite(Number(response?.is_fav?.is_favourite) === 1);
+                  setUserRating(Number(productData?.average_rating) || 0);
+                  setTotalRating(Number(productData.total_rating) || 0);
+
+                  // Fetch new related products for the selected product
+                  const relatedProductsData = await fetchRelatedProducts(
+                    productId
+                  );
+                  setRelatedProducts(
+                    relatedProductsData.length > 0 ? relatedProductsData : null
+                  );
+
+                  // Scroll to top
+                  scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+                }
+              } catch (err) {
+                console.error("Error fetching product:", err);
+                showAlert(
+                  "Error",
+                  "Failed to fetch product details: " + (err.message || err)
+                );
+              } finally {
+                setIsLoading(false);
+              }
+            }}
+          />
         )}
       </ScrollView>
 

@@ -56,31 +56,20 @@ const ProductCard = React.memo(({ product, theme, isDarkTheme, onPress }) => {
   );
 });
 
-const RelatedProducts = ({ relatedProducts }) => {
+const RelatedProducts = ({ relatedProducts, onProductSelect }) => {
   const [showAll, setShowAll] = useState(false);
   const theme = useTheme();
-  const router = useRouter();
-
   const { isDarkTheme } = useThemeStore();
-
-  const handleProductPress = (productId) => {
-    // Navigate to product details with the selected product ID
-    router.replace({
-      pathname: "/screens/ProductDetails",
-      params: { id: productId },
-    });
-  };
 
   const renderItem = ({ item }) => (
     <ProductCard
       product={item}
       theme={theme}
       isDarkTheme={isDarkTheme}
-      onPress={() => handleProductPress(item.products_id)}
+      onPress={() => onProductSelect(item.products_id)}
     />
   );
 
-  // Don't show the component if there are no related products
   if (!relatedProducts) return null;
 
   return (
