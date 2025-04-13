@@ -60,12 +60,8 @@ const ProductVariantSelection = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Customize Order",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme]);
+  }, [navigation]);
 
   useEffect(() => {
     try {

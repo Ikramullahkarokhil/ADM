@@ -1,4 +1,10 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  useLayoutEffect,
+} from "react";
 import {
   StyleSheet,
   Text,
@@ -111,7 +117,7 @@ const FavoriteProductPage = () => {
   );
 
   // Set custom header
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       header: () => <CustomHeader />,
     });

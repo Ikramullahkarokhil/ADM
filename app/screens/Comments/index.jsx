@@ -192,12 +192,8 @@ const Comments = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Comments",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme.colors]);
+  }, [navigation]);
 
   // Load comments on initial mount
   useEffect(() => {

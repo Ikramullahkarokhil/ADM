@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo, useLayoutEffect } from "react";
 import {
   View,
   Text,
@@ -84,7 +84,7 @@ const ProductsList = () => {
   const { isDarkTheme } = useThemeStore();
 
   // Set navigation options
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: sellerName || "Products",
       headerTintColor: colors.buttonText,
@@ -107,10 +107,10 @@ const ProductsList = () => {
         let productsData;
         if (listType === "newArrivals") {
           const response = await fetchSellerNewArivals({ sellerId: sellerId });
-          productsData = response.data.new_arrivals;
+          productsData = response.new_arrivals;
         } else {
           const response = await fetchSellerAllProducts({ sellerId: sellerId });
-          productsData = response.data.all_products;
+          productsData = response.all_products;
         }
 
         if (productsData?.data) {
@@ -155,8 +155,8 @@ const ProductsList = () => {
 
       const productsData =
         listType === "newArrivals"
-          ? response.data.new_arrivals
-          : response.data.all_products;
+          ? response.new_arrivals
+          : response.all_products;
 
       if (productsData?.data) {
         setProducts((prev) => [...prev, ...productsData.data]);
@@ -208,33 +208,6 @@ const ProductsList = () => {
             Loading products...
           </Text>
         </View>
-      </View>
-    );
-  }
-
-  if (!user) {
-    return (
-      <View
-        style={[styles.errorContainer, { backgroundColor: colors.primary }]}
-      >
-        <MaterialIcons
-          name="error-outline"
-          size={48}
-          color={colors.deleteButton}
-        />
-        <Text style={[styles.errorText, { color: colors.textColor }]}>
-          Please Login to view products
-        </Text>
-        <Pressable
-          style={[styles.backButton, { borderColor: colors.inactiveColor }]}
-          onPress={() => {
-            router.replace("/Login");
-          }}
-        >
-          <Text style={[styles.backButtonText, { color: colors.textColor }]}>
-            Login
-          </Text>
-        </Pressable>
       </View>
     );
   }

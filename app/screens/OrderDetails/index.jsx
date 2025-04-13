@@ -289,10 +289,8 @@ const OrderDetails = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Order Details",
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
     });
-  }, [navigation, colors]);
+  }, [navigation]);
 
   if (loading) {
     return (

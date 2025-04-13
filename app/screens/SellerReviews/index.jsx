@@ -1,4 +1,10 @@
-import React, { useEffect, useState, useCallback, memo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  memo,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -87,7 +93,7 @@ const ReviewsList = () => {
   const { colors } = useTheme();
 
   // Set navigation options
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: sellerName || "Customer Reviews",
       headerTintColor: colors.buttonText,
@@ -113,8 +119,8 @@ const ReviewsList = () => {
         });
 
         if (isMounted) {
-          setReviews(response.data.people_reviews.data || []);
-          setHasMore(response.data.people_reviews?.data?.length === 10); // Assuming 10 items per page
+          setReviews(response.people_reviews.data || []);
+          setHasMore(response.people_reviews?.data?.length === 10); // Assuming 10 items per page
           setLoading(false);
         }
       } catch (error) {
@@ -133,24 +139,20 @@ const ReviewsList = () => {
 
   // Load more reviews
   const loadMoreReviews = useCallback(async () => {
-    if (!hasMore || loading || !sellerId || !user?.consumer_id) return;
+    if (!hasMore || loading || !sellerId) return;
 
     try {
       const nextPage = page + 1;
       const response = await fetchSellerReviews({
         sellerId,
-        consumerId: user.consumer_id,
         page: nextPage,
       });
 
-      if (response.data.people_reviews.data) {
+      if (response.people_reviews.data) {
         setReviews((prevReviews) => {
-          const newReviews = [
-            ...prevReviews,
-            ...response.data.people_reviews.data,
-          ];
+          const newReviews = [...prevReviews, ...response.people_reviews.data];
           // Update hasMore based on the new reviews count.
-          setHasMore(response.data.people_reviews.total > newReviews.length);
+          setHasMore(response.people_reviews.total > newReviews.length);
           return newReviews;
         });
         setPage(nextPage);
@@ -160,35 +162,7 @@ const ReviewsList = () => {
     } catch (error) {
       console.error("Error loading more reviews:", error);
     }
-  }, [hasMore, loading, page, sellerId, user?.consumer_id, fetchSellerReviews]);
-
-  // Render login prompt if user not logged in
-  if (!user) {
-    return (
-      <View
-        style={[styles.errorContainer, { backgroundColor: colors.primary }]}
-      >
-        <MaterialIcons
-          name="error-outline"
-          size={48}
-          color={colors.deleteButton}
-        />
-        <Text style={[styles.errorText, { color: colors.textColor }]}>
-          Please Login to view reviews
-        </Text>
-        <Pressable
-          style={[styles.backButton, { borderColor: colors.inactiveColor }]}
-          onPress={() => {
-            router.replace("/Login");
-          }}
-        >
-          <Text style={[styles.backButtonText, { color: colors.textColor }]}>
-            Login
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
+  }, [hasMore, loading, page, sellerId, fetchSellerReviews]);
 
   // Loading state
   if (loading && page === 1) {

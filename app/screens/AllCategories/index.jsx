@@ -118,8 +118,6 @@ const AllCategories = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: MainCategorieName,
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
     });
   }, [navigation, MainCategorieName]);
 

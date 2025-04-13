@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useLayoutEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -89,11 +89,9 @@ const JustForYouScreen = () => {
   const colors = theme.colors;
   const navigation = useNavigation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       title: "Just For You",
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
     });
   }, [navigation]);
 

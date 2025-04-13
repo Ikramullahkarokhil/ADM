@@ -260,10 +260,8 @@ const ProductList = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: subCategorieName,
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, subCategorieName, theme]);
+  }, [navigation, subCategorieName]);
 
   // Load products helper
   const loadProducts = useCallback(async () => {

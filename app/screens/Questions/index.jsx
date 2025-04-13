@@ -120,12 +120,8 @@ const Questions = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Questions",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme.colors]);
+  }, [navigation]);
 
   // Load questions with optimized pagination handling
   const loadQuestions = useCallback(

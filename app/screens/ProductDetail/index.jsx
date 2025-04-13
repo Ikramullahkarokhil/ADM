@@ -547,10 +547,8 @@ const ProductDetail = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, product, theme]);
+  }, [navigation, product]);
 
   // Refresh control
   const onRefresh = useCallback(async () => {

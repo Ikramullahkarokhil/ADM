@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo, useLayoutEffect } from "react";
 import {
   View,
   Text,
@@ -130,13 +130,11 @@ const TopSellersScreen = () => {
 
   const navigation = useNavigation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       title: "Top Sellers",
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
     });
-  }, [navigation, colors]);
+  }, [navigation]);
 
   const handleSellerPress = useCallback(
     (seller) => {

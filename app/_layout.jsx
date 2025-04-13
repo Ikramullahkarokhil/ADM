@@ -76,6 +76,7 @@ const Layout = () => {
     () => ({
       headerTitleAlign: "center",
       headerStyle: { backgroundColor: theme.colors.primary },
+      headerTintColor: theme.colors.textColor,
       detachInactiveScreens: true,
     }),
     [theme.colors.primary]

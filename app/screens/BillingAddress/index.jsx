@@ -700,12 +700,8 @@ const BillingAddress = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Billing Addresses",
-      headerStyle: {
-        backgroundColor: theme.colors.primary,
-      },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme]);
+  }, [navigation]);
 
   // Animate FAB when mode changes
   useLayoutEffect(() => {

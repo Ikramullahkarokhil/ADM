@@ -1,4 +1,11 @@
-import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  memo,
+  useMemo,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -215,29 +222,28 @@ const SellerProfile = () => {
   const { isDarkTheme } = useThemeStore();
 
   // Set navigation options
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: sellerTitle || "Seller Profile",
-      headerShown: true,
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
     });
-  }, [sellerTitle, navigation, colors]);
+  }, [sellerTitle, navigation]);
 
   // Load seller data with error handling
   const loadSellerData = useCallback(
     async (isRefreshing = false) => {
-      if (!sellerId || !user?.consumer_id) return;
-
+      if (!sellerId) return;
       try {
         if (!isRefreshing) setLoading(true);
+
         const data = await fetchSellerProfile({
           sellerId,
-          consumerId: user.consumer_id,
+          consumerId: user?.consumer_id ?? "",
         });
 
-        setSellerData(data);
-        setIsFollowing(data.do_i_follow === 1);
+        if (data) {
+          setSellerData(data);
+          setIsFollowing(data.do_i_follow === 1);
+        }
       } catch (error) {
         console.error("Error fetching seller data:", error);
       } finally {
@@ -283,7 +289,7 @@ const SellerProfile = () => {
 
   const handleShowAll = useCallback(
     (type) => {
-      if (!sellerData || !user?.consumer_id) return;
+      if (!sellerData) return;
 
       router.push({
         pathname: `/screens/Seller${
@@ -302,7 +308,7 @@ const SellerProfile = () => {
         },
       });
     },
-    [sellerId, sellerData, user?.consumer_id]
+    [sellerId, sellerData]
   );
 
   // Memoized data
@@ -330,32 +336,6 @@ const SellerProfile = () => {
     () => sellerData?.people_reviews?.total || 0,
     [sellerData?.people_reviews?.total]
   );
-
-  // Render login prompt if user not logged in
-  if (!user) {
-    return (
-      <View
-        style={[styles.errorContainer, { backgroundColor: colors.primary }]}
-      >
-        <MaterialIcons
-          name="error-outline"
-          size={48}
-          color={colors.deleteButton}
-        />
-        <Text style={[styles.errorText, { color: colors.textColor }]}>
-          Please Login to view seller profile
-        </Text>
-        <Pressable
-          style={[styles.backButton, { borderColor: colors.inactiveColor }]}
-          onPress={() => router.replace("/Login")}
-        >
-          <Text style={[styles.backButtonText, { color: colors.textColor }]}>
-            Login
-          </Text>
-        </Pressable>
-      </View>
-    );
-  }
 
   // Loading state
   if (loading) {

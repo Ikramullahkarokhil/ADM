@@ -91,10 +91,8 @@ const UpdateProfile = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "Update Profile",
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme]);
+  }, [navigation]);
 
   useEffect(() => {
     if (profileData) {

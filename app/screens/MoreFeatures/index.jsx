@@ -11,10 +11,8 @@ const index = () => {
   useLayoutEffect(() => {
     navigation.setOptions({
       title: "More Features",
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
     });
-  }, [navigation, theme]);
+  }, [navigation]);
 
   return (
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>

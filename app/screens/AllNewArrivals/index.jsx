@@ -1,4 +1,11 @@
-import { useEffect, useState, useCallback, memo, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  memo,
+  useRef,
+  useLayoutEffect,
+} from "react";
 import {
   View,
   Text,
@@ -138,11 +145,9 @@ const AllNewArrivals = () => {
   const colors = theme.colors;
   const navigation = useNavigation();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     navigation.setOptions({
       title: "New Arrivals",
-      headerStyle: { backgroundColor: colors.primary },
-      headerTintColor: colors.textColor,
     });
   }, [navigation]);
 
