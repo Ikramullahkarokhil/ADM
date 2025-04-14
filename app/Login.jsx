@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, memo } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,24 +9,27 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ActivityIndicator,
-  ToastAndroid,
 } from "react-native";
 import { Formik, useField } from "formik";
 import * as Yup from "yup";
-import useProductStore from "../components/api/useProductStore";
 import { Link, useRouter } from "expo-router";
 import { Button, useTheme } from "react-native-paper";
+import useProductStore from "../components/api/useProductStore";
 import useThemeStore from "../components/store/useThemeStore";
-import * as LocalAuthentication from "expo-local-authentication";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as WebBrowser from "expo-web-browser";
+import * as Google from "expo-auth-session/providers/google";
+import { makeRedirectUri } from "expo-auth-session";
 
+// Complete any lingering authentication sessions
+WebBrowser.maybeCompleteAuthSession();
+
+// Schema for login form validation
 const loginSchema = Yup.object().shape({
   email: Yup.string().email("Invalid email").required("Required"),
   password: Yup.string().min(6, "Too Short!").required("Required"),
 });
 
-// Memoized FormikInput component
+// Memoized FormikInput component for form fields
 const FormikInput = memo(
   ({ fieldName, theme, secureTextEntry, toggleSecure, ...props }) => {
     const [field, meta, helpers] = useField(fieldName);
@@ -86,16 +89,67 @@ const Login = () => {
   const router = useRouter();
   const { loginUser, loginLoading, loginError } = useProductStore();
   const theme = useTheme();
-  const [secureTextEntry, setSecureTextEntry] = useState(true);
   const { isDarkTheme } = useThemeStore();
+  const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [googleAuthInProgress, setGoogleAuthInProgress] = useState(false);
+
+  const redirectUri = makeRedirectUri();
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    webClientId:
+      "471117594700-86hee82eto1lukhq4sq0v81thv6bodbu.apps.googleusercontent.com",
+    androidClientId:
+      "471117594700-p0gv2s89o7d13tvtlsfj7ru17d8cf0a9.apps.googleusercontent.com",
+    redirectUri: redirectUri,
+  });
+
+  useEffect(() => {
+    if (response?.type === "success") {
+      setGoogleAuthInProgress(false);
+
+      // Get the access token instead of id_token
+      const { access_token } = response.params;
+
+      console.log("Google sign in successful!");
+
+      handleGoogleLogin(access_token);
+    } else if (response?.type === "error") {
+      setGoogleAuthInProgress(false);
+      console.error("Google sign in error:", response.error);
+    } else if (response?.type === "dismiss") {
+      setGoogleAuthInProgress(false);
+      console.log("Google sign in dismissed by user");
+    }
+  }, [response]);
+
+  const handleGoogleLogin = async (accessToken) => {
+    try {
+      setSubmitting(true);
+
+      console.log("Processing Google login with token:", accessToken);
+
+      // Wait a moment to simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      // Navigate to the main app
+      router.navigate("(tabs)");
+    } catch (error) {
+      console.error("Google Login Error:", error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleLogin = useCallback(
     async (values) => {
       try {
+        setSubmitting(true);
         await loginUser(values);
         router.navigate("(tabs)");
       } catch (error) {
         console.error("Login Error:", error);
+      } finally {
+        setSubmitting(false);
       }
     },
     [loginUser, router]
@@ -104,6 +158,20 @@ const Login = () => {
   const toggleSecure = useCallback(() => {
     setSecureTextEntry((prev) => !prev);
   }, []);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    try {
+      setGoogleAuthInProgress(true);
+      // Improved platform handling
+      await promptAsync({
+        useProxy: Platform.OS === "web",
+        showInRecents: true,
+      });
+    } catch (error) {
+      setGoogleAuthInProgress(false);
+      console.error("Error starting Google auth:", error);
+    }
+  }, [promptAsync]);
 
   return (
     <KeyboardAvoidingView
@@ -178,11 +246,47 @@ const Login = () => {
                 textColor={theme.colors.primary}
                 buttonColor={theme.colors.button}
                 style={styles.button}
-                loading={loginLoading}
+                loading={loginLoading || submitting}
                 accessibilityLabel="Sign in button"
                 onPress={handleSubmit}
+                disabled={loginLoading || submitting || googleAuthInProgress}
               >
                 Sign In
+              </Button>
+
+              <View style={styles.divider}>
+                <View
+                  style={[
+                    styles.dividerLine,
+                    { backgroundColor: theme.colors.subInactiveColor },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.dividerText,
+                    { color: theme.colors.inactiveColor },
+                  ]}
+                >
+                  OR
+                </Text>
+                <View
+                  style={[
+                    styles.dividerLine,
+                    { backgroundColor: theme.colors.subInactiveColor },
+                  ]}
+                />
+              </View>
+
+              <Button
+                textColor={theme.colors.primary}
+                buttonColor={theme.colors.button}
+                style={styles.button}
+                loading={googleAuthInProgress}
+                disabled={submitting || googleAuthInProgress}
+                onPress={handleGoogleSignIn}
+                accessibilityLabel="Sign in with Google button"
+              >
+                Sign In with Google
               </Button>
 
               <View style={styles.footer}>
@@ -318,6 +422,19 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 20,
     fontSize: 16,
+  },
+  divider: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    paddingHorizontal: 10,
+    fontSize: 14,
   },
 });
 
