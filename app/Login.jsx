@@ -309,7 +309,7 @@ const Login = () => {
                     textColor={theme.colors.button}
                     style={styles.skipButton}
                   >
-                    Skip
+                    Continue as a guest
                   </Button>
                 </Link>
               </View>

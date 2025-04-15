@@ -3,10 +3,10 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   RefreshControl,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { Tab } from "@rneui/themed";
 import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -44,6 +44,11 @@ const ProductRow = React.memo(({ product, index, getStatusColor, colors }) => (
       <Text style={styles.productStatusText}>
         {product.status || "Unknown"}
       </Text>
+      {product.process_at && (
+        <Text style={styles.productStatusText}>
+          {new Date(product.process_at).toISOString().split("T")[0]}
+        </Text>
+      )}
     </View>
   </View>
 ));
@@ -193,6 +198,12 @@ const Orders = () => {
           return "#2563eb"; // Blue
         case "delivered":
           return colors.button;
+        case "on-way":
+          return "#1e293b";
+        case "pending":
+          return "#3498db";
+        case "packing":
+          return "#f59e0b";
         case "cancelled":
         case "rejected":
           return colors.deleteButton;
@@ -218,7 +229,7 @@ const Orders = () => {
     [index, colors.deleteButton, colors.button, colors.inactiveColor]
   );
 
-  // Memoize the item renderer for better FlatList performance
+  // Memoize the item renderer for better FlashList performance
   const renderItem = useCallback(
     ({ item }) => (
       <OrderCard
@@ -267,6 +278,9 @@ const Orders = () => {
     [refreshing, onRefresh, colors.button]
   );
 
+  // Estimate item size for FlashList
+  const estimatedItemSize = useMemo(() => 150, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
       <View style={styles.tabContainer}>
@@ -289,23 +303,19 @@ const Orders = () => {
           ))}
         </Tab>
       </View>
-      <FlatList
+      <FlashList
         data={filteredOrders}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
         ListEmptyComponent={EmptyState}
         refreshControl={refreshControl}
         contentContainerStyle={styles.listContentContainer}
+        estimatedItemSize={estimatedItemSize}
         removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={5}
-        initialNumToRender={5}
-        updateCellsBatchingPeriod={50}
-        getItemLayout={(data, index) => ({
-          length: 150,
-          offset: 150 * index,
-          index,
-        })}
+        overrideItemLayout={(layout, item) => {
+          layout.size = estimatedItemSize;
+        }}
+        optimizeItemLayout
       />
     </View>
   );
@@ -320,13 +330,13 @@ const styles = StyleSheet.create({
   },
   listContentContainer: {
     paddingBottom: 30,
-    flexGrow: 1,
   },
   emptyState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     padding: 20,
+    height: 300, // Provide a fixed height for empty state
   },
   emptyTitle: {
     fontSize: 20,

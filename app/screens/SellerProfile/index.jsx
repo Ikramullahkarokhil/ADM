@@ -337,6 +337,11 @@ const SellerProfile = () => {
     [sellerData?.people_reviews?.total]
   );
 
+  const displayTotalReviews = useMemo(
+    () => sellerData?.total_reviews || 0,
+    [sellerData?.total_reviews]
+  );
+
   // Loading state
   if (loading) {
     return (
@@ -421,9 +426,17 @@ const SellerProfile = () => {
               {seller.store_name}
             </Text>
             <View style={styles.ratingSection}>
+              <Text
+                style={[
+                  styles.ratingText,
+                  { color: colors.buttonText, marginLeft: 0, marginRight: 5 },
+                ]}
+              >
+                {parseFloat(average_rating || 0).toFixed(1)}
+              </Text>
               <RatingStars rating={parseFloat(average_rating)} color="yellow" />
               <Text style={[styles.ratingText, { color: colors.buttonText }]}>
-                {parseFloat(average_rating || 0).toFixed(1)}
+                ({displayTotalReviews})
               </Text>
             </View>
             <View style={styles.ratingSection}>
