@@ -34,8 +34,7 @@
           "icon": "./assets/icon.png",
           "color": "#ffffff"
         }
-      ],
-      ["@react-native-google-signin/google-signin"]
+      ]
     ],
 
     "scheme": "com.afghanbyteTechnologies.ADM",
