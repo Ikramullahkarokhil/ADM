@@ -1,12 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useCallback,
-  useState,
-  memo,
-  useRef,
-} from "react";
+import React, { useEffect, useCallback, useState, memo, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -75,6 +67,7 @@ const useAlertDialog = () => {
   };
 };
 
+// Simplified ProductRating component
 const ProductRating = memo(
   ({ rating, colors, onRateProduct, readOnly, size, numberOfRating }) => {
     const handleStarPress = useCallback(
@@ -118,19 +111,17 @@ const ProductRating = memo(
   }
 );
 
+// Simplified ProductImages component
 const ProductImages = memo(({ images, isDarkTheme }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const displayImages = useMemo(
-    () =>
-      images?.length > 0
-        ? images
-        : [
-            isDarkTheme
-              ? require("../../../assets/images/darkImagePlaceholder.jpg")
-              : require("../../../assets/images/imageSkeleton.jpg"),
-          ],
-    [images, isDarkTheme]
-  );
+  const displayImages =
+    images?.length > 0
+      ? images
+      : [
+          isDarkTheme
+            ? require("../../../assets/images/darkImagePlaceholder.jpg")
+            : require("../../../assets/images/imageSkeleton.jpg"),
+        ];
 
   return (
     <View style={styles.carouselContainer}>
@@ -163,6 +154,17 @@ const ProductImages = memo(({ images, isDarkTheme }) => {
   );
 });
 
+// Modern Discount Badge component
+const DiscountBadge = memo(({ discountTitle, discountValue }) => {
+  return (
+    <View style={styles.discountBadge}>
+      <Text style={styles.discountValue}>{discountValue}%</Text>
+      <Text style={styles.discountTitle}>{discountTitle}</Text>
+    </View>
+  );
+});
+
+// Product Actions component
 const ProductActions = memo(
   ({
     product,
@@ -208,6 +210,7 @@ const ProductActions = memo(
   }
 );
 
+// Question Item component
 const QuestionItem = memo(({ item, theme }) => (
   <View
     style={[styles.questionItem, { backgroundColor: theme.colors.primary }]}
@@ -266,6 +269,7 @@ const QuestionItem = memo(({ item, theme }) => (
   </View>
 ));
 
+// Question Section component
 const QuestionSection = memo(
   ({
     questions,
@@ -335,6 +339,7 @@ const QuestionSection = memo(
   }
 );
 
+// Review Section component
 const ReviewSection = memo(
   ({ user, theme, productId, rating, onRateProduct }) => {
     const [showLoginAlert, setShowLoginAlert] = useState(false);
@@ -435,6 +440,7 @@ const ReviewSection = memo(
   }
 );
 
+// Main ProductDetail component
 const ProductDetail = () => {
   const { id } = useLocalSearchParams();
   const navigation = useNavigation();
@@ -477,17 +483,14 @@ const ProductDetail = () => {
   // Alert dialog
   const { alertState, showAlert, hideAlert } = useAlertDialog();
 
-  // Memoized derived state
-  const isInCart = useMemo(() => {
-    return (
-      product &&
-      cartItem?.some(
-        (item) => item.products_id.toString() === product.products_id.toString()
-      )
+  // Check if product is in cart
+  const isInCart =
+    product &&
+    cartItem?.some(
+      (item) => item.products_id.toString() === product.products_id.toString()
     );
-  }, [cartItem, product]);
 
-  // Data fetching functions
+  // Fetch all product data
   const fetchAllData = useCallback(async () => {
     if (!id) return;
 
@@ -543,14 +546,14 @@ const ProductDetail = () => {
     fetchAllData();
   }, [fetchAllData]);
 
-  // Header update
-  useLayoutEffect(() => {
+  // Update header title
+  useEffect(() => {
     navigation.setOptions({
       title: product?.title || "Product Details",
     });
   }, [navigation, product]);
 
-  // Refresh control
+  // Refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -562,7 +565,7 @@ const ProductDetail = () => {
     }
   }, [fetchAllData]);
 
-  // Handlers
+  // Add to cart handler
   const handleAddToCart = useCallback(async () => {
     if (!product) return;
 
@@ -599,6 +602,7 @@ const ProductDetail = () => {
     }
   }, [product, user, isInCart, addToCart, showAlert, router]);
 
+  // Share handler
   const handleShare = useCallback(async () => {
     if (!product) return;
 
@@ -616,6 +620,7 @@ const ProductDetail = () => {
     }
   }, [product]);
 
+  // Toggle favorite handler
   const handleToggleFavorite = useCallback(async () => {
     if (!user) return router.navigate("/screens/Login");
     if (isFavoriting || !product) return;
@@ -665,6 +670,7 @@ const ProductDetail = () => {
     router,
   ]);
 
+  // Rate product handler
   const handleRate = useCallback(
     async (rating) => {
       if (!user || !product) return;
@@ -687,6 +693,7 @@ const ProductDetail = () => {
     [user, product, userRating, rateProduct, showAlert]
   );
 
+  // Delete question handler
   const handleDeleteQuestion = useCallback(
     async (questionId) => {
       if (!user) {
@@ -727,6 +734,7 @@ const ProductDetail = () => {
     ]
   );
 
+  // Show question action sheet
   const showQuestionActionSheet = useCallback(
     (questionId) => {
       const options = ["Edit", "Delete", "Cancel"];
@@ -755,6 +763,7 @@ const ProductDetail = () => {
     [showActionSheetWithOptions, handleDeleteQuestion, theme.colors.button]
   );
 
+  // Handle related product selection
   const handleRelatedProductSelect = useCallback(
     async (productId) => {
       setIsLoading(true);
@@ -767,7 +776,7 @@ const ProductDetail = () => {
         setIsLoading(false);
       }
     },
-    [user, showAlert]
+    [router, showAlert]
   );
 
   // Loading state
@@ -833,6 +842,14 @@ const ProductDetail = () => {
     );
   }
 
+  // Calculate discount end date
+  const discountEndDate = product.discount_end_at
+    ? new Date(product.discount_end_at)
+    : null;
+  const today = new Date();
+  const hasActiveDiscount =
+    product.discount_value && discountEndDate && discountEndDate > today;
+
   // Main render
   return (
     <View style={styles.mainContainer}>
@@ -865,6 +882,7 @@ const ProductDetail = () => {
             { backgroundColor: theme.colors.primary },
           ]}
         >
+          {/* Title and favorite button */}
           <View style={styles.titleRow}>
             <Text
               style={[styles.title, { color: theme.colors.textColor }]}
@@ -890,6 +908,7 @@ const ProductDetail = () => {
             </Pressable>
           </View>
 
+          {/* Rating */}
           <ProductRating
             rating={userRating}
             colors={theme.colors}
@@ -898,10 +917,46 @@ const ProductDetail = () => {
             numberOfRating={totalRating}
           />
 
-          <Text style={[styles.price, { color: theme.colors.button }]}>
-            AF {product.spu}
-          </Text>
+          {/* Modern price display with discount */}
+          <View style={styles.priceContainer}>
+            {hasActiveDiscount ? (
+              <>
+                <View style={styles.priceRow}>
+                  <Text
+                    style={[
+                      styles.originalPrice,
+                      { color: theme.colors.deleteButton },
+                    ]}
+                  >
+                    AF {product.spu}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.discountedPrice,
+                      { color: theme.colors.button },
+                    ]}
+                  >
+                    AF {product.discounted_price}
+                  </Text>
+                </View>
+                <DiscountBadge
+                  discountTitle={product.discount_title}
+                  discountValue={product.discount_value}
+                />
+                {discountEndDate && (
+                  <Text style={styles.discountEndDate}>
+                    Offer ends: {discountEndDate.toLocaleDateString()}
+                  </Text>
+                )}
+              </>
+            ) : (
+              <Text style={[styles.price, { color: theme.colors.button }]}>
+                AF {product.spu}
+              </Text>
+            )}
+          </View>
 
+          {/* Description */}
           {product.description && (
             <Text
               style={[styles.description, { color: theme.colors.textColor }]}
@@ -910,6 +965,7 @@ const ProductDetail = () => {
             </Text>
           )}
 
+          {/* Brand */}
           {product.brand_title && (
             <View style={styles.detailsRow}>
               <Text
@@ -918,13 +974,14 @@ const ProductDetail = () => {
                 Brand
               </Text>
               <Text
-                style={[styles.detailLabel, { color: theme.colors.textColor }]}
+                style={[styles.detailValue, { color: theme.colors.textColor }]}
               >
                 {product.brand_title}
               </Text>
             </View>
           )}
 
+          {/* Seller */}
           <Link
             href={{
               pathname: "/screens/SellerProfile",
@@ -942,16 +999,14 @@ const ProductDetail = () => {
                 Seller
               </Text>
               <Text
-                style={[
-                  styles.showCommentsButton,
-                  { color: theme.colors.textColor },
-                ]}
+                style={[styles.detailValue, { color: theme.colors.textColor }]}
               >
                 {product.store_name}
               </Text>
             </Pressable>
           </Link>
 
+          {/* Comments */}
           <Link
             href={{
               pathname: "/screens/Comments",
@@ -969,16 +1024,14 @@ const ProductDetail = () => {
                 Comments
               </Text>
               <Text
-                style={[
-                  styles.showCommentsButton,
-                  { color: theme.colors.textColor },
-                ]}
+                style={[styles.detailValue, { color: theme.colors.textColor }]}
               >
                 {product.total_comments} Comments
               </Text>
             </Pressable>
           </Link>
 
+          {/* Action buttons */}
           <ProductActions
             product={product}
             isInCart={isInCart}
@@ -988,6 +1041,8 @@ const ProductDetail = () => {
             theme={theme}
           />
         </View>
+
+        {/* Review section */}
         {user && (
           <ReviewSection
             user={user}
@@ -998,6 +1053,7 @@ const ProductDetail = () => {
           />
         )}
 
+        {/* Questions section */}
         <QuestionSection
           questions={questions}
           totalQuestions={totalQuestions}
@@ -1008,6 +1064,7 @@ const ProductDetail = () => {
           router={router}
         />
 
+        {/* Related products */}
         {relatedProducts && (
           <RelatedProducts
             relatedProducts={relatedProducts}
@@ -1015,6 +1072,8 @@ const ProductDetail = () => {
           />
         )}
       </ScrollView>
+
+      {/* Alert Dialog */}
       <PaperProvider theme={theme}>
         <AlertDialog
           visible={alertState.visible}
@@ -1104,10 +1163,50 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
   },
+  priceContainer: {
+    marginBottom: 16,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   price: {
     fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 16,
+  },
+  originalPrice: {
+    fontSize: 18,
+    textDecorationLine: "line-through",
+    marginRight: 10,
+    opacity: 0.7,
+  },
+  discountedPrice: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#E53935",
+  },
+  discountBadge: {
+    backgroundColor: "#E53935",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: "flex-start",
+    marginBottom: 8,
+  },
+  discountValue: {
+    color: "white",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  discountTitle: {
+    color: "white",
+    fontSize: 12,
+  },
+  discountEndDate: {
+    fontSize: 12,
+    color: "#757575",
+    marginTop: 4,
   },
   description: {
     fontSize: 16,
@@ -1122,6 +1221,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
   },
+  detailLabel: {
+    fontSize: 16,
+  },
+  detailValue: {
+    fontSize: 16,
+    textDecorationLine: "underline",
+  },
   buttonRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1129,9 +1235,6 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
-  },
-  detailLabel: {
-    fontSize: 16,
   },
   button: {
     width: "48%",
@@ -1152,9 +1255,6 @@ const styles = StyleSheet.create({
   retryButtonText: {
     fontSize: 16,
     fontWeight: "600",
-  },
-  showCommentsButton: {
-    textDecorationLine: "underline",
   },
   questionsSection: {
     padding: 20,
@@ -1199,17 +1299,11 @@ const styles = StyleSheet.create({
     marginLeft: 50,
     marginTop: 4,
   },
-  answersContainer: {
-    marginTop: 8,
-    marginLeft: 50,
-    paddingLeft: 8,
-    borderLeftWidth: 2,
-    borderLeftColor: "#ddd",
-  },
   answerItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 8,
+    marginTop: 10,
+    marginLeft: 50,
   },
   answerSellerPhoto: {
     width: 35,

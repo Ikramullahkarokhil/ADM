@@ -15,6 +15,7 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
+  Text,
 } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
@@ -29,8 +30,9 @@ import useThemeStore from "../../components/store/useThemeStore";
 import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
+import SaleProductsList from "../../components/ui/SaleProductsList";
 
-// Pre-load images once so they aren’t reloaded on each render.
+// Pre-load images once so they aren't reloaded on each render.
 const DARK_LOGO = require("../../assets/images/darkLogo.png");
 const LIGHT_LOGO = require("../../assets/images/lightLogo.png");
 
@@ -79,9 +81,15 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   );
 });
 
+// Sale Products Section with skeleton loading
+const SaleProductsSection = memo(({ data }) => {
+  if (!data || data.total <= 0) return null;
+  return <SaleProductsList data={data} />;
+});
+
 // Each content section is wrapped in React.memo so they only re-render when their props change.
 const NewArrivalsSection = memo(({ data }) => {
-  if (!data || data.total <= 10) return null;
+  if (!data || data.total <= 0) return null;
   return <NewArrivals data={data} />;
 });
 
@@ -147,6 +155,21 @@ const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
   );
 });
 
+// Network status indicator
+const NetworkStatusIndicator = memo(({ isConnected, theme }) => {
+  if (isConnected) return null;
+
+  return (
+    <View
+      style={[styles.networkIndicator, { backgroundColor: theme.colors.error }]}
+    >
+      <Text style={styles.networkIndicatorText}>
+        No internet connection. Please check your network.
+      </Text>
+    </View>
+  );
+});
+
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
@@ -156,6 +179,7 @@ const Home = () => {
   const [justForYou, setJustForYou] = useState({ total_rows: 0, data: [] });
   const [newArrivals, setNewArrivals] = useState({ total: 0, data: [] });
   const [topSellers, setTopSellers] = useState({ total: 0, data: [] });
+  const [saleProducts, setSaleProducts] = useState({ total: 0, data: [] });
   const [alertVisible, setAlertVisible] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
 
@@ -167,6 +191,7 @@ const Home = () => {
     fetchJustForYou,
     fetchNewArrivals,
     fetchTopSellers,
+    fetchSaleProducts,
   } = useProductStore();
 
   // Set Android navigation bar color when theme changes.
@@ -188,24 +213,30 @@ const Home = () => {
     setRefreshing(true);
 
     try {
-      // Fetch categories first (critical data)
-      const categoriesData = await fetchMainPageData();
-      setCategories(categoriesData);
+      // First fetch sale products and categories in parallel
+      const [categoriesData, saleProductsData] = await Promise.all([
+        fetchMainPageData(),
+        fetchSaleProducts(1),
+      ]);
 
-      // Fetch additional content sections concurrently.
+      // Update state immediately for faster UI response
+      setSaleProducts(saleProductsData || { total: 0, data: [] });
+      setCategories(categoriesData || []);
+
+      // Then fetch additional content sections concurrently
       const [newArrivalsData, justForYouData, topSellersData] =
         await Promise.all([
           fetchNewArrivals(1),
           fetchJustForYou(),
           fetchTopSellers(),
         ]);
+
       setNewArrivals(newArrivalsData || { total: 0, data: [] });
       setJustForYou(justForYouData || { total_rows: 0, data: [] });
       setTopSellers(topSellersData || { total: 0, data: [] });
     } catch (err) {
       console.error("Error fetching data:", err);
-      // In case of failure, ensure categories is reset.
-      setCategories([]);
+      // Don't clear categories if there's an error to avoid flickering
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -215,6 +246,7 @@ const Home = () => {
     fetchNewArrivals,
     fetchJustForYou,
     fetchTopSellers,
+    fetchSaleProducts,
     isConnected,
   ]);
 
@@ -305,30 +337,43 @@ const Home = () => {
         cartItemCount={cartItemCount}
         onCartPress={handleCartPress}
       />
+
+      <NetworkStatusIndicator isConnected={isConnected} theme={theme} />
+
       <ScrollView
         refreshControl={refreshControl}
         removeClippedSubviews={true}
         contentInsetAdjustmentBehavior="automatic"
+        showsVerticalScrollIndicator={false}
       >
+        <SaleProductsSection data={saleProducts} />
+
         <CategoriesSection
           loading={loading}
           categories={categories}
           keyExtractor={keyExtractor}
         />
+
         <ContentSections
           newArrivals={newArrivals}
           justForYou={justForYou}
           topSellers={topSellers}
           isConnected={isConnected}
         />
+
+        {/* Add some bottom padding for better scrolling experience */}
+        <View style={styles.bottomPadding} />
       </ScrollView>
+
       {alertDialog}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: {
+    flex: 1,
+  },
   header: {
     paddingHorizontal: 15,
     paddingTop: Platform.OS === "ios" ? 50 : 40,
@@ -338,22 +383,64 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-  iconsContainer: { flexDirection: "row", alignItems: "center" },
-  iconButton: { position: "relative" },
+
+  saleProductsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    marginBottom: 10,
+  },
+  skeletonRow: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+  },
+  skeletonCard: {
+    marginRight: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  iconsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  iconButton: {
+    position: "relative",
+  },
   badge: {
     position: "absolute",
     top: 5,
     left: 25,
     color: "white",
   },
-  logo: { height: 30, width: 120, resizeMode: "contain" },
+  logo: {
+    height: 30,
+    width: 120,
+    resizeMode: "contain",
+  },
   skeletonContainer: {
     marginTop: 50,
     marginHorizontal: 10,
   },
   dataContainer: {},
-  searchBar: { margin: 0 },
-  sectionContainer: { marginBottom: 10 },
+  searchBar: {
+    margin: 0,
+  },
+  sectionContainer: {
+    marginBottom: 10,
+  },
+  networkIndicator: {
+    padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  networkIndicatorText: {
+    color: "white",
+    fontWeight: "500",
+    fontSize: 12,
+  },
+  bottomPadding: {
+    height: 20,
+  },
 });
 
 export default memo(Home);

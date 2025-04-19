@@ -337,11 +337,6 @@ const SellerProfile = () => {
     [sellerData?.people_reviews?.total]
   );
 
-  const displayTotalReviews = useMemo(
-    () => sellerData?.total_reviews || 0,
-    [sellerData?.total_reviews]
-  );
-
   // Loading state
   if (loading) {
     return (
@@ -387,6 +382,7 @@ const SellerProfile = () => {
     seller,
     followers_count,
     average_rating,
+    total_rating,
     total_visits,
     all_products,
   } = sellerData;
@@ -436,7 +432,7 @@ const SellerProfile = () => {
               </Text>
               <RatingStars rating={parseFloat(average_rating)} color="yellow" />
               <Text style={[styles.ratingText, { color: colors.buttonText }]}>
-                ({displayTotalReviews})
+                ({total_rating})
               </Text>
             </View>
             <View style={styles.ratingSection}>
@@ -495,33 +491,35 @@ const SellerProfile = () => {
         </View>
 
         {/* Follow Button */}
-        <TouchableOpacity
-          style={[
-            styles.followButton,
-            {
-              backgroundColor: isFollowing ? colors.primary : colors.button,
-              borderColor: isFollowing ? colors.button : "transparent",
-              borderWidth: isFollowing ? 1 : 0,
-            },
-          ]}
-          onPress={handleFollowToggle}
-          activeOpacity={0.8}
-        >
-          <AntDesign
-            name={isFollowing ? "check" : "plus"}
-            size={16}
-            color={isFollowing ? colors.button : colors.primary}
-            style={styles.followIcon}
-          />
-          <Text
+        {user && (
+          <TouchableOpacity
             style={[
-              styles.followButtonText,
-              { color: isFollowing ? colors.button : colors.primary },
+              styles.followButton,
+              {
+                backgroundColor: isFollowing ? colors.primary : colors.button,
+                borderColor: isFollowing ? colors.button : "transparent",
+                borderWidth: isFollowing ? 1 : 0,
+              },
             ]}
+            onPress={handleFollowToggle}
+            activeOpacity={0.8}
           >
-            {isFollowing ? "Following" : "Follow"}
-          </Text>
-        </TouchableOpacity>
+            <AntDesign
+              name={isFollowing ? "check" : "plus"}
+              size={16}
+              color={isFollowing ? colors.button : colors.primary}
+              style={styles.followIcon}
+            />
+            <Text
+              style={[
+                styles.followButtonText,
+                { color: isFollowing ? colors.button : colors.primary },
+              ]}
+            >
+              {isFollowing ? "Following" : "Follow"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* New Arrivals Section */}
         {displayNewArrivalsCount > 10 && (

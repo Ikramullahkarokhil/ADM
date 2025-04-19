@@ -77,6 +77,11 @@ const useProductStore = create(
         return data ?? [];
       },
 
+      fetchSaleProducts: async (page) => {
+        const data = await get().apiRequest(`/get-sale-products?page=${page}`);
+        return data ?? [];
+      },
+
       // ====================== Seller Related ======================
       fetchTopSellers: async () => {
         const data = await get().apiRequest("/get-top-sellers");
