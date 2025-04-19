@@ -469,7 +469,6 @@ const useProductStore = create(
           method: "POST",
           data: items,
         });
-        await get().listOrders(items.consumer_id);
         return data;
       },
 

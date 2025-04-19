@@ -142,16 +142,18 @@ const OrderCard = React.memo(({ item, colors, router, getStatusColor }) => (
 ));
 
 // Extracted to prevent recreation on each render
-const EmptyStateComponent = React.memo(({ index, colors }) => (
-  <View style={styles.emptyState}>
-    <MaterialIcons
-      name="remove-shopping-cart"
-      size={80}
-      color={colors.subInactiveColor}
-    />
-    <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
-      No {index === 0 ? "Orders" : statusTypes[index].title}
-    </Text>
+const EmptyStateComponent = React.memo(({ colors }) => (
+  <View style={[styles.emptyContainer, { backgroundColor: colors.primary }]}>
+    <View style={styles.emptyState}>
+      <MaterialIcons
+        name="remove-shopping-cart"
+        size={80}
+        color={colors.subInactiveColor}
+      />
+      <Text style={[styles.emptyTitle, { color: colors.textColor }]}>
+        No Orders Found
+      </Text>
+    </View>
   </View>
 ));
 
@@ -186,8 +188,11 @@ const Orders = () => {
     }
 
     // For other tabs, filter as usual
-    return orders.filter((order) => order.status === statusKey);
+    return orders?.filter((order) => order.status === statusKey);
   }, [orders, index]);
+
+  // Check if there are any orders at all
+  const hasOrders = useMemo(() => orders?.length > 0, [orders]);
 
   // Helper function to get status color
   const getStatusColor = useCallback(
@@ -259,12 +264,6 @@ const Orders = () => {
     [index, colors.deleteButton, colors.button]
   );
 
-  // Memoize the EmptyState component
-  const EmptyState = useCallback(
-    () => <EmptyStateComponent index={index} colors={colors} />,
-    [index, colors]
-  );
-
   // Memoize the RefreshControl component
   const refreshControl = useMemo(
     () => (
@@ -283,40 +282,47 @@ const Orders = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
-      <View style={styles.tabContainer}>
-        <Tab
-          value={index}
-          onChange={setIndex}
-          indicatorStyle={tabIndicatorStyle}
-          variant="default"
-          scrollable={true}
-          style={{ backgroundColor: colors.primary }}
-        >
-          {statusTypes.map((status, i) => (
-            <Tab.Item
-              key={status.key}
-              title={status.title}
-              titleStyle={{
-                color: getTabTitleColor(i),
-              }}
-            />
-          ))}
-        </Tab>
-      </View>
-      <FlashList
-        data={filteredOrders}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListEmptyComponent={EmptyState}
-        refreshControl={refreshControl}
-        contentContainerStyle={styles.listContentContainer}
-        estimatedItemSize={estimatedItemSize}
-        removeClippedSubviews={true}
-        overrideItemLayout={(layout, item) => {
-          layout.size = estimatedItemSize;
-        }}
-        optimizeItemLayout
-      />
+      {hasOrders && (
+        <View style={styles.tabContainer}>
+          <Tab
+            value={index}
+            onChange={setIndex}
+            indicatorStyle={tabIndicatorStyle}
+            variant="default"
+            scrollable={true}
+            style={{ backgroundColor: colors.primary }}
+          >
+            {statusTypes.map((status, i) => (
+              <Tab.Item
+                key={status.key}
+                title={status.title}
+                titleStyle={{
+                  color: getTabTitleColor(i),
+                }}
+              />
+            ))}
+          </Tab>
+        </View>
+      )}
+
+      {hasOrders ? (
+        <FlashList
+          data={filteredOrders}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          ListEmptyComponent={<EmptyStateComponent colors={colors} />}
+          refreshControl={refreshControl}
+          contentContainerStyle={styles.listContentContainer}
+          estimatedItemSize={estimatedItemSize}
+          removeClippedSubviews={true}
+          overrideItemLayout={(layout, item) => {
+            layout.size = estimatedItemSize;
+          }}
+          optimizeItemLayout
+        />
+      ) : (
+        <EmptyStateComponent colors={colors} />
+      )}
     </View>
   );
 };
@@ -331,12 +337,15 @@ const styles = StyleSheet.create({
   listContentContainer: {
     paddingBottom: 30,
   },
-  emptyState: {
+  emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  emptyState: {
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
-    height: 300, // Provide a fixed height for empty state
   },
   emptyTitle: {
     fontSize: 20,

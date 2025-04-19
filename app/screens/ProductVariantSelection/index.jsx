@@ -1,11 +1,4 @@
-import {
-  useLayoutEffect,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  memo,
-} from "react";
+import { useLayoutEffect, useState, useEffect, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -33,12 +26,13 @@ import useThemeStore from "../../../components/store/useThemeStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
 
 const ProductVariantSelection = () => {
+  // Hooks and state initialization
   const navigation = useNavigation();
   const router = useRouter();
   const theme = useTheme();
   const { isDarkTheme } = useThemeStore();
   const { item } = useLocalSearchParams();
-  const { user, consumerBillingAddress, proceedOrder, listCart } =
+  const { user, consumerBillingAddress, proceedOrder, listCart, listOrders } =
     useProductStore();
 
   const [selectedItems, setSelectedItems] = useState([]);
@@ -50,76 +44,75 @@ const ProductVariantSelection = () => {
   const [showBillingModal, setShowBillingModal] = useState(false);
   const [selectedBillingAddress, setSelectedBillingAddress] = useState(null);
   const [expandedAddressId, setExpandedAddressId] = useState(null);
-
-  // Alert dialog state
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
 
+  // Set navigation title
   useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Customize Order",
-    });
+    navigation.setOptions({ title: "Customize Order" });
   }, [navigation]);
 
+  // Parse items and initialize selections
   useEffect(() => {
-    try {
-      const parsedItems = JSON.parse(item);
-      setSelectedItems(parsedItems);
+    const initializeData = async () => {
+      try {
+        const parsedItems = JSON.parse(item);
+        setSelectedItems(parsedItems);
 
-      setSelections(
-        parsedItems.map((item) => ({
+        const initialSelections = parsedItems.map((item) => ({
           id: item.consumer_cart_items_id,
           selectedVariants: {},
-          quantity: Number.parseInt(item.qty) || 1,
-        }))
-      );
+          quantity: Number(item.qty) || 1,
+        }));
 
-      if (parsedItems.length > 0) {
-        setExpandedItem(parsedItems[0].consumer_cart_items_id);
-      }
+        setSelections(initialSelections);
+        if (parsedItems.length > 0)
+          setExpandedItem(parsedItems[0].consumer_cart_items_id);
 
-      setIsLoading(false);
-
-      // Auto-select default billing address (status = 1)
-      if (consumerBillingAddress && consumerBillingAddress.length > 0) {
-        const defaultAddress = consumerBillingAddress.find(
-          (addr) => addr.status === 1
-        );
-        if (defaultAddress) {
+        // Set default billing address
+        if (consumerBillingAddress?.length > 0) {
+          const defaultAddress =
+            consumerBillingAddress.find((addr) => addr.status === 1) ||
+            consumerBillingAddress[0];
           setSelectedBillingAddress(defaultAddress);
-        } else {
-          // If no address with status 1, select the first one
-          setSelectedBillingAddress(consumerBillingAddress[0]);
         }
+
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error parsing items:", error);
+        showAlert(
+          "Error",
+          "There was a problem loading your selected items. Please try again.",
+          () => router.back()
+        );
       }
-    } catch (error) {
-      console.error("Error parsing items:", error);
-      showAlert(
-        "Error",
-        "There was a problem loading your selected items. Please try again.",
-        () => router.back()
-      );
-    }
+    };
+
+    initializeData();
   }, [item, router, consumerBillingAddress]);
 
+  // Calculate total price
   useEffect(() => {
     if (selectedItems.length > 0 && selections.length > 0) {
       const total = selectedItems.reduce((sum, item) => {
         const selection = selections.find(
           (sel) => sel.id === item.consumer_cart_items_id
         );
-        if (selection) {
-          return sum + Number.parseFloat(item.spu) * selection.quantity;
-        }
-        return sum;
+        return (
+          sum +
+          (selection
+            ? Number(item.discount.discounted_price || item.spu) *
+              selection.quantity
+            : 0)
+        );
       }, 0);
-      setTotalPrice(total);
+      setTotalPrice(total.toFixed(2));
     }
   }, [selectedItems, selections]);
 
-  // Helper function to show alerts
+  // Helper functions
   const showAlert = (title, message, confirmAction = () => {}) => {
     setAlertTitle(title);
     setAlertMessage(message);
@@ -147,18 +140,33 @@ const ProductVariantSelection = () => {
     setSelections((prev) =>
       prev.map((sel) =>
         sel.id === itemId
-          ? { ...sel, quantity: Math.max(1, sel.quantity + delta) }
+          ? {
+              ...sel,
+              quantity: Math.max(1, sel.quantity + delta),
+            }
           : sel
       )
     );
   }, []);
 
   const toggleExpandItem = useCallback((itemId) => {
-    setExpandedItem((prevExpandedItem) =>
-      prevExpandedItem === itemId ? null : itemId
+    setExpandedItem((prev) => (prev === itemId ? null : itemId));
+  }, []);
+
+  // Check if item has valid variants
+  const hasValidVariants = useCallback((item) => {
+    return (
+      item.variants?.length > 0 &&
+      !(
+        item.variants.length === 1 &&
+        (item.variants[0].variants_id === null ||
+          item.variants[0].variant_values === null ||
+          item.variants[0].variant_title === null)
+      )
     );
   }, []);
 
+  // Check if item selection is complete
   const isItemComplete = useCallback(
     (itemId) => {
       const currentItem = selectedItems.find(
@@ -167,25 +175,14 @@ const ProductVariantSelection = () => {
       const selection = selections.find((sel) => sel.id === itemId);
 
       if (!currentItem || !selection) return false;
-
-      if (!currentItem.variants || currentItem.variants.length === 0)
-        return true;
-
-      if (
-        currentItem.variants.length === 1 &&
-        (currentItem.variants[0].variants_id === null ||
-          currentItem.variants[0].variant_values === null ||
-          currentItem.variants[0].variant_title === null)
-      ) {
-        return true;
-      }
+      if (!hasValidVariants(currentItem)) return true;
 
       return (
         currentItem.variants.length ===
         Object.keys(selection.selectedVariants).length
       );
     },
-    [selectedItems, selections]
+    [selectedItems, selections, hasValidVariants]
   );
 
   const getCompletionPercentage = useCallback(
@@ -196,116 +193,57 @@ const ProductVariantSelection = () => {
       const selection = selections.find((sel) => sel.id === itemId);
 
       if (!currentItem || !selection) return 0;
-
-      if (!currentItem.variants || currentItem.variants.length === 0)
-        return 100;
-
-      if (
-        currentItem.variants.length === 1 &&
-        (currentItem.variants[0].variants_id === null ||
-          currentItem.variants[0].variant_values === null ||
-          currentItem.variants[0].variant_title === null)
-      ) {
-        return 100;
-      }
+      if (!hasValidVariants(currentItem)) return 100;
 
       const totalVariants = currentItem.variants.length;
       const selectedVariants = Object.keys(selection.selectedVariants).length;
-
       return (selectedVariants / totalVariants) * 100;
     },
-    [selectedItems, selections]
+    [selectedItems, selections, hasValidVariants]
   );
 
-  const checkBillingAddresses = () => {
-    if (!consumerBillingAddress || consumerBillingAddress.length === 0) {
+  // Billing address functions
+  const checkBillingAddresses = useCallback(() => {
+    if (!consumerBillingAddress?.length) {
       showAlert(
         "Billing Address Required",
         "You need to add a billing address before placing an order.",
         () => router.push("/screens/BillingAddress")
       );
       return false;
-    } else {
-      // If no address is selected yet, try to select the default one (status = 1)
-      if (!selectedBillingAddress) {
-        const defaultAddress = consumerBillingAddress.find(
-          (addr) => addr.status === 1
-        );
-        if (defaultAddress) {
-          setSelectedBillingAddress(defaultAddress);
-        } else {
-          // If no default address, select the first one
-          setSelectedBillingAddress(consumerBillingAddress[0]);
-        }
-      }
-      return true;
     }
-  };
 
-  const handleConfirm = async () => {
-    const incompleteItems = selections.filter((sel) => {
-      const currentItem = selectedItems.find(
-        (i) => i.consumer_cart_items_id === sel.id
+    if (!selectedBillingAddress) {
+      const defaultAddress =
+        consumerBillingAddress.find((addr) => addr.status === 1) ||
+        consumerBillingAddress[0];
+      setSelectedBillingAddress(defaultAddress);
+    }
+    return true;
+  }, [consumerBillingAddress, selectedBillingAddress, router]);
+
+  const handleAddressSelection = useCallback(
+    (addressId) => {
+      const address = consumerBillingAddress.find(
+        (addr) => addr.consumer_billing_address_id === addressId
       );
+      setSelectedBillingAddress(address);
+    },
+    [consumerBillingAddress]
+  );
 
-      if (!currentItem.variants || currentItem.variants.length === 0)
-        return false;
-
-      if (
-        currentItem.variants.length === 1 &&
-        (currentItem.variants[0].variants_id === null ||
-          currentItem.variants[0].variant_values === null ||
-          currentItem.variants[0].variant_title === null)
-      ) {
-        return false;
-      }
-
-      return (
-        currentItem.variants.length !== Object.keys(sel.selectedVariants).length
-      );
-    });
-
-    if (incompleteItems.length > 0) {
-      showAlert(
-        "Incomplete Selection",
-        "Please select all variants for each item before placing your order."
-      );
-      return;
-    }
-
-    if (!checkBillingAddresses()) {
-      return;
-    }
-
-    if (selectedBillingAddress) {
-      processOrder();
-    }
-  };
-
-  const processOrder = async () => {
+  // Order processing
+  const processOrder = useCallback(async () => {
     setIsSubmitting(true);
     try {
-      // Format items for the API
       const formattedItems = selections.map((sel) => {
         const currentItem = selectedItems.find(
           (i) => i.consumer_cart_items_id === sel.id
         );
+        const hasRealVariants = hasValidVariants(currentItem);
 
-        // Check if item has valid variants
-        const hasRealVariants =
-          currentItem.variants &&
-          currentItem.variants.length > 0 &&
-          !(
-            currentItem.variants.length === 1 &&
-            (currentItem.variants[0].variants_id === null ||
-              currentItem.variants[0].variant_values === null ||
-              currentItem.variants[0].variant_title === null)
-          );
-
-        // Format variants for API
         const formattedVariants = hasRealVariants
           ? Object.entries(sel.selectedVariants).map(([title, value]) => {
-              // Find the variant_id that matches this title
               const variantObj = currentItem.variants.find(
                 (v) => v.variant_title === title
               );
@@ -322,7 +260,7 @@ const ProductVariantSelection = () => {
           variants: formattedVariants,
         };
       });
-      // Create the order payload
+
       const orderPayload = {
         items: formattedItems,
         payment_type: "cash",
@@ -330,8 +268,8 @@ const ProductVariantSelection = () => {
         billing_address_id: selectedBillingAddress.consumer_billing_address_id,
       };
 
-      // Process the order using the API
       const response = await proceedOrder(orderPayload);
+      await listOrders(user.consumer_id);
       await listCart(user.consumer_id);
 
       showAlert(
@@ -348,20 +286,51 @@ const ProductVariantSelection = () => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [
+    selections,
+    selectedItems,
+    user,
+    proceedOrder,
+    listCart,
+    router,
+    hasValidVariants,
+  ]);
 
-  // Optimized to handle address selection without closing modal
-  const handleAddressSelection = (addressId) => {
-    const address = consumerBillingAddress.find(
-      (addr) => addr.consumer_billing_address_id === addressId
-    );
-    setSelectedBillingAddress(address);
-  };
+  const handleConfirm = useCallback(async () => {
+    const incompleteItems = selections.filter((sel) => {
+      const currentItem = selectedItems.find(
+        (i) => i.consumer_cart_items_id === sel.id
+      );
+      return (
+        hasValidVariants(currentItem) &&
+        currentItem.variants.length !== Object.keys(sel.selectedVariants).length
+      );
+    });
 
+    if (incompleteItems.length > 0) {
+      showAlert(
+        "Incomplete Selection",
+        "Please select all variants for each item before placing your order."
+      );
+      return;
+    }
+
+    if (!checkBillingAddresses()) return;
+    if (selectedBillingAddress) processOrder();
+  }, [
+    selections,
+    selectedItems,
+    checkBillingAddresses,
+    selectedBillingAddress,
+    processOrder,
+    hasValidVariants,
+  ]);
+
+  // Memoized Components
   const BillingAddressModal = memo(() => (
     <Modal
       visible={showBillingModal}
-      transparent={true}
+      transparent
       animationType="fade"
       onRequestClose={() => setShowBillingModal(false)}
     >
@@ -393,7 +362,7 @@ const ProductVariantSelection = () => {
               onValueChange={handleAddressSelection}
               value={selectedBillingAddress?.consumer_billing_address_id || ""}
             >
-              {consumerBillingAddress.map((address) => {
+              {consumerBillingAddress?.map((address) => {
                 const isExpanded =
                   expandedAddressId === address.consumer_billing_address_id;
                 const hasPinLocation = !!address.pin_location;
@@ -404,9 +373,8 @@ const ProductVariantSelection = () => {
                     style={[
                       styles.addressItem,
                       selectedBillingAddress?.consumer_billing_address_id ===
-                      address.consumer_billing_address_id
-                        ? styles.selectedAddressItem
-                        : {},
+                        address.consumer_billing_address_id &&
+                        styles.selectedAddressItem,
                       { backgroundColor: theme.colors.primary },
                     ]}
                   >
@@ -443,72 +411,20 @@ const ProductVariantSelection = () => {
 
                     {isExpanded && (
                       <View style={styles.addressDetailsExpanded}>
-                        <View style={styles.addressIconRow}>
-                          <Feather
-                            name="map-pin"
-                            size={14}
-                            color={theme.colors.textColor}
-                            style={styles.addressIcon}
-                          />
-                          <Text
-                            style={[
-                              styles.addressText,
-                              { color: theme.colors.textColor },
-                            ]}
-                          >
-                            {address.address}
-                          </Text>
-                        </View>
-                        <View style={styles.addressIconRow}>
-                          <Feather
-                            name="map"
-                            size={14}
-                            color={theme.colors.textColor}
-                            style={styles.addressIcon}
-                          />
-                          <Text
-                            style={[
-                              styles.addressText,
-                              { color: theme.colors.textColor },
-                            ]}
-                          >
-                            {hasPinLocation
+                        <AddressDetailRow
+                          icon="map-pin"
+                          text={address.address}
+                        />
+                        <AddressDetailRow
+                          icon="map"
+                          text={
+                            hasPinLocation
                               ? "Pin location available"
-                              : "Pin location not available"}
-                          </Text>
-                        </View>
-                        <View style={styles.addressIconRow}>
-                          <Entypo
-                            name="email"
-                            size={14}
-                            color={theme.colors.textColor}
-                            style={styles.addressIcon}
-                          />
-                          <Text
-                            style={[
-                              styles.addressText,
-                              { color: theme.colors.textColor },
-                            ]}
-                          >
-                            {address.email}
-                          </Text>
-                        </View>
-                        <View style={styles.addressIconRow}>
-                          <Feather
-                            name="phone"
-                            size={14}
-                            color={theme.colors.textColor}
-                            style={styles.addressIcon}
-                          />
-                          <Text
-                            style={[
-                              styles.addressText,
-                              { color: theme.colors.textColor },
-                            ]}
-                          >
-                            {address.phone}
-                          </Text>
-                        </View>
+                              : "Pin location not available"
+                          }
+                        />
+                        <AddressDetailRow icon="email" text={address.email} />
+                        <AddressDetailRow icon="phone" text={address.phone} />
                       </View>
                     )}
                   </Surface>
@@ -530,11 +446,9 @@ const ProductVariantSelection = () => {
               mode="contained"
               onPress={() => {
                 setShowBillingModal(false);
-                if (selectedBillingAddress) {
-                  processOrder();
-                } else {
-                  showAlert("Error", "Please select a billing address");
-                }
+                selectedBillingAddress
+                  ? processOrder()
+                  : showAlert("Error", "Please select a billing address");
               }}
               style={[
                 styles.modalButton,
@@ -566,10 +480,22 @@ const ProductVariantSelection = () => {
     </Modal>
   ));
 
+  const AddressDetailRow = memo(({ icon, text }) => (
+    <View style={styles.addressIconRow}>
+      <Feather
+        name={icon}
+        size={14}
+        color={theme.colors.textColor}
+        style={styles.addressIcon}
+      />
+      <Text style={[styles.addressText, { color: theme.colors.textColor }]}>
+        {text}
+      </Text>
+    </View>
+  ));
+
   const SelectedBillingAddress = memo(() => {
     if (!selectedBillingAddress) return null;
-
-    const hasPinLocation = !!selectedBillingAddress.pin_location;
 
     return (
       <Surface
@@ -611,149 +537,92 @@ const ProductVariantSelection = () => {
           >
             {selectedBillingAddress.name}
           </Text>
-          <View style={styles.addressIconRow}>
-            <Feather
-              name="map-pin"
-              size={14}
-              color={theme.colors.textColor}
-              style={styles.addressIcon}
-            />
-            <Text
-              style={[
-                styles.billingAddressText,
-                { color: theme.colors.textColor },
-              ]}
-            >
-              {selectedBillingAddress.address}
-            </Text>
-          </View>
-          <View style={styles.addressIconRow}>
-            <Feather
-              name="map"
-              size={14}
-              color={theme.colors.textColor}
-              style={styles.addressIcon}
-            />
-            <Text
-              style={[
-                styles.billingAddressText,
-                { color: theme.colors.textColor },
-              ]}
-            >
-              {hasPinLocation
+          <AddressDetailRow
+            icon="map-pin"
+            text={selectedBillingAddress.address}
+          />
+          <AddressDetailRow
+            icon="map"
+            text={
+              selectedBillingAddress.pin_location
                 ? "Pin location available"
-                : "Pin location not available"}
-            </Text>
-          </View>
-          <View style={styles.addressIconRow}>
-            <Entypo
-              name="email"
-              size={14}
-              color={theme.colors.textColor}
-              style={styles.addressIcon}
-            />
-            <Text
-              style={[
-                styles.billingAddressText,
-                { color: theme.colors.textColor },
-              ]}
-            >
-              {selectedBillingAddress.email}
-            </Text>
-          </View>
-          <View style={styles.addressIconRow}>
-            <Feather
-              name="phone"
-              size={14}
-              color={theme.colors.textColor}
-              style={styles.addressIcon}
-            />
-            <Text
-              style={[
-                styles.billingAddressText,
-                { color: theme.colors.textColor },
-              ]}
-            >
-              {selectedBillingAddress.phone}
-            </Text>
-          </View>
+                : "Pin location not available"
+            }
+          />
+          <AddressDetailRow icon="mail" text={selectedBillingAddress.email} />
+          <AddressDetailRow icon="phone" text={selectedBillingAddress.phone} />
         </View>
       </Surface>
     );
   });
 
-  const PaymentMethodSection = memo(() => {
-    return (
-      <Surface
-        style={[
-          styles.paymentMethodContainer,
-          { backgroundColor: theme.colors.primary },
-        ]}
-      >
-        <View style={styles.paymentMethodHeader}>
-          <Feather name="credit-card" size={20} color={theme.colors.button} />
-          <Text
-            style={[
-              styles.paymentMethodTitle,
-              { color: theme.colors.textColor },
-            ]}
-          >
-            Payment Method
-          </Text>
-        </View>
+  const PaymentMethodSection = memo(() => (
+    <Surface
+      style={[
+        styles.paymentMethodContainer,
+        { backgroundColor: theme.colors.primary },
+      ]}
+    >
+      <View style={styles.paymentMethodHeader}>
+        <Feather name="credit-card" size={20} color={theme.colors.button} />
+        <Text
+          style={[styles.paymentMethodTitle, { color: theme.colors.textColor }]}
+        >
+          Payment Method
+        </Text>
+      </View>
 
-        <View style={styles.paymentMethodContent}>
-          <View
-            style={[
-              styles.paymentOption,
-              {
-                backgroundColor: isDarkTheme
-                  ? "rgba(255, 255, 255, 0.05)"
-                  : "rgba(0, 0, 0, 0.03)",
-              },
-            ]}
-          >
-            <View style={styles.paymentOptionLeft}>
-              <View
-                style={[
-                  styles.paymentIconContainer,
-                  { backgroundColor: theme.colors.button + "20" },
-                ]}
-              >
-                <Feather name="truck" size={20} color={theme.colors.button} />
-              </View>
-              <View style={styles.paymentDetails}>
-                <Text
-                  style={[
-                    styles.paymentOptionTitle,
-                    { color: theme.colors.textColor },
-                  ]}
-                >
-                  Cash on Delivery
-                </Text>
-                <Text
-                  style={[
-                    styles.paymentOptionDescription,
-                    { color: theme.colors.textColor + "99" },
-                  ]}
-                >
-                  Pay when your order arrives
-                </Text>
-              </View>
-            </View>
+      <View style={styles.paymentMethodContent}>
+        <View
+          style={[
+            styles.paymentOption,
+            {
+              backgroundColor: isDarkTheme
+                ? "rgba(255, 255, 255, 0.05)"
+                : "rgba(0, 0, 0, 0.03)",
+            },
+          ]}
+        >
+          <View style={styles.paymentOptionLeft}>
             <View
               style={[
-                styles.selectedPaymentIndicator,
-                { backgroundColor: theme.colors.button },
+                styles.paymentIconContainer,
+                { backgroundColor: theme.colors.button + "20" },
               ]}
             >
-              <Feather name="check" size={14} color="#fff" />
+              <Feather name="truck" size={20} color={theme.colors.button} />
+            </View>
+            <View style={styles.paymentDetails}>
+              <Text
+                style={[
+                  styles.paymentOptionTitle,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                Cash on Delivery
+              </Text>
+              <Text
+                style={[
+                  styles.paymentOptionDescription,
+                  { color: theme.colors.textColor + "99" },
+                ]}
+              >
+                Pay when your order arrives
+              </Text>
             </View>
           </View>
+          <View
+            style={[
+              styles.selectedPaymentIndicator,
+              { backgroundColor: theme.colors.button },
+            ]}
+          >
+            <Feather name="check" size={14} color="#fff" />
+          </View>
         </View>
-      </Surface>
-    );
-  });
+      </View>
+    </Surface>
+  ));
 
   const QuantitySelector = memo(({ quantity, onDecrease, onIncrease }) => (
     <View style={styles.quantityContainer}>
@@ -783,28 +652,161 @@ const ProductVariantSelection = () => {
     </View>
   ));
 
-  const hasValidVariants = useMemo(
-    () => (item) => {
-      return (
-        item.variants &&
-        item.variants.length > 0 &&
-        !(
-          item.variants.length === 1 &&
-          (item.variants[0].variants_id === null ||
-            item.variants[0].variant_values === null ||
-            item.variants[0].variant_title === null)
-        )
-      );
-    },
-    []
-  );
+  const OrderSummary = memo(() => {
+    const allComplete = selectedItems.every((item) =>
+      isItemComplete(item.consumer_cart_items_id)
+    );
+    const completedCount = selectedItems.filter((item) =>
+      isItemComplete(item.consumer_cart_items_id)
+    ).length;
+    const completionPercentage = (completedCount / selectedItems.length) * 100;
+
+    return (
+      <View style={styles.orderSummaryWrapper}>
+        {selectedBillingAddress && <SelectedBillingAddress />}
+        <PaymentMethodSection />
+        <Surface
+          style={[
+            styles.orderSummaryContainer,
+            { backgroundColor: theme.colors.primary },
+          ]}
+        >
+          <View style={styles.orderSummaryContent}>
+            <View style={styles.summaryHeader}>
+              <Text
+                style={[styles.summaryTitle, { color: theme.colors.textColor }]}
+              >
+                Order Summary
+              </Text>
+              <Text
+                style={[
+                  styles.summarySubtitle,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                {completedCount} of {selectedItems.length} items complete
+              </Text>
+            </View>
+
+            <View style={styles.progressBarContainer}>
+              <View
+                style={[
+                  styles.progressBarFull,
+                  {
+                    width: `${completionPercentage}%`,
+                    backgroundColor: allComplete
+                      ? theme.colors.button
+                      : "#FF9800",
+                  },
+                ]}
+              />
+            </View>
+
+            <View style={styles.productQuantitySummary}>
+              <Text
+                style={[
+                  styles.quantitySummaryTitle,
+                  { color: theme.colors.textColor },
+                ]}
+              >
+                Products
+              </Text>
+              <Divider style={styles.quantitySummaryDivider} />
+              {selectedItems.map((item) => {
+                const selection = selections.find(
+                  (sel) => sel.id === item.consumer_cart_items_id
+                );
+                if (!selection) return null;
+
+                return (
+                  <View
+                    key={item.consumer_cart_items_id}
+                    style={styles.quantitySummaryItem}
+                  >
+                    <Text
+                      style={[
+                        styles.quantitySummaryName,
+                        { color: theme.colors.textColor },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {item.title}
+                    </Text>
+                    <View style={styles.quantitySummaryDetails}>
+                      <Text
+                        style={[
+                          styles.quantitySummaryQty,
+                          { color: theme.colors.textColor },
+                        ]}
+                      >
+                        x{selection.quantity}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.quantitySummaryPrice,
+                          { color: theme.colors.button },
+                        ]}
+                      >
+                        AF{" "}
+                        {(
+                          Number(item.discount.discounted_price || item.spu) *
+                          selection.quantity
+                        ).toFixed(2)}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.totalContainer}>
+              <Text
+                style={[styles.totalLabel, { color: theme.colors.textColor }]}
+              >
+                Total
+              </Text>
+              <Text style={[styles.totalValue, { color: theme.colors.button }]}>
+                AF {totalPrice}
+              </Text>
+            </View>
+
+            <Button
+              mode="contained"
+              onPress={handleConfirm}
+              style={[
+                styles.confirmButton,
+                allComplete ? styles.completeButton : styles.incompleteButton,
+              ]}
+              contentStyle={styles.buttonContent}
+              labelStyle={[styles.buttonLabel, { color: "white" }]}
+              loading={isSubmitting}
+              disabled={isSubmitting || !allComplete}
+              textColor="white"
+              icon={({ size, color }) => (
+                <Feather
+                  name={allComplete ? "check-circle" : "alert-circle"}
+                  size={18}
+                  color={color}
+                />
+              )}
+            >
+              {isSubmitting
+                ? "Processing..."
+                : allComplete
+                ? "Place Order"
+                : "Complete All Selections"}
+            </Button>
+          </View>
+        </Surface>
+      </View>
+    );
+  });
 
   const renderItem = useCallback(
     ({ item, index }) => {
       const selection = selections.find(
         (sel) => sel.id === item.consumer_cart_items_id
       );
-
       if (!selection) return null;
 
       const isComplete = isItemComplete(item.consumer_cart_items_id);
@@ -812,7 +814,9 @@ const ProductVariantSelection = () => {
         item.consumer_cart_items_id
       );
       const isExpanded = expandedItem === item.consumer_cart_items_id;
-      const itemSubtotal = Number.parseFloat(item.spu) * selection.quantity;
+      const itemSubtotal = (
+        Number(item.discount.discounted_price || item.spu) * selection.quantity
+      ).toFixed(2);
       const itemHasValidVariants = hasValidVariants(item);
 
       return (
@@ -834,7 +838,7 @@ const ProductVariantSelection = () => {
               <View style={styles.itemTitleContainer}>
                 <Text
                   style={[styles.itemTitle, { color: theme.colors.textColor }]}
-                  numberOfLines={1}
+                  numberOfLines={2}
                 >
                   {item.title}
                 </Text>
@@ -861,7 +865,7 @@ const ProductVariantSelection = () => {
 
             <View style={styles.itemHeaderRight}>
               <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
-                AF {item.spu}
+                AF {item.discount.discounted_price || item.spu}
               </Text>
               <Feather
                 name={isExpanded ? "chevron-up" : "chevron-down"}
@@ -982,57 +986,56 @@ const ProductVariantSelection = () => {
                           showsHorizontalScrollIndicator={false}
                           contentContainerStyle={styles.optionsContainer}
                         >
-                          {(variant.variant_values
-                            ? variant.variant_values.split(",")
-                            : []
-                          ).map((value) => {
-                            const isSelected =
-                              selection.selectedVariants[
-                                variant.variant_title
-                              ] === value;
+                          {(variant.variant_values?.split(",") || []).map(
+                            (value) => {
+                              const isSelected =
+                                selection.selectedVariants[
+                                  variant.variant_title
+                                ] === value;
 
-                            return (
-                              <TouchableOpacity
-                                key={value}
-                                style={[
-                                  styles.optionItem,
-                                  isSelected && styles.selectedOptionItem,
-                                  {
-                                    backgroundColor: isDarkTheme
-                                      ? "#333"
-                                      : "#f0f0f0",
-                                  },
-                                ]}
-                                onPress={() =>
-                                  handleVariantSelect(
-                                    item.consumer_cart_items_id,
-                                    variant.variant_title,
-                                    value
-                                  )
-                                }
-                                activeOpacity={0.7}
-                              >
-                                {isSelected && (
-                                  <View style={styles.selectedIndicator}>
-                                    <Feather
-                                      name="check"
-                                      size={12}
-                                      color="#fff"
-                                    />
-                                  </View>
-                                )}
-                                <Text
+                              return (
+                                <TouchableOpacity
+                                  key={value}
                                   style={[
-                                    styles.optionText,
-                                    { color: theme.colors.textColor },
-                                    isSelected && styles.selectedOptionText,
+                                    styles.optionItem,
+                                    isSelected && styles.selectedOptionItem,
+                                    {
+                                      backgroundColor: isDarkTheme
+                                        ? "#333"
+                                        : "#f0f0f0",
+                                    },
                                   ]}
+                                  onPress={() =>
+                                    handleVariantSelect(
+                                      item.consumer_cart_items_id,
+                                      variant.variant_title,
+                                      value
+                                    )
+                                  }
+                                  activeOpacity={0.7}
                                 >
-                                  {value}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
+                                  {isSelected && (
+                                    <View style={styles.selectedIndicator}>
+                                      <Feather
+                                        name="check"
+                                        size={12}
+                                        color="#fff"
+                                      />
+                                    </View>
+                                  )}
+                                  <Text
+                                    style={[
+                                      styles.optionText,
+                                      { color: theme.colors.textColor },
+                                      isSelected && styles.selectedOptionText,
+                                    ]}
+                                  >
+                                    {value}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            }
+                          )}
                         </ScrollView>
                       </View>
                     );
@@ -1058,160 +1061,7 @@ const ProductVariantSelection = () => {
     ]
   );
 
-  const OrderSummary = memo(() => {
-    const allComplete = selectedItems.every((item) =>
-      isItemComplete(item.consumer_cart_items_id)
-    );
-
-    const completedCount = selectedItems.filter((item) =>
-      isItemComplete(item.consumer_cart_items_id)
-    ).length;
-
-    const completionPercentage = (completedCount / selectedItems.length) * 100;
-
-    return (
-      <View style={styles.orderSummaryWrapper}>
-        {selectedBillingAddress && <SelectedBillingAddress />}
-        <PaymentMethodSection />
-        <Surface
-          style={[
-            styles.orderSummaryContainer,
-            { backgroundColor: theme.colors.primary },
-          ]}
-        >
-          <View style={styles.orderSummaryContent}>
-            <View style={styles.summaryHeader}>
-              <Text
-                style={[styles.summaryTitle, { color: theme.colors.textColor }]}
-              >
-                Order Summary
-              </Text>
-              <Text
-                style={[
-                  styles.summarySubtitle,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                {completedCount} of {selectedItems.length} items complete
-              </Text>
-            </View>
-
-            <View style={styles.progressBarContainer}>
-              <View
-                style={[
-                  styles.progressBarFull,
-                  {
-                    width: `${completionPercentage}%`,
-                    backgroundColor: allComplete
-                      ? theme.colors.button
-                      : "#FF9800",
-                  },
-                ]}
-              />
-            </View>
-
-            <View style={styles.productQuantitySummary}>
-              <Text
-                style={[
-                  styles.quantitySummaryTitle,
-                  { color: theme.colors.textColor },
-                ]}
-              >
-                Products
-              </Text>
-              <Divider style={styles.quantitySummaryDivider} />
-              {selectedItems.map((item) => {
-                const selection = selections.find(
-                  (sel) => sel.id === item.consumer_cart_items_id
-                );
-                if (!selection) return null;
-
-                return (
-                  <View
-                    key={item.consumer_cart_items_id}
-                    style={styles.quantitySummaryItem}
-                  >
-                    <Text
-                      style={[
-                        styles.quantitySummaryName,
-                        { color: theme.colors.textColor },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.title}
-                    </Text>
-                    <View style={styles.quantitySummaryDetails}>
-                      <Text
-                        style={[
-                          styles.quantitySummaryQty,
-                          { color: theme.colors.textColor },
-                        ]}
-                      >
-                        x{selection.quantity}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.quantitySummaryPrice,
-                          { color: theme.colors.button },
-                        ]}
-                      >
-                        AF {Number.parseFloat(item.spu) * selection.quantity}
-                      </Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
-
-            <View style={styles.totalContainer}>
-              <Text
-                style={[styles.totalLabel, { color: theme.colors.textColor }]}
-              >
-                Total
-              </Text>
-              <Text style={[styles.totalValue, { color: theme.colors.button }]}>
-                AF {totalPrice}
-              </Text>
-            </View>
-
-            <Button
-              mode="contained"
-              onPress={handleConfirm}
-              style={[
-                styles.confirmButton,
-                allComplete ? styles.completeButton : styles.incompleteButton,
-              ]}
-              contentStyle={styles.buttonContent}
-              labelStyle={[
-                styles.buttonLabel,
-                {
-                  color: "white",
-                },
-              ]}
-              loading={isSubmitting}
-              disabled={isSubmitting || !allComplete}
-              textColor="white"
-              icon={({ size, color }) => (
-                <Feather
-                  name={allComplete ? "check-circle" : "alert-circle"}
-                  size={18}
-                  color={color}
-                />
-              )}
-            >
-              {isSubmitting
-                ? "Processing..."
-                : allComplete
-                ? "Place Order"
-                : "Complete All Selections"}
-            </Button>
-          </View>
-        </Surface>
-      </View>
-    );
-  });
-
-  const EmptyState = () => (
+  const EmptyState = memo(() => (
     <View style={styles.emptyContainer}>
       <MaterialCommunityIcons
         name="cart-off"
@@ -1231,7 +1081,7 @@ const ProductVariantSelection = () => {
         Return to Cart
       </Button>
     </View>
-  );
+  ));
 
   if (isLoading) {
     return (
@@ -1265,12 +1115,11 @@ const ProductVariantSelection = () => {
           initialNumToRender={4}
           maxToRenderPerBatch={4}
           windowSize={5}
-          removeClippedSubviews={true}
+          removeClippedSubviews
         />
       </View>
-      <BillingAddressModal />
 
-      {/* Add the AlertDialog component */}
+      <BillingAddressModal />
       <AlertDialog
         visible={alertVisible}
         title={alertTitle}

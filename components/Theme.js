@@ -13,6 +13,7 @@ const lightTheme = {
     disabled: "#9CA3AF",
     deleteButton: "#EF4444",
     buttonText: "white",
+    warning: "#f59e0b",
   },
 };
 
@@ -31,6 +32,7 @@ const darkTheme = {
     deleteButton: "#F87171",
     subInactiveColor: "rgba(255, 255, 255, 0.2)",
     buttonText: "white",
+    warning: "#f59e0b",
   },
 };
 

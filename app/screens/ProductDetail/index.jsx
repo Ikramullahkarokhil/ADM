@@ -924,19 +924,19 @@ const ProductDetail = () => {
                 <View style={styles.priceRow}>
                   <Text
                     style={[
-                      styles.originalPrice,
-                      { color: theme.colors.deleteButton },
-                    ]}
-                  >
-                    AF {product.spu}
-                  </Text>
-                  <Text
-                    style={[
                       styles.discountedPrice,
                       { color: theme.colors.button },
                     ]}
                   >
                     AF {product.discounted_price}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.originalPrice,
+                      { color: theme.colors.deleteButton },
+                    ]}
+                  >
+                    AF {product.spu}
                   </Text>
                 </View>
                 <DiscountBadge
@@ -1178,7 +1178,7 @@ const styles = StyleSheet.create({
   originalPrice: {
     fontSize: 18,
     textDecorationLine: "line-through",
-    marginRight: 10,
+    marginLeft: 10,
     opacity: 0.7,
   },
   discountedPrice: {

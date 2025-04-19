@@ -24,7 +24,6 @@ import useProductStore from "../../components/api/useProductStore";
 import CategoriesSectionList from "../../components/ui/CategoriesList";
 import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
 import AlertDialog from "../../components/ui/AlertDialog";
-import * as NavigationBar from "expo-navigation-bar";
 import NetInfo from "@react-native-community/netinfo";
 import useThemeStore from "../../components/store/useThemeStore";
 import NewArrivals from "../../components/ui/NewArrivals";
@@ -194,13 +193,6 @@ const Home = () => {
     fetchSaleProducts,
   } = useProductStore();
 
-  // Set Android navigation bar color when theme changes.
-  useEffect(() => {
-    if (Platform.OS === "android") {
-      NavigationBar.setBackgroundColorAsync(theme.colors.primary);
-    }
-  }, [theme.colors.primary]);
-
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
@@ -214,9 +206,9 @@ const Home = () => {
 
     try {
       // First fetch sale products and categories in parallel
-      const [categoriesData, saleProductsData] = await Promise.all([
-        fetchMainPageData(),
+      const [saleProductsData, categoriesData] = await Promise.all([
         fetchSaleProducts(1),
+        fetchMainPageData(),
       ]);
 
       // Update state immediately for faster UI response

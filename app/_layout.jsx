@@ -4,7 +4,7 @@ import {
   ActivityIndicator,
   View,
 } from "react-native";
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
@@ -198,6 +198,18 @@ const Layout = () => {
 
     checkAuthenticationAndNetworkStatus();
   }, [hasAcceptedTerms, user, logout, isLoading, router, fetchUserData]);
+
+  // 11. Monitor network connectivity changes
+  useEffect(() => {
+    // Subscribe to network state updates
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const connected = Boolean(state.isConnected);
+      setShowAlert(!connected);
+    });
+
+    // Cleanup subscription on unmount
+    return () => unsubscribe();
+  }, []);
 
   // 12. Memoized handlers to prevent unnecessary re-creation
   const handleAcceptTerms = useCallback(async () => {

@@ -286,6 +286,11 @@ const Profile = () => {
     },
 
     { icon: "apps", label: "More Features", screen: "screens/MoreFeatures" },
+    {
+      icon: "information-outline",
+      label: "About Us",
+      screen: "screens/AboutUs",
+    },
   ];
 
   const accountActions = [

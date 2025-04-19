@@ -219,7 +219,11 @@ const Cart = () => {
 
   const totalPrice =
     selectedItems && selectedItems.length > 0
-      ? selectedItems.reduce((sum, item) => sum + Number(item.spu || 0), 0)
+      ? selectedItems.reduce(
+          (sum, item) =>
+            sum + Number(item.discount.discounted_price || item.spu || 0),
+          0
+        )
       : 0;
 
   const formatTimeRemaining = (timeAdded) => {
@@ -346,6 +350,13 @@ const Cart = () => {
   const renderItem = ({ item }) => {
     const timeAdded = parseCartItemDate(item.date);
     const timeInfo = formatTimeRemaining(timeAdded);
+    const hasDiscount =
+      item.discount && item.discount.value && item.discount.value !== "null";
+    const originalPrice = parseFloat(item.spu);
+    const discountedPrice = hasDiscount
+      ? parseFloat(item.discount.discounted_price)
+      : originalPrice;
+    const discountPercentage = hasDiscount ? item.discount.value : 0;
 
     return (
       <View
@@ -362,26 +373,69 @@ const Cart = () => {
           onLongPress={() => showActionSheet(item)}
           activeOpacity={0.7}
         >
-          <Image
-            source={
-              isDarkTheme
-                ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                : require("../../../assets/images/imageSkeleton.jpg")
-            }
-            style={styles.itemImage}
-          />
+          <View>
+            <Image
+              source={
+                isDarkTheme
+                  ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                  : require("../../../assets/images/imageSkeleton.jpg")
+              }
+              style={styles.itemImage}
+            />
+
+            {hasDiscount && (
+              <View
+                style={[
+                  styles.discountBadge,
+                  { backgroundColor: theme.colors.deleteButton },
+                ]}
+              >
+                <Text style={styles.discountBadgeText}>
+                  {discountPercentage}% OFF
+                </Text>
+              </View>
+            )}
+          </View>
 
           <View style={styles.itemDetails}>
             <Text
               style={[styles.itemName, { color: theme.colors.textColor }]}
-              numberOfLines={2}
+              numberOfLines={1}
             >
               {item.title}
             </Text>
 
-            <Text style={[styles.itemPrice, { color: theme.colors.button }]}>
-              AF {item.spu}
-            </Text>
+            {/* Price and Discount Section */}
+            <View style={styles.priceContainer}>
+              {hasDiscount ? (
+                <>
+                  <View style={styles.priceRow}>
+                    <Text
+                      style={[
+                        styles.discountedPrice,
+                        { color: theme.colors.button },
+                      ]}
+                    >
+                      AF {discountedPrice.toFixed(2)}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.originalPrice,
+                        { color: theme.colors.deleteButton },
+                      ]}
+                    >
+                      AF {originalPrice}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <Text
+                  style={[styles.itemPrice, { color: theme.colors.button }]}
+                >
+                  AF {originalPrice.toFixed(2)}
+                </Text>
+              )}
+            </View>
 
             <View style={styles.timerContainer}>
               <Ionicons
@@ -649,7 +703,6 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: "600",
-    marginBottom: 4,
   },
   itemPrice: {
     fontSize: 18,
@@ -723,6 +776,42 @@ const styles = StyleSheet.create({
   divider: {
     height: 1,
     marginVertical: 4,
+  },
+
+  priceContainer: {
+    marginVertical: 4,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  originalPrice: {
+    fontSize: 14,
+    textDecorationLine: "line-through",
+    marginLeft: 8,
+  },
+  discountedPrice: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  discountBadge: {
+    paddingVertical: 1,
+    position: "absolute",
+    top: 0,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    width: "100%",
+    alignItems: "center",
+  },
+  discountBadgeText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  discountTitle: {
+    fontSize: 12,
+    marginTop: 2,
+    fontStyle: "italic",
   },
 });
 
