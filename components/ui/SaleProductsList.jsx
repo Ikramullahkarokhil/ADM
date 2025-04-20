@@ -5,7 +5,6 @@ import {
   StyleSheet,
   TouchableOpacity,
   Image,
-  ActivityIndicator,
   Pressable,
   useWindowDimensions,
   Platform,
@@ -95,10 +94,9 @@ const ProductImage = memo(({ source, isDarkTheme, style }) => {
 });
 
 // ViewAllCard component
-const ViewAllCard = memo(({ onPress }) => {
-  const { colors } = useTheme();
+const ViewAllCard = memo(({ onPress, colors }) => {
   return (
-    <View style={styles.cardWrapper}>
+    <View style={[styles.cardWrapper, { backgroundColor: colors.primary }]}>
       <Pressable
         style={[
           styles.productCard,
@@ -121,8 +119,7 @@ const ViewAllCard = memo(({ onPress }) => {
 
 // ProductItem component
 const ProductItem = memo(
-  ({ item, onPress }) => {
-    const { colors } = useTheme();
+  ({ item, onPress, colors, isDarkTheme }) => {
     const handlePress = useCallback(() => {
       InteractionManager.runAfterInteractions(() => onPress(item.id));
     }, [onPress, item.id]);
@@ -142,7 +139,7 @@ const ProductItem = memo(
             <ProductImage
               source={item.image ? { uri: item.image } : null}
               style={styles.productImage}
-              isDarkTheme={useThemeStore((state) => state.dark)}
+              isDarkTheme={isDarkTheme}
             />
             <View style={styles.badgesContainer}>
               {item.discountEndAt && (
@@ -166,7 +163,11 @@ const ProductItem = memo(
             <View
               style={[
                 styles.titleOverlay,
-                { backgroundColor: "rgba(255,255,255,0.7)" },
+                {
+                  backgroundColor: isDarkTheme
+                    ? "rgba(0, 0, 0, 0.7)"
+                    : "rgba(255, 255, 255, 0.7)",
+                },
               ]}
             >
               <Text
@@ -216,6 +217,7 @@ const SaleProductsList = ({ data }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const { colors } = useTheme();
+  const { isDarkTheme } = useThemeStore();
 
   const itemWidth = useMemo(
     () => (width > 550 ? width / 3 - 24 : width / 2 - 24),
@@ -257,16 +259,7 @@ const SaleProductsList = ({ data }) => {
   }, [data]);
 
   if (loading) {
-    return (
-      <View style={[styles.container, { backgroundColor: colors.primary }]}>
-        <Text
-          style={[styles.sectionTitle, { color: colors.textColor, margin: 16 }]}
-        >
-          Hot Deals
-        </Text>
-        <ActivityIndicator size="large" color={colors.button} />
-      </View>
-    );
+    return;
   }
 
   if (error) {
@@ -324,9 +317,18 @@ const SaleProductsList = ({ data }) => {
         data={data.total > 10 ? [...saleProducts, "viewAll"] : saleProducts}
         renderItem={({ item }) =>
           item === "viewAll" ? (
-            <ViewAllCard onPress={handleViewAllPress} />
+            <ViewAllCard
+              onPress={handleViewAllPress}
+              colors={colors}
+              isDarkTheme={isDarkTheme}
+            />
           ) : (
-            <ProductItem item={item} onPress={handleProductPress} />
+            <ProductItem
+              item={item}
+              onPress={handleProductPress}
+              colors={colors}
+              isDarkTheme={isDarkTheme}
+            />
           )
         }
         keyExtractor={(item, index) =>
@@ -348,7 +350,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 8,
   },
   sectionTitle: { fontSize: 22, fontWeight: "700", letterSpacing: 0.5 },
   viewAllButton: {
@@ -358,7 +359,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   viewAllText: { fontSize: 14, fontWeight: "600", marginRight: 4 },
-  listContentContainer: { paddingHorizontal: 16, paddingBottom: 15 },
+  listContentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 15,
+    paddingTop: 10,
+  },
   cardWrapper: { marginRight: 12, paddingBottom: 10 },
   productCard: {
     width: 170,

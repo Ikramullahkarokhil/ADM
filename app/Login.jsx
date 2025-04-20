@@ -9,30 +9,39 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  StatusBar,
+  ActivityIndicator,
 } from "react-native";
 import { Formik, useField } from "formik";
 import * as Yup from "yup";
 import { Link, useRouter } from "expo-router";
-import { Button, useTheme } from "react-native-paper";
+import { useTheme } from "react-native-paper";
 import useProductStore from "../components/api/useProductStore";
 import useThemeStore from "../components/store/useThemeStore";
 import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import { makeRedirectUri } from "expo-auth-session";
+import { AntDesign, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Complete any lingering authentication sessions
 WebBrowser.maybeCompleteAuthSession();
 
 // Schema for login form validation
 const loginSchema = Yup.object().shape({
-  email: Yup.string().email("Invalid email").required("Required"),
-  password: Yup.string().min(6, "Too Short!").required("Required"),
+  email: Yup.string()
+    .email("Invalid email address")
+    .required("Email is required"),
+  password: Yup.string()
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
 });
 
 // Memoized FormikInput component for form fields
 const FormikInput = memo(
-  ({ fieldName, theme, secureTextEntry, toggleSecure, ...props }) => {
+  ({ fieldName, colors, secureTextEntry, toggleSecure, icon, ...props }) => {
     const [field, meta, helpers] = useField(fieldName);
+    const [isFocused, setIsFocused] = useState(false);
 
     const handleChange = useCallback(
       (text) => {
@@ -43,40 +52,64 @@ const FormikInput = memo(
 
     const handleBlur = useCallback(() => {
       helpers.setTouched(true);
+      setIsFocused(false);
     }, [helpers]);
+
+    const handleFocus = useCallback(() => {
+      setIsFocused(true);
+    }, []);
 
     return (
       <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
+        <View
+          style={[
+            styles.inputWrapper,
+            {
+              borderColor: isFocused
+                ? colors.button
+                : meta.touched && meta.error
+                ? colors.deleteButton
+                : colors.subInactiveColor,
+              backgroundColor:
+                Platform.OS === "ios"
+                  ? colors.primary
+                  : `${colors.background}90`,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={icon}
+            size={20}
+            color={isFocused ? colors.button : colors.inactiveColor}
+            style={styles.inputIcon}
+          />
           <TextInput
             value={field.value}
             onChangeText={handleChange}
             onBlur={handleBlur}
+            onFocus={handleFocus}
             style={[
               styles.input,
               {
-                backgroundColor: theme.colors.primary,
-                color: theme.colors.textColor,
-                borderColor: theme.colors.subInactiveColor,
+                color: colors.textColor,
               },
-              meta.touched && meta.error && styles.errorInput,
             ]}
-            placeholderTextColor={theme.colors.inactiveColor}
+            placeholderTextColor={colors.inactiveColor}
             secureTextEntry={secureTextEntry}
             {...props}
           />
           {fieldName === "password" && (
             <TouchableOpacity onPress={toggleSecure} style={styles.eyeIcon}>
-              <Text style={{ color: theme.colors.textColor }}>
-                {secureTextEntry ? "👁️" : "👁️‍🗨️"}
-              </Text>
+              <MaterialCommunityIcons
+                name={secureTextEntry ? "eye-outline" : "eye-off-outline"}
+                size={20}
+                color={colors.inactiveColor}
+              />
             </TouchableOpacity>
           )}
         </View>
         {meta.touched && meta.error && (
-          <Text
-            style={[styles.errorText, { color: theme.colors.deleteButton }]}
-          >
+          <Text style={[styles.errorText, { color: colors.deleteButton }]}>
             {meta.error}
           </Text>
         )}
@@ -93,6 +126,8 @@ const Login = () => {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [googleAuthInProgress, setGoogleAuthInProgress] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
 
   const redirectUri = makeRedirectUri();
   const [request, response, promptAsync] = Google.useAuthRequest({
@@ -106,12 +141,7 @@ const Login = () => {
   useEffect(() => {
     if (response?.type === "success") {
       setGoogleAuthInProgress(false);
-
-      // Get the access token instead of id_token
       const { access_token } = response.params;
-
-      console.log("Google sign in successful!");
-
       handleGoogleLogin(access_token);
     } else if (response?.type === "error") {
       setGoogleAuthInProgress(false);
@@ -125,12 +155,8 @@ const Login = () => {
   const handleGoogleLogin = async (accessToken) => {
     try {
       setSubmitting(true);
-
-      console.log("Processing Google login with token:", accessToken);
-
       // Wait a moment to simulate API call
       await new Promise((resolve) => setTimeout(resolve, 500));
-
       // Navigate to the main app
       router.navigate("(tabs)");
     } catch (error) {
@@ -162,7 +188,6 @@ const Login = () => {
   const handleGoogleSignIn = useCallback(async () => {
     try {
       setGoogleAuthInProgress(true);
-      // Improved platform handling
       await promptAsync({
         useProxy: Platform.OS === "web",
         showInRecents: true,
@@ -176,15 +201,51 @@ const Login = () => {
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={[styles.container, { backgroundColor: theme.colors.primary }]}
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.primary,
+          paddingTop: insets.top,
+          paddingBottom: insets.bottom,
+        },
+      ]}
     >
+      <StatusBar
+        barStyle={isDarkTheme ? "light-content" : "dark-content"}
+        backgroundColor="transparent"
+        translucent
+      />
+
+      {isDarkTheme && (
+        <View style={styles.backgroundElements}>
+          <View
+            style={[
+              styles.circle1,
+              { backgroundColor: "rgba(66, 133, 244, 0.08)" },
+            ]}
+          />
+          <View
+            style={[
+              styles.circle2,
+              { backgroundColor: "rgba(52, 168, 83, 0.05)" },
+            ]}
+          />
+          <View
+            style={[
+              styles.circle3,
+              { backgroundColor: "rgba(234, 67, 53, 0.07)" },
+            ]}
+          />
+        </View>
+      )}
+
       <View style={styles.content}>
         <View style={styles.logoContainer}>
           <Image
             source={
-              !isDarkTheme
-                ? require("../assets/images/darkLogo.png")
-                : require("../assets/images/lightLogo.png")
+              isDarkTheme
+                ? require("../assets/images/lightLogo.png")
+                : require("../assets/images/darkLogo.png")
             }
             style={styles.logo}
             resizeMode="contain"
@@ -192,11 +253,11 @@ const Login = () => {
           />
         </View>
 
-        <Text style={[styles.title, { color: theme.colors.textColor }]}>
+        <Text style={[styles.title, { color: colors.textColor }]}>
           Welcome Back
         </Text>
-        <Text style={[styles.subtitle, { color: theme.colors.inactiveColor }]}>
-          Sign in to your account
+        <Text style={[styles.subtitle, { color: colors.inactiveColor }]}>
+          Sign in to continue
         </Text>
 
         <Formik
@@ -205,112 +266,170 @@ const Login = () => {
           onSubmit={handleLogin}
         >
           {({ handleSubmit }) => (
-            <View
-              style={[
-                styles.form,
-                {
-                  backgroundColor: theme.colors.background,
-                  borderColor: theme.colors.subInactiveColor,
-                },
-              ]}
-            >
-              <>
-                <FormikInput
-                  fieldName="email"
-                  placeholder="Email"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  theme={theme}
-                  accessibilityLabel="Email input"
-                />
-                <FormikInput
-                  fieldName="password"
-                  placeholder="Password"
-                  secureTextEntry={secureTextEntry}
-                  toggleSecure={toggleSecure}
-                  autoCapitalize="none"
-                  theme={theme}
-                  accessibilityLabel="Password input"
-                />
-              </>
+            <View style={styles.formContainer}>
+              <FormikInput
+                fieldName="email"
+                placeholder="Email"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                colors={colors}
+                icon="email-outline"
+                accessibilityLabel="Email input"
+              />
+
+              <FormikInput
+                fieldName="password"
+                placeholder="Password"
+                secureTextEntry={secureTextEntry}
+                toggleSecure={toggleSecure}
+                autoCapitalize="none"
+                colors={colors}
+                icon="lock-outline"
+                accessibilityLabel="Password input"
+              />
 
               {loginError && (
-                <Text
-                  style={[styles.error, { color: theme.colors.deleteButton }]}
+                <View
+                  style={[
+                    styles.errorContainer,
+                    { backgroundColor: `${colors.deleteButton}20` },
+                  ]}
                 >
-                  {loginError}
-                </Text>
+                  <MaterialCommunityIcons
+                    name="alert-circle-outline"
+                    size={16}
+                    color={colors.deleteButton}
+                  />
+                  <Text style={[styles.error, { color: colors.deleteButton }]}>
+                    {loginError}
+                  </Text>
+                </View>
               )}
 
-              <Button
-                textColor={theme.colors.primary}
-                buttonColor={theme.colors.button}
-                style={styles.button}
-                loading={loginLoading || submitting}
-                accessibilityLabel="Sign in button"
+              <TouchableOpacity
+                style={[
+                  styles.signInButton,
+                  {
+                    backgroundColor: colors.button,
+                    opacity: loginLoading || submitting ? 0.7 : 1,
+                    shadowColor: colors.button,
+                  },
+                ]}
                 onPress={handleSubmit}
                 disabled={loginLoading || submitting || googleAuthInProgress}
+                accessibilityLabel="Sign in button"
               >
-                Sign In
-              </Button>
+                {loginLoading || submitting ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator
+                      animating={true}
+                      color={colors.buttonText}
+                    />
+                  </View>
+                ) : (
+                  <Text
+                    style={[styles.buttonText, { color: colors.buttonText }]}
+                  >
+                    Sign In
+                  </Text>
+                )}
+              </TouchableOpacity>
 
               <View style={styles.divider}>
                 <View
                   style={[
                     styles.dividerLine,
-                    { backgroundColor: theme.colors.subInactiveColor },
+                    { backgroundColor: colors.subInactiveColor },
                   ]}
                 />
                 <Text
-                  style={[
-                    styles.dividerText,
-                    { color: theme.colors.inactiveColor },
-                  ]}
+                  style={[styles.dividerText, { color: colors.inactiveColor }]}
                 >
                   OR
                 </Text>
                 <View
                   style={[
                     styles.dividerLine,
-                    { backgroundColor: theme.colors.subInactiveColor },
+                    { backgroundColor: colors.subInactiveColor },
                   ]}
                 />
               </View>
 
-              <Button
-                textColor={theme.colors.primary}
-                buttonColor={theme.colors.button}
-                style={styles.button}
-                loading={googleAuthInProgress}
-                disabled={submitting || googleAuthInProgress}
+              {/* Modern Google Sign In Button */}
+              <TouchableOpacity
+                style={[
+                  styles.googleButton,
+                  {
+                    backgroundColor: isDarkTheme
+                      ? "rgba(255, 255, 255, 0.08)"
+                      : "#FFFFFF",
+                    borderColor: colors.subInactiveColor,
+                    opacity: googleAuthInProgress ? 0.7 : 1,
+                  },
+                ]}
                 onPress={handleGoogleSignIn}
+                disabled={submitting || googleAuthInProgress}
                 accessibilityLabel="Sign in with Google button"
               >
-                Sign In with Google
-              </Button>
+                {googleAuthInProgress ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator animating={true} color={colors.button} />
+                  </View>
+                ) : (
+                  <>
+                    <View style={styles.googleIconContainer}>
+                      <AntDesign
+                        name="google"
+                        size={18}
+                        color="#FFFFFF"
+                        style={styles.googleIcon}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.googleButtonText,
+                        {
+                          color: isDarkTheme
+                            ? colors.activeColor
+                            : colors.textColor,
+                        },
+                      ]}
+                    >
+                      Sign in with Google
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
 
               <View style={styles.footer}>
-                <Link href="/screens/Signup" asChild>
-                  <Pressable style={{ flexDirection: "row" }}>
-                    <Text
-                      style={[styles.link, { color: theme.colors.textColor }]}
-                    >
-                      Don't have an account?{" "}
-                    </Text>
-                    <Text style={[styles.link, { color: theme.colors.button }]}>
-                      Sign Up
-                    </Text>
-                  </Pressable>
-                </Link>
+                <View style={styles.signupContainer}>
+                  <Text
+                    style={[styles.signupText, { color: colors.inactiveColor }]}
+                  >
+                    Don't have an account?
+                  </Text>
+                  <Link href="/screens/Signup" asChild>
+                    <Pressable>
+                      <Text
+                        style={[styles.signupLink, { color: colors.button }]}
+                      >
+                        Sign Up
+                      </Text>
+                    </Pressable>
+                  </Link>
+                </View>
 
                 <Link href="(tabs)" asChild>
-                  <Button
-                    mode="text"
-                    textColor={theme.colors.button}
-                    style={styles.skipButton}
-                  >
-                    Continue as a guest
-                  </Button>
+                  <TouchableOpacity style={styles.guestButton}>
+                    <Text
+                      style={[
+                        styles.guestButtonText,
+                        { color: colors.subInactiveColor },
+                      ]}
+                    >
+                      Continue as a guest
+                    </Text>
+                  </TouchableOpacity>
                 </Link>
               </View>
             </View>
@@ -324,116 +443,181 @@ const Login = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    position: "relative",
+  },
+  backgroundElements: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  circle1: {
+    position: "absolute",
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    top: -100,
+    right: -100,
+  },
+  circle2: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    bottom: 100,
+    left: -50,
+  },
+  circle3: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    bottom: -50,
+    right: 50,
   },
   content: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 32,
+    paddingHorizontal: 24,
   },
   logoContainer: {
-    marginBottom: 48,
+    marginBottom: 32,
   },
   logo: {
-    width: 180,
-    height: 60,
+    width: 160,
+    height: 50,
   },
   title: {
-    fontSize: 34,
-    fontWeight: "800",
+    fontSize: 28,
+    fontWeight: "700",
     marginBottom: 8,
+    textAlign: "center",
     letterSpacing: 0.5,
   },
   subtitle: {
     fontSize: 16,
-    marginBottom: 40,
-    opacity: 0.8,
+    marginBottom: 32,
+    textAlign: "center",
   },
-  form: {
+  formContainer: {
     width: "100%",
-    borderRadius: 20,
-    padding: 24,
-    borderWidth: 1,
+    maxWidth: 360,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   inputWrapper: {
-    position: "relative",
     flexDirection: "row",
     alignItems: "center",
+    borderWidth: 1,
+    borderRadius: 12,
+    height: 56,
+    paddingHorizontal: 16,
+  },
+  inputIcon: {
+    marginRight: 12,
   },
   input: {
     flex: 1,
-    height: 60,
-    borderRadius: 16,
-    paddingHorizontal: 20,
     fontSize: 16,
-    borderWidth: 1,
+    height: "100%",
   },
   eyeIcon: {
-    position: "absolute",
-    right: 20,
-  },
-  errorInput: {
-    borderColor: "red",
+    padding: 4,
   },
   errorText: {
     fontSize: 12,
-    marginTop: 6,
+    marginTop: 4,
+    marginLeft: 4,
   },
-  button: {
-    borderRadius: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-  },
-  biometricButton: {
-    borderRadius: 12,
-    paddingVertical: 10,
-    borderColor: "#6200ee",
-    marginBottom: 12,
-  },
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "700",
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    padding: 12,
+    borderRadius: 8,
   },
   error: {
     fontSize: 14,
-    textAlign: "center",
-    marginBottom: 16,
+    marginLeft: 8,
   },
-  footer: {
-    marginTop: 28,
-    alignItems: "center",
-    gap: 16,
-  },
-  link: {
-    fontSize: 14,
-  },
-  skipButton: {
-    paddingHorizontal: 0,
-  },
-  loader: {
-    flex: 1,
+  signInButton: {
+    height: 56,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
+    marginBottom: 24,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  loadingText: {
-    marginTop: 20,
+  buttonText: {
     fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: 0.5,
+  },
+  loadingContainer: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   divider: {
     flexDirection: "row",
     alignItems: "center",
-    marginVertical: 16,
+    marginBottom: 24,
   },
   dividerLine: {
     flex: 1,
     height: 1,
   },
   dividerText: {
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginBottom: 32,
+  },
+  googleIconContainer: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#4285F4",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  googleIcon: {
+    color: "#FFFFFF",
+  },
+  googleButtonText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  footer: {
+    alignItems: "center",
+  },
+  signupContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  signupText: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  signupLink: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  guestButton: {
+    padding: 8,
+  },
+  guestButtonText: {
     fontSize: 14,
   },
 });

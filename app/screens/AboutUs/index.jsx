@@ -10,14 +10,17 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Surface, Divider, useTheme } from "react-native-paper";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useNavigation } from "expo-router";
 import useThemeStore from "../../../components/store/useThemeStore";
+import Constants from "expo-constants";
 
 const AboutUs = () => {
   const theme = useTheme();
   const navigation = useNavigation();
   const { isDarkTheme } = useThemeStore();
+
+  const AppVersion = Constants.expoConfig?.version || "1.0.0";
 
   useLayoutEffect(() => {
     navigation.setOptions({
@@ -32,9 +35,9 @@ const AboutUs = () => {
   };
 
   const stats = [
-    { value: "10,000+", label: "Businesses" },
-    { value: "1M+", label: "Customers" },
-    { value: "98%", label: "Satisfaction" },
+    { value: "1000+", label: "Businesses" },
+    { value: "50000+", label: "Customers" },
+    { value: "99%", label: "Satisfaction" },
     { value: "24/7", label: "Support" },
   ];
 
@@ -249,7 +252,10 @@ const AboutUs = () => {
           <Text
             style={[
               styles.sectionText,
-              { marginBottom: 16, color: theme.colors.textColor },
+              {
+                marginBottom: 16,
+                color: theme.colors.textColor,
+              },
             ]}
           >
             We'd love to hear from you! Reach out for support, partnerships, or
@@ -262,7 +268,9 @@ const AboutUs = () => {
                 styles.contactButton,
                 { backgroundColor: theme.colors.button },
               ]}
-              onPress={() => openLink("https://afgdigitalmarket.com")}
+              onPress={() =>
+                openLink("https://demo.ucsofficialstore.com/eshop")
+              }
             >
               <MaterialCommunityIcons
                 name="web"
@@ -284,7 +292,7 @@ const AboutUs = () => {
                 styles.contactButton,
                 { backgroundColor: theme.colors.button },
               ]}
-              onPress={() => openLink("mailto:info@afgdigitalmarket.com")}
+              onPress={() => openLink("mailto:shafiqullah.ghyasi@gmail.com")}
             >
               <MaterialCommunityIcons
                 name="email-outline"
@@ -306,10 +314,10 @@ const AboutUs = () => {
                 styles.contactButton,
                 { backgroundColor: theme.colors.button },
               ]}
-              onPress={() => openLink("tel:+93799999999")}
+              onPress={() => openLink("https://wa.me/9376 563 8844")}
             >
               <MaterialCommunityIcons
-                name="phone-outline"
+                name="whatsapp"
                 size={20}
                 color={theme.colors.buttonText}
               />
@@ -319,7 +327,7 @@ const AboutUs = () => {
                   { color: theme.colors.buttonText },
                 ]}
               >
-                Call Support
+                WhatsApp Support
               </Text>
             </TouchableOpacity>
           </View>
@@ -335,11 +343,13 @@ const AboutUs = () => {
           <View style={styles.socialIcons}>
             <TouchableOpacity
               style={styles.socialIcon}
-              onPress={() => openLink("https://facebook.com/adm")}
+              onPress={() =>
+                openLink("https://www.facebook.com/share/1F9o4D3qyT/")
+              }
             >
               <MaterialCommunityIcons
                 name="facebook"
-                size={28}
+                size={30}
                 color="#1877F2"
               />
             </TouchableOpacity>
@@ -347,10 +357,10 @@ const AboutUs = () => {
               style={styles.socialIcon}
               onPress={() => openLink("https://twitter.com/adm")}
             >
-              <MaterialCommunityIcons
-                name="twitter"
-                size={28}
-                color="#1DA1F2"
+              <FontAwesome6
+                name="x-twitter"
+                size={30}
+                color={theme.colors.textColor}
               />
             </TouchableOpacity>
             <TouchableOpacity
@@ -359,7 +369,7 @@ const AboutUs = () => {
             >
               <MaterialCommunityIcons
                 name="instagram"
-                size={28}
+                size={30}
                 color="#E1306C"
               />
             </TouchableOpacity>
@@ -369,7 +379,7 @@ const AboutUs = () => {
             >
               <MaterialCommunityIcons
                 name="linkedin"
-                size={28}
+                size={30}
                 color="#0077B5"
               />
             </TouchableOpacity>
@@ -381,7 +391,7 @@ const AboutUs = () => {
           <Text
             style={[styles.versionText, { color: theme.colors.inactiveColor }]}
           >
-            ADM Mobile App v1.0.0
+            ADM Mobile App v{AppVersion}
           </Text>
           <Text
             style={[

@@ -34,9 +34,9 @@
           "icon": "./assets/icon.png",
           "color": "#ffffff"
         }
-      ]
+      ],
+      "expo-font"
     ],
-
     "scheme": "com.afghanbyteTechnologies.ADM",
     "extra": {
       "router": {

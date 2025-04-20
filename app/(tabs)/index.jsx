@@ -7,7 +7,6 @@ import React, {
   memo,
 } from "react";
 import {
-  FlatList,
   Pressable,
   StyleSheet,
   View,
@@ -21,8 +20,7 @@ import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import useProductStore from "../../components/api/useProductStore";
-import CategoriesSectionList from "../../components/ui/CategoriesList";
-import CategoriesSkeleton from "../../components/skeleton/CategoriesSkeleton";
+import CategoriesSection from "../../components/ui/CategoriesSection"; // Import the new component
 import AlertDialog from "../../components/ui/AlertDialog";
 import NetInfo from "@react-native-community/netinfo";
 import useThemeStore from "../../components/store/useThemeStore";
@@ -86,7 +84,6 @@ const SaleProductsSection = memo(({ data }) => {
   return <SaleProductsList data={data} />;
 });
 
-// Each content section is wrapped in React.memo so they only re-render when their props change.
 const NewArrivalsSection = memo(({ data }) => {
   if (!data || data.total <= 0) return null;
   return <NewArrivals data={data} />;
@@ -115,44 +112,6 @@ const ContentSections = memo(
     );
   }
 );
-
-// Optimize category item rendering with memoization.
-const CategoryItem = memo(({ item, loading }) => {
-  if (loading) return <CategoriesSkeleton />;
-  return <CategoriesSectionList data={[item]} />;
-});
-
-// Categories section with optimized FlatList parameters for better performance.
-const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
-  const renderItem = useCallback(
-    ({ item }) => <CategoryItem item={item} loading={loading} />,
-    [loading]
-  );
-
-  return (
-    <FlatList
-      data={loading ? Array(6).fill(null) : categories}
-      renderItem={renderItem}
-      keyExtractor={keyExtractor}
-      numColumns={loading ? 2 : 1}
-      key={loading ? "skeleton" : "data"}
-      contentContainerStyle={
-        loading ? styles.skeletonContainer : styles.dataContainer
-      }
-      scrollEnabled={false}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={3}
-      windowSize={3}
-      initialNumToRender={2}
-      updateCellsBatchingPeriod={50}
-      getItemLayout={(data, index) => ({
-        length: loading ? 150 : 200,
-        offset: (loading ? 150 : 200) * index,
-        index,
-      })}
-    />
-  );
-});
 
 // Network status indicator
 const NetworkStatusIndicator = memo(({ isConnected, theme }) => {
@@ -205,7 +164,6 @@ const Home = () => {
     setRefreshing(true);
 
     try {
-      // First fetch sale products and categories in parallel
       const [saleProductsData, categoriesData] = await Promise.all([
         fetchSaleProducts(1),
         fetchMainPageData(),
@@ -340,6 +298,7 @@ const Home = () => {
       >
         <SaleProductsSection data={saleProducts} />
 
+        {/* Using the new CategoriesSection component */}
         <CategoriesSection
           loading={loading}
           categories={categories}
@@ -375,7 +334,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
   },
-
   saleProductsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -409,11 +367,6 @@ const styles = StyleSheet.create({
     width: 120,
     resizeMode: "contain",
   },
-  skeletonContainer: {
-    marginTop: 50,
-    marginHorizontal: 10,
-  },
-  dataContainer: {},
   searchBar: {
     margin: 0,
   },

@@ -622,7 +622,7 @@ const ProductDetail = () => {
 
   // Toggle favorite handler
   const handleToggleFavorite = useCallback(async () => {
-    if (!user) return router.navigate("/screens/Login");
+    if (!user) return router.navigate("/Login");
     if (isFavoriting || !product) return;
 
     const previousFavorite = isFavorite;

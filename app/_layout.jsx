@@ -29,11 +29,9 @@ import { checkForUpdate } from "../utils/VersionUtils";
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
-// Move enableScreens to outside of component (if not done already)
 enableScreens();
 
 const Layout = () => {
-  // 1. Theme & styling setup
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = useMemo(
