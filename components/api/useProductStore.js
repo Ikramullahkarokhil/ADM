@@ -266,9 +266,8 @@ const useProductStore = create(
       },
 
       changePassword: async ({ consumerID, password }) => {
-        return await get().apiRequest(
-          `/consumer/change-password?consumer_id=${consumerID}&password=${password}`,
-          { method: "POST" }
+        return await api.post(
+          `/consumer/change-password?consumer_id=${consumerID}&password=${password}`
         );
       },
 

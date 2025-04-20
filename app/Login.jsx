@@ -216,28 +216,26 @@ const Login = () => {
         translucent
       />
 
-      {isDarkTheme && (
-        <View style={styles.backgroundElements}>
-          <View
-            style={[
-              styles.circle1,
-              { backgroundColor: "rgba(66, 133, 244, 0.08)" },
-            ]}
-          />
-          <View
-            style={[
-              styles.circle2,
-              { backgroundColor: "rgba(52, 168, 83, 0.05)" },
-            ]}
-          />
-          <View
-            style={[
-              styles.circle3,
-              { backgroundColor: "rgba(234, 67, 53, 0.07)" },
-            ]}
-          />
-        </View>
-      )}
+      <View style={styles.backgroundElements}>
+        <View
+          style={[
+            styles.circle1,
+            { backgroundColor: "rgba(66, 133, 244, 0.08)" },
+          ]}
+        />
+        <View
+          style={[
+            styles.circle2,
+            { backgroundColor: "rgba(52, 168, 83, 0.05)" },
+          ]}
+        />
+        <View
+          style={[
+            styles.circle3,
+            { backgroundColor: "rgba(234, 67, 53, 0.07)" },
+          ]}
+        />
+      </View>
 
       <View style={styles.content}>
         <View style={styles.logoContainer}>
@@ -362,7 +360,7 @@ const Login = () => {
                   {
                     backgroundColor: isDarkTheme
                       ? "rgba(255, 255, 255, 0.08)"
-                      : "#FFFFFF",
+                      : "rgba(163, 155, 155, 0.08)",
                     borderColor: colors.subInactiveColor,
                     opacity: googleAuthInProgress ? 0.7 : 1,
                   },
@@ -378,11 +376,10 @@ const Login = () => {
                 ) : (
                   <>
                     <View style={styles.googleIconContainer}>
-                      <AntDesign
-                        name="google"
-                        size={18}
-                        color="#FFFFFF"
+                      <Image
+                        source={require("../assets/icons/google.png")}
                         style={styles.googleIcon}
+                        resizeMode="cover"
                       />
                     </View>
                     <Text
@@ -422,10 +419,7 @@ const Login = () => {
                 <Link href="(tabs)" asChild>
                   <TouchableOpacity style={styles.guestButton}>
                     <Text
-                      style={[
-                        styles.guestButtonText,
-                        { color: colors.subInactiveColor },
-                      ]}
+                      style={[styles.guestButtonText, { color: colors.button }]}
                     >
                       Continue as a guest
                     </Text>
@@ -586,13 +580,14 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#4285F4",
+    backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
   googleIcon: {
-    color: "#FFFFFF",
+    height: 25,
+    width: 25,
   },
   googleButtonText: {
     fontSize: 16,
