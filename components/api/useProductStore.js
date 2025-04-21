@@ -58,10 +58,6 @@ const useProductStore = create(
       },
 
       // ====================== Product Fetching ======================
-      fetchMostSaleProducts: async () => {
-        const data = await get().apiRequest("/get-most-sale-products");
-        set({ mostSaleProducts: data });
-      },
 
       fetchNewArrivals: async (page) => {
         const data = await get().apiRequest(

@@ -362,8 +362,8 @@ const styles = StyleSheet.create({
     minHeight: 210,
   },
   productCard: {
-    width: 170,
-    height: 210,
+    width: 160,
+    height: 200,
     marginRight: 12,
     borderRadius: 16,
     overflow: "hidden",

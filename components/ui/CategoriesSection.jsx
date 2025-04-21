@@ -1,7 +1,9 @@
 import React, { memo, useCallback } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { FlatList, StyleSheet } from "react-native";
 import CategoriesSectionList from "./CategoriesList";
-import CategoriesSkeleton from "../skeleton/CategoriesSkeleton";
+import CategoriesSkeleton, {
+  CategoriesSkeletonList,
+} from "../skeleton/CategoriesSkeleton";
 
 // Optimize category item rendering with memoization.
 const CategoryItem = memo(({ item, loading }) => {
@@ -16,16 +18,16 @@ const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
     [loading]
   );
 
+  if (loading) return <CategoriesSkeletonList />;
+
   return (
     <FlatList
-      data={loading ? Array(6).fill(null) : categories}
+      data={categories}
       renderItem={renderItem}
       keyExtractor={keyExtractor}
-      numColumns={loading ? 2 : 1}
-      key={loading ? "skeleton" : "data"}
-      contentContainerStyle={
-        loading ? styles.skeletonContainer : styles.dataContainer
-      }
+      numColumns={1}
+      key="data"
+      contentContainerStyle={styles.dataContainer}
       scrollEnabled={false}
       removeClippedSubviews={true}
       maxToRenderPerBatch={3}
@@ -33,8 +35,8 @@ const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
       initialNumToRender={2}
       updateCellsBatchingPeriod={50}
       getItemLayout={(data, index) => ({
-        length: loading ? 150 : 200,
-        offset: (loading ? 150 : 200) * index,
+        length: 200,
+        offset: 200 * index,
         index,
       })}
     />
@@ -42,10 +44,6 @@ const CategoriesSection = memo(({ loading, categories, keyExtractor }) => {
 });
 
 const styles = StyleSheet.create({
-  skeletonContainer: {
-    marginTop: 50,
-    marginHorizontal: 10,
-  },
   dataContainer: {},
 });
 

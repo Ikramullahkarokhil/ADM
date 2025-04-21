@@ -1,12 +1,12 @@
-import React from "react";
-import { View } from "react-native";
+import React, { memo } from "react";
+import { View, StyleSheet, FlatList } from "react-native";
 import { Skeleton } from "@rneui/base";
 import { useTheme } from "react-native-paper";
 
-const CategoriesSkeleton = () => {
+const CategoriesSkeletonItem = () => {
   const theme = useTheme();
   return (
-    <View style={{ padding: 8, paddingTop: 13, flex: 1 }}>
+    <View style={{ padding: 8, paddingTop: 6, flex: 1 }}>
       <Skeleton
         width={"100%"}
         animation="none"
@@ -32,4 +32,36 @@ const CategoriesSkeleton = () => {
   );
 };
 
-export default CategoriesSkeleton;
+const CategoriesSkeletonList = memo(() => {
+  return (
+    <FlatList
+      data={Array(6).fill(null)}
+      renderItem={() => <CategoriesSkeletonItem />}
+      keyExtractor={(_, index) => index.toString()}
+      numColumns={2}
+      key="skeleton"
+      contentContainerStyle={styles.skeletonContainer}
+      scrollEnabled={false}
+      removeClippedSubviews={true}
+      maxToRenderPerBatch={3}
+      windowSize={3}
+      initialNumToRender={2}
+      updateCellsBatchingPeriod={50}
+      getItemLayout={(data, index) => ({
+        length: 150,
+        offset: 150 * index,
+        index,
+      })}
+    />
+  );
+});
+
+const styles = StyleSheet.create({
+  skeletonContainer: {
+    marginTop: 50,
+    marginHorizontal: 10,
+  },
+});
+
+export default CategoriesSkeletonItem;
+export { CategoriesSkeletonList };

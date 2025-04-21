@@ -28,6 +28,7 @@ import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 import SaleProductsList from "../../components/ui/SaleProductsList";
+import HotDealsSkeleton from "../../components/skeleton/HotDealsSkeleton";
 
 // Pre-load images once so they aren't reloaded on each render.
 const DARK_LOGO = require("../../assets/images/darkLogo.png");
@@ -79,9 +80,9 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
 });
 
 // Sale Products Section with skeleton loading
-const SaleProductsSection = memo(({ data }) => {
-  if (!data || data.total <= 0) return null;
-  return <SaleProductsList data={data} />;
+const SaleProductsSection = memo(({ data, loading }) => {
+  if (!data || data.total <= 0) return;
+  return <SaleProductsList data={data} load={loading} />;
 });
 
 const NewArrivalsSection = memo(({ data }) => {
@@ -296,7 +297,7 @@ const Home = () => {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <SaleProductsSection data={saleProducts} />
+        <SaleProductsSection data={saleProducts} loading={loading} />
 
         {/* Using the new CategoriesSection component */}
         <CategoriesSection
