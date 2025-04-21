@@ -281,7 +281,7 @@ const SellerProfile = () => {
   }, [sellerId, user?.consumer_id, followSeller, sellerData]);
 
   const handleProductPress = useCallback((productId) => {
-    router.navigate({
+    router.push({
       pathname: "/screens/ProductDetail",
       params: { id: productId },
     });

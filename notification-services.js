@@ -49,7 +49,7 @@ export async function registerBackgroundNotifications() {
       stopOnTerminate: false,
       startOnBoot: true,
     });
-    console.log("Background fetch registered successfully");
+    console.log("Background notifications registers");
   } catch (error) {
     console.error("Background fetch registration failed:", error);
   }

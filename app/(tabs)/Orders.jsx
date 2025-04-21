@@ -12,6 +12,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import useProductStore from "../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
+import useThemeStore from "../../components/store/useThemeStore";
 
 // Status types definition - moved outside component to prevent recreation
 const statusTypes = [
@@ -163,6 +164,7 @@ const Orders = () => {
   const router = useRouter();
   const { orders, listOrders, user } = useProductStore();
   const { colors } = useTheme();
+  const { isDarkTheme } = useThemeStore();
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -310,6 +312,7 @@ const Orders = () => {
           data={filteredOrders}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
+          key={`flashlist-${isDarkTheme ? "dark" : "light"}`}
           ListEmptyComponent={<EmptyStateComponent colors={colors} />}
           refreshControl={refreshControl}
           contentContainerStyle={styles.listContentContainer}

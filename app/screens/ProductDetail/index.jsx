@@ -457,6 +457,7 @@ const ProductDetail = () => {
   const [isFavoriting, setIsFavoriting] = useState(false);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [userRating, setUserRating] = useState(0);
+  const [rating, setRating] = useState(0);
   const [totalRating, setTotalRating] = useState(0);
   const [questions, setQuestions] = useState([]);
   const [totalQuestions, setTotalQuestions] = useState(0);
@@ -507,6 +508,7 @@ const ProductDetail = () => {
         const productData = productResponse.data;
         setProduct(productData);
         setIsFavorite(Number(productResponse?.is_fav?.is_favourite) === 1);
+        setRating(Number(productData?.average_rating) || 0);
         setUserRating(Number(productData?.average_rating) || 0);
         setTotalRating(Number(productData.total_rating) || 0);
 
@@ -910,7 +912,7 @@ const ProductDetail = () => {
 
           {/* Rating */}
           <ProductRating
-            rating={userRating}
+            rating={rating}
             colors={theme.colors}
             readOnly={true}
             size={16}
@@ -986,7 +988,7 @@ const ProductDetail = () => {
           <Pressable
             style={styles.detailsRow}
             onPress={() =>
-              router.navigate({
+              router.push({
                 pathname: "/screens/SellerProfile",
                 params: {
                   sellerId: product.accounts_id,

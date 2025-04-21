@@ -206,7 +206,9 @@ const ProductItem = memo(
     prev.item.discountedPrice === next.item.discountedPrice &&
     prev.item.originalPrice === next.item.originalPrice &&
     prev.item.discountEndAt === next.item.discountEndAt &&
-    prev.item.discountValue === next.item.discountValue
+    prev.item.discountValue === next.item.discountValue &&
+    prev.colors === next.colors &&
+    prev.isDarkTheme === next.isDarkTheme
 );
 
 // Main List component
@@ -331,6 +333,7 @@ const SaleProductsList = ({ data }) => {
             />
           )
         }
+        key={`flashlist-${isDarkTheme ? "dark" : "light"}`}
         keyExtractor={(item, index) =>
           typeof item === "string" ? `view-all-${index}` : `product-${item.id}`
         }

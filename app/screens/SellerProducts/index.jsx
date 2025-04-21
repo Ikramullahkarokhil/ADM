@@ -173,7 +173,7 @@ const ProductsList = () => {
   }, [hasMore, loading, sellerId, listType, page]);
 
   const handleProductPress = useCallback((productId) => {
-    router.navigate({
+    router.push({
       pathname: "/screens/ProductDetail",
       params: { id: productId },
     });

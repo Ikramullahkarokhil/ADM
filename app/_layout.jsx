@@ -60,6 +60,16 @@ const Layout = () => {
   const router = useRouter();
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
+  const screenOptions = useCallback(() => {
+    return {
+      headerTitleAlign: "center",
+      headerStyle: { backgroundColor: theme.colors.primary },
+      headerTintColor: theme.colors.textColor,
+      detachInactiveScreens: true,
+      animation: "slide_from_right",
+    };
+  }, [theme]);
+
   // 4. Memoized loading view and screen options
   const loadingView = useMemo(
     () => (
@@ -67,16 +77,6 @@ const Layout = () => {
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     ),
-    [theme.colors.primary]
-  );
-
-  const screenOptions = useMemo(
-    () => ({
-      headerTitleAlign: "center",
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
-      detachInactiveScreens: true,
-    }),
     [theme.colors.primary]
   );
 
