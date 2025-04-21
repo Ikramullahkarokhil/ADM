@@ -185,7 +185,7 @@ const Profile = () => {
         ToastAndroid.SHORT
       );
       await logout();
-      router.replace("/Login");
+      router.navigate("/Login");
     } catch (error) {
       Alert.alert("Error", "Failed to delete account. Please try again.");
     }
@@ -230,7 +230,7 @@ const Profile = () => {
   const handleLogout = useCallback(async () => {
     try {
       await logout();
-      router.replace("/Login");
+      router.navigate("/Login");
     } catch (error) {
       Alert.alert("Error", "Failed to logout. Please try again.");
     }

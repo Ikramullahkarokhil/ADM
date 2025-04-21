@@ -477,7 +477,7 @@ const Signup = () => {
       const signupResponse = await signupUser(signupData);
       if (signupResponse.success) {
         console.log("Signup successful:", signupResponse.user);
-        router.replace("Login");
+        router.navigate("Login");
       } else {
         throw new Error(signupResponse.message || "Signup failed");
       }

@@ -351,12 +351,6 @@ const OrderDetails = () => {
     );
   }
 
-  const {
-    text: statusText,
-    color: statusColor,
-    icon: statusIcon,
-  } = orderStatus(orderData.order_details.status);
-
   // Check if all products are cancelled.
   const allProductsCancelled = orderData.cart_products.every(
     (product) => product.status === "5" || product.status === "7"

@@ -44,6 +44,7 @@ const ProductItem = memo(
     onShare,
     isInCart,
     renderRatingStars,
+    router,
   }) => {
     if (!item) return null;
 
@@ -56,98 +57,87 @@ const ProductItem = memo(
 
     return (
       <View style={styles.itemContainer}>
-        <Link
-          href={{
-            pathname: "/screens/ProductDetail",
-            params: { id: item.products_id },
-          }}
-          asChild
+        <Pressable
+          onLongPress={() => onLongPress(item)}
+          delayLongPress={500}
+          android_ripple={{ color: theme.colors.ripple }}
+          onPress={() =>
+            router.navigate({
+              pathname: "/screens/ProductDetail",
+              params: { id: item.products_id },
+            })
+          }
         >
-          <Pressable
-            onLongPress={() => onLongPress(item)}
-            delayLongPress={500}
-            android_ripple={{ color: theme.colors.ripple }}
+          <View
+            style={[styles.listItem, { backgroundColor: theme.colors.primary }]}
           >
-            <View
-              style={[
-                styles.listItem,
-                { backgroundColor: theme.colors.primary },
-              ]}
-            >
-              <Image
-                source={imageSource}
-                style={styles.productImage}
-                resizeMode="cover"
-              />
-              <View style={styles.productInfo}>
+            <Image
+              source={imageSource}
+              style={styles.productImage}
+              resizeMode="cover"
+            />
+            <View style={styles.productInfo}>
+              <Text
+                style={[styles.productTitle, { color: theme.colors.textColor }]}
+                numberOfLines={2}
+              >
+                {item.title}
+              </Text>
+              <View style={styles.brandContainer}>
                 <Text
-                  style={[
-                    styles.productTitle,
-                    { color: theme.colors.textColor },
-                  ]}
-                  numberOfLines={2}
+                  style={[styles.brand, { color: theme.colors.textColor }]}
+                  numberOfLines={1}
                 >
-                  {item.title}
+                  Brand: {item.brand_title}
                 </Text>
-                <View style={styles.brandContainer}>
-                  <Text
-                    style={[styles.brand, { color: theme.colors.textColor }]}
-                    numberOfLines={1}
-                  >
-                    Brand: {item.brand_title}
-                  </Text>
-                </View>
-                <View style={styles.bottomRow}>
-                  <Text
-                    style={[
-                      styles.productPrice,
-                      { color: theme.colors.button },
-                    ]}
-                  >
-                    AF {item.spu}
-                  </Text>
-                  {renderRatingStars(item)}
-                </View>
               </View>
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.iconButton,
-                    {
-                      backgroundColor: theme.colors.button,
-                      opacity: isInCart ? 0.6 : 1,
-                    },
-                  ]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    if (!isInCart) onAddToCart(item);
-                  }}
-                  activeOpacity={0.7}
-                  disabled={isInCart}
+              <View style={styles.bottomRow}>
+                <Text
+                  style={[styles.productPrice, { color: theme.colors.button }]}
                 >
-                  {isInCart ? (
-                    <Feather name="check-circle" size={16} color="white" />
-                  ) : (
-                    <Feather name="shopping-cart" size={16} color="white" />
-                  )}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.iconButton,
-                    { backgroundColor: theme.colors.button },
-                  ]}
-                  onPress={(e) => {
-                    e.stopPropagation();
-                    onShare(item);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="share-2" size={16} color="white" />
-                </TouchableOpacity>
+                  AF {item.spu}
+                </Text>
+                {renderRatingStars(item)}
               </View>
             </View>
-          </Pressable>
-        </Link>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  {
+                    backgroundColor: theme.colors.button,
+                    opacity: isInCart ? 0.6 : 1,
+                  },
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  if (!isInCart) onAddToCart(item);
+                }}
+                activeOpacity={0.7}
+                disabled={isInCart}
+              >
+                {isInCart ? (
+                  <Feather name="check-circle" size={16} color="white" />
+                ) : (
+                  <Feather name="shopping-cart" size={16} color="white" />
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  { backgroundColor: theme.colors.button },
+                ]}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onShare(item);
+                }}
+                activeOpacity={0.7}
+              >
+                <Feather name="share-2" size={16} color="white" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Pressable>
       </View>
     );
   }
@@ -441,6 +431,7 @@ const ProductList = () => {
           onShare={shareProduct}
           renderRatingStars={renderRatingStars}
           isInCart={isInCart(item)}
+          router={router}
         />
       );
     },

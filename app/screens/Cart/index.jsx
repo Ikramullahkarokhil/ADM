@@ -555,24 +555,22 @@ const Cart = () => {
           )}
         </View>
 
-        <Link
-          href={{
-            pathname: "/screens/ProductVariantSelection",
-            params: { item: JSON.stringify(selectedItems) },
-          }}
-          asChild
+        <Button
+          mode="contained"
+          style={styles.orderButton}
+          buttonColor={theme.colors.button}
+          textColor="white"
+          disabled={selectedItems.length === 0}
+          icon="cart-arrow-right"
+          onPress={() =>
+            router.navigate({
+              pathname: "/screens/ProductVariantSelection",
+              params: { item: JSON.stringify(selectedItems) },
+            })
+          }
         >
-          <Button
-            mode="contained"
-            style={styles.orderButton}
-            buttonColor={theme.colors.button}
-            textColor="white"
-            disabled={selectedItems.length === 0}
-            icon="cart-arrow-right"
-          >
-            Select and Continue
-          </Button>
-        </Link>
+          Select and Continue
+        </Button>
       </View>
     );
   };

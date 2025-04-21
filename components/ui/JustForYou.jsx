@@ -10,64 +10,61 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
-import useProductStore from "../api/useProductStore";
 import { Feather } from "@expo/vector-icons";
 
 // ProductItem component
-const ProductItem = ({ item, isDarkTheme, colors }) => {
+const ProductItem = ({ item, isDarkTheme, colors, router }) => {
   return (
     <View style={styles.itemContainer}>
-      <Link
-        href={{
-          pathname: `/screens/ProductDetail`,
-          params: {
-            id: item.products_id,
-          },
-        }}
-        asChild
+      <Pressable
+        style={styles.product}
+        accessibilityLabel={`View product ${item.title}`}
+        android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+        onPress={() =>
+          router.navigate({
+            pathname: `/screens/ProductDetail`,
+            params: {
+              id: item.products_id,
+            },
+          })
+        }
       >
-        <Pressable
-          style={styles.product}
-          accessibilityLabel={`View product ${item.title}`}
-          android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
-        >
-          <View style={styles.imageContainer}>
-            <Image
-              source={
-                item.product_images && item.product_images.length > 0
-                  ? { uri: item.product_images[0] }
-                  : isDarkTheme
-                  ? require("../../assets/images/darkImagePlaceholder.jpg")
-                  : require("../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.image}
-              resizeMode="cover"
-            />
-            <View
-              style={[
-                styles.titleOverlay,
-                {
-                  backgroundColor: isDarkTheme
-                    ? "rgba(0, 0, 0, 0.7)"
-                    : "rgba(255, 255, 255, 0.7)",
-                },
-              ]}
+        <View style={styles.imageContainer}>
+          <Image
+            source={
+              item.product_images && item.product_images.length > 0
+                ? { uri: item.product_images[0] }
+                : isDarkTheme
+                ? require("../../assets/images/darkImagePlaceholder.jpg")
+                : require("../../assets/images/imageSkeleton.jpg")
+            }
+            style={styles.image}
+            resizeMode="cover"
+          />
+          <View
+            style={[
+              styles.titleOverlay,
+              {
+                backgroundColor: isDarkTheme
+                  ? "rgba(0, 0, 0, 0.7)"
+                  : "rgba(255, 255, 255, 0.7)",
+              },
+            ]}
+          >
+            <Text
+              style={[styles.name, { color: colors.textColor }]}
+              numberOfLines={1}
             >
-              <Text
-                style={[styles.name, { color: colors.textColor }]}
-                numberOfLines={1}
-              >
-                {item.title}
-              </Text>
-              <Text style={[styles.price, { color: colors.button }]}>
-                AF {item.spu}
-              </Text>
-            </View>
+              {item.title}
+            </Text>
+            <Text style={[styles.price, { color: colors.button }]}>
+              AF {item.spu}
+            </Text>
           </View>
-        </Pressable>
-      </Link>
+        </View>
+      </Pressable>
     </View>
   );
 };
@@ -145,7 +142,12 @@ const JustForYou = ({ data }) => {
       <FlatList
         data={products}
         renderItem={({ item }) => (
-          <ProductItem item={item} isDarkTheme={isDarkTheme} colors={colors} />
+          <ProductItem
+            item={item}
+            isDarkTheme={isDarkTheme}
+            colors={colors}
+            router={router}
+          />
         )}
         keyExtractor={keyExtractor}
         numColumns={numColumns}

@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { Link, useRouter } from "expo-router";
+import { Link, router, useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
 import { MaterialIcons, Feather } from "@expo/vector-icons";
 
@@ -33,65 +33,63 @@ const transformData = (rawData) => {
 };
 
 // SubcategoryItem component (unchanged)
-const SubcategoryItem = ({ item, index, isDarkTheme }) => {
+const SubcategoryItem = ({ item, index, isDarkTheme, router }) => {
   return (
     <View style={styles.itemContainer}>
-      <Link
-        href={{
-          pathname: `/screens/Products`,
-          params: {
-            subcategoryId: item.categories_id,
-            subCategorieName: item.title,
+      <Pressable
+        style={[
+          styles.product,
+          {
+            backgroundColor: isDarkTheme
+              ? "rgba(30, 30, 30, 0.8)"
+              : "rgba(255, 255, 255, 0.8)",
+            shadowColor: isDarkTheme ? "#000" : "#888",
           },
-        }}
-        asChild
-      >
-        <Pressable
-          style={[
-            styles.product,
-            {
-              backgroundColor: isDarkTheme
-                ? "rgba(30, 30, 30, 0.8)"
-                : "rgba(255, 255, 255, 0.8)",
-              shadowColor: isDarkTheme ? "#000" : "#888",
+        ]}
+        accessibilityLabel={`View products in ${item.title}`}
+        android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
+        activeOpacity={0.7}
+        onPress={() =>
+          router.navigate({
+            pathname: `/screens/Products`,
+            params: {
+              subcategoryId: item.categories_id,
+              subCategorieName: item.title,
             },
-          ]}
-          accessibilityLabel={`View products in ${item.title}`}
-          android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
-          activeOpacity={0.7}
-        >
-          <View style={styles.imageContainer}>
-            <Image
-              source={
-                item.category_image
-                  ? { uri: item.category_image }
-                  : isDarkTheme
-                  ? require("../../assets/images/darkImagePlaceholder.jpg")
-                  : require("../../assets/images/imageSkeleton.jpg")
-              }
-              style={styles.image}
-              resizeMode="cover"
-            />
-            <View
-              style={[
-                styles.titleOverlay,
-                {
-                  backgroundColor: isDarkTheme
-                    ? "rgba(0, 0, 0, 0.7)"
-                    : "rgba(255, 255, 255, 0.7)",
-                },
-              ]}
+          })
+        }
+      >
+        <View style={styles.imageContainer}>
+          <Image
+            source={
+              item.category_image
+                ? { uri: item.category_image }
+                : isDarkTheme
+                ? require("../../assets/images/darkImagePlaceholder.jpg")
+                : require("../../assets/images/imageSkeleton.jpg")
+            }
+            style={styles.image}
+            resizeMode="cover"
+          />
+          <View
+            style={[
+              styles.titleOverlay,
+              {
+                backgroundColor: isDarkTheme
+                  ? "rgba(0, 0, 0, 0.7)"
+                  : "rgba(255, 255, 255, 0.7)",
+              },
+            ]}
+          >
+            <Text
+              style={[styles.name, { color: isDarkTheme ? "#fff" : "#000" }]}
+              numberOfLines={2}
             >
-              <Text
-                style={[styles.name, { color: isDarkTheme ? "#fff" : "#000" }]}
-                numberOfLines={2}
-              >
-                {item.title}
-              </Text>
-            </View>
+              {item.title}
+            </Text>
           </View>
-        </Pressable>
-      </Link>
+        </View>
+      </Pressable>
     </View>
   );
 };
@@ -149,6 +147,7 @@ const CategorySection = ({
             item={item}
             index={index}
             isDarkTheme={isDarkTheme}
+            router={router}
           />
         )}
         keyExtractor={(subItem) => subItem.categories_id.toString()}
@@ -182,7 +181,7 @@ const CategoriesSectionList = ({ data: rawData }) => {
   // Handle "Show More" button click
   const handleShowMore = useCallback(
     (mainCategoryId, MainCategorieName, totalSubCategories) => {
-      router.push({
+      router.navigate({
         pathname: "/screens/AllCategories",
         params: { mainCategoryId, MainCategorieName, totalSubCategories },
       });
@@ -227,6 +226,7 @@ const CategoriesSectionList = ({ data: rawData }) => {
           expandedCategories={expandedCategories}
           toggleCategoryExpansion={toggleCategoryExpansion}
           handleShowMore={handleShowMore}
+          router={router}
         />
       )}
       keyExtractor={(item) => item.main_category_id.toString()}

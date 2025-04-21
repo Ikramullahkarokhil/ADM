@@ -269,13 +269,15 @@ const ProductVariantSelection = () => {
       };
 
       const response = await proceedOrder(orderPayload);
-      await listOrders(user.consumer_id);
-      await listCart(user.consumer_id);
+      await Promise.all([
+        listOrders(user.consumer_id),
+        listCart(user.consumer_id),
+      ]);
 
       showAlert(
         "Order Placed Successfully",
         `Your order no is ${response.order_no}`,
-        () => router.replace("/Orders")
+        () => router.navigate("/Orders")
       );
     } catch (error) {
       console.error("Failed to place order:", error);

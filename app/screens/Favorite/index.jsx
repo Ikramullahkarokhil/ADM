@@ -304,87 +304,79 @@ const FavoriteProductPage = () => {
           ]}
           elevation={3}
         >
-          <Link
-            href={{
-              pathname: "/screens/ProductDetail",
-              params: { id: item.products_id },
-            }}
-            asChild
+          <Pressable
+            style={styles.productContent}
+            onLongPress={() => handleLongPress(item)}
+            delayLongPress={300}
+            android_ripple={{ color: "rgba(0,0,0,0.1)" }}
+            onPress={() =>
+              router.navigate({
+                pathname: "/screens/ProductDetail",
+                params: { id: item.products_id },
+              })
+            }
           >
-            <Pressable
-              style={styles.productContent}
-              onLongPress={() => handleLongPress(item)}
-              delayLongPress={300}
-              android_ripple={{ color: "rgba(0,0,0,0.1)" }}
-            >
-              <View style={styles.imageContainer}>
-                <Image
-                  source={
-                    isDarkTheme
-                      ? require("../../../assets/images/darkImagePlaceholder.jpg")
-                      : require("../../../assets/images/imageSkeleton.jpg")
-                  }
-                  style={styles.productImage}
-                  resizeMode="cover"
-                />
-                {item.discount && (
-                  <View
-                    style={[
-                      styles.discountBadge,
-                      { backgroundColor: theme.colors.deleteButton },
-                    ]}
-                  >
-                    <Text style={styles.discountText}>-{item.discount}%</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.productInfo}>
-                <Text
+            <View style={styles.imageContainer}>
+              <Image
+                source={
+                  isDarkTheme
+                    ? require("../../../assets/images/darkImagePlaceholder.jpg")
+                    : require("../../../assets/images/imageSkeleton.jpg")
+                }
+                style={styles.productImage}
+                resizeMode="cover"
+              />
+              {item.discount && (
+                <View
                   style={[
-                    styles.productName,
-                    { color: theme.colors.textColor },
+                    styles.discountBadge,
+                    { backgroundColor: theme.colors.deleteButton },
                   ]}
-                  numberOfLines={2}
                 >
-                  {item.name}
+                  <Text style={styles.discountText}>-{item.discount}%</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.productInfo}>
+              <Text
+                style={[styles.productName, { color: theme.colors.textColor }]}
+                numberOfLines={2}
+              >
+                {item.name}
+              </Text>
+              <View style={styles.priceContainer}>
+                <Text
+                  style={[styles.productPrice, { color: theme.colors.button }]}
+                >
+                  AF {item.price}
                 </Text>
-                <View style={styles.priceContainer}>
+                {item.originalPrice && (
                   <Text
                     style={[
-                      styles.productPrice,
-                      { color: theme.colors.button },
+                      styles.originalPrice,
+                      { color: theme.colors.inactiveColor },
                     ]}
                   >
-                    AF {item.price}
+                    AF {item.originalPrice}
                   </Text>
-                  {item.originalPrice && (
-                    <Text
-                      style={[
-                        styles.originalPrice,
-                        { color: theme.colors.inactiveColor },
-                      ]}
-                    >
-                      AF {item.originalPrice}
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.chipRow}>
-                  <Chip
-                    style={[
-                      styles.categoryChip,
-                      { backgroundColor: theme.colors.subInactiveColor },
-                    ]}
-                    textStyle={{
-                      fontSize: 12,
-                      color: theme.colors.textColor,
-                    }}
-                  >
-                    {item.system_name}
-                  </Chip>
-                </View>
+                )}
               </View>
-            </Pressable>
-          </Link>
+              <View style={styles.chipRow}>
+                <Chip
+                  style={[
+                    styles.categoryChip,
+                    { backgroundColor: theme.colors.subInactiveColor },
+                  ]}
+                  textStyle={{
+                    fontSize: 12,
+                    color: theme.colors.textColor,
+                  }}
+                >
+                  {item.system_name}
+                </Chip>
+              </View>
+            </View>
+          </Pressable>
         </Surface>
       );
     },

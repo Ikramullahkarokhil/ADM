@@ -700,7 +700,7 @@ const ProductDetail = () => {
         showAlert(
           "Login Required",
           "Please login to delete your question.",
-          () => router.navigate("/screens/Login")
+          () => router.navigate("/Login")
         );
         return;
       }
@@ -982,54 +982,56 @@ const ProductDetail = () => {
           )}
 
           {/* Seller */}
-          <Link
-            href={{
-              pathname: "/screens/SellerProfile",
-              params: {
-                sellerId: product.accounts_id,
-                sellerTitle: product.store_name,
-              },
-            }}
-            asChild
+
+          <Pressable
+            style={styles.detailsRow}
+            onPress={() =>
+              router.navigate({
+                pathname: "/screens/SellerProfile",
+                params: {
+                  sellerId: product.accounts_id,
+                  sellerTitle: product.store_name,
+                },
+              })
+            }
           >
-            <Pressable style={styles.detailsRow}>
-              <Text
-                style={[styles.detailLabel, { color: theme.colors.textColor }]}
-              >
-                Seller
-              </Text>
-              <Text
-                style={[styles.detailValue, { color: theme.colors.textColor }]}
-              >
-                {product.store_name}
-              </Text>
-            </Pressable>
-          </Link>
+            <Text
+              style={[styles.detailLabel, { color: theme.colors.textColor }]}
+            >
+              Seller
+            </Text>
+            <Text
+              style={[styles.detailValue, { color: theme.colors.textColor }]}
+            >
+              {product.store_name}
+            </Text>
+          </Pressable>
 
           {/* Comments */}
-          <Link
-            href={{
-              pathname: "/screens/Comments",
-              params: {
-                productId: product.products_id,
-                numOfComments: product.total_comments,
-              },
-            }}
-            asChild
+
+          <Pressable
+            style={styles.detailsRow}
+            onPress={() =>
+              router.navigate({
+                pathname: "/screens/Comments",
+                params: {
+                  productId: product.products_id,
+                  numOfComments: product.total_comments,
+                },
+              })
+            }
           >
-            <Pressable style={styles.detailsRow}>
-              <Text
-                style={[styles.detailLabel, { color: theme.colors.textColor }]}
-              >
-                Comments
-              </Text>
-              <Text
-                style={[styles.detailValue, { color: theme.colors.textColor }]}
-              >
-                {product.total_comments} Comments
-              </Text>
-            </Pressable>
-          </Link>
+            <Text
+              style={[styles.detailLabel, { color: theme.colors.textColor }]}
+            >
+              Comments
+            </Text>
+            <Text
+              style={[styles.detailValue, { color: theme.colors.textColor }]}
+            >
+              {product.total_comments} Comments
+            </Text>
+          </Pressable>
 
           {/* Action buttons */}
           <ProductActions

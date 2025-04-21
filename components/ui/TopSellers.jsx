@@ -12,15 +12,8 @@ import {
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { useRouter } from "expo-router";
-import useProductStore from "../api/useProductStore";
 import useThemeStore from "../store/useThemeStore";
-import {
-  Feather,
-  MaterialCommunityIcons,
-  FontAwesome5,
-  MaterialIcons,
-} from "@expo/vector-icons";
-import NetInfo from "@react-native-community/netinfo";
+import { Feather, FontAwesome5 } from "@expo/vector-icons";
 
 // Create a reusable image component with proper placeholder handling
 const ProductImage = memo(({ source, isDarkTheme, style }) => {
@@ -68,7 +61,7 @@ const getBadgeIcon = (index) => {
   return null;
 };
 
-const ViewAllCard = memo(({ onPress, isDarkTheme, colors }) => {
+const ViewAllCard = memo(({ onPress, colors }) => {
   return (
     <Pressable
       style={[
@@ -191,13 +184,7 @@ const TopSellers = ({ data }) => {
     ({ item, index }) => {
       // Check if this is the last item (View All card)
       if (item === "viewAll") {
-        return (
-          <ViewAllCard
-            onPress={handleViewAllPress}
-            isDarkTheme={isDarkTheme}
-            colors={colors}
-          />
-        );
+        return <ViewAllCard onPress={handleViewAllPress} colors={colors} />;
       }
 
       // Regular seller item

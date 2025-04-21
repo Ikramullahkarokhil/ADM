@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState } from "react";
 import {
   StyleSheet,
@@ -11,7 +9,6 @@ import {
   Dimensions,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { useRouter } from "expo-router";
 import useThemeStore from "../../components/store/useThemeStore";
 
 const { width: screenWidth } = Dimensions.get("window");

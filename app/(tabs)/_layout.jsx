@@ -65,7 +65,7 @@ const Layout = () => {
   // Memoized login handler to navigate to Login screen
   const handleLogin = useCallback(() => {
     setAlertVisible(false);
-    router.replace("/Login");
+    router.navigate("/Login");
   }, [router]);
 
   // Memoized tab icon renderers for each tab

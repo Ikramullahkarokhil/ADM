@@ -6,19 +6,21 @@ import {
   FlatList,
   useWindowDimensions,
 } from "react-native";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useTheme } from "react-native-paper";
 import Icon from "@expo/vector-icons";
-import { Link } from "expo-router";
+import { useRouter } from "expo-router";
 import { Pressable } from "react-native";
 
 const ProductList = ({ data }) => {
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const numColumns = width > 550 ? 4 : 2;
+  const router = useRouter();
 
   const renderItem = ({ item }) => (
-    <Link
+    <Pressable
+      android_ripple={{ color: theme.colors.riple }}
       style={[
         styles.product,
         {
@@ -28,43 +30,39 @@ const ProductList = ({ data }) => {
           margin: 10,
         },
       ]}
-      href={{
-        pathname: `/screens/ProductDetail`,
-        params: { id: item.products_id },
-      }}
-      asChild
+      onPress={() =>
+        router.navigate({
+          pathname: `/screens/ProductDetail`,
+          params: { id: item.products_id },
+        })
+      }
     >
-      <Pressable
-        android_ripple={{ color: theme.colors.riple }}
-        style={{ borderRadius: 10 }}
-      >
-        <Image
-          source={
-            item.image
-              ? { uri: item.image }
-              : require("../../assets/images/imageSkeleton.jpg")
-          }
-          style={styles.image}
-          resizeMode="cover"
-        />
-        <View style={styles.details}>
-          <Text
-            style={[styles.name, { color: theme.colors.textColor }]}
-            numberOfLines={2}
-            ellipsizeMode="tail"
-          >
-            {item.title}
-          </Text>
-          <Text style={[styles.price, { color: theme.colors.textColor }]}>
-            ${item.spu}
-          </Text>
-        </View>
-        <View style={styles.ratingContainer}>
-          <Icon name="star" size={16} color="#FFD700" />
-          <Text style={styles.rating}>{item.rating} 4.7</Text>
-        </View>
-      </Pressable>
-    </Link>
+      <Image
+        source={
+          item.image
+            ? { uri: item.image }
+            : require("../../assets/images/imageSkeleton.jpg")
+        }
+        style={styles.image}
+        resizeMode="cover"
+      />
+      <View style={styles.details}>
+        <Text
+          style={[styles.name, { color: theme.colors.textColor }]}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {item.title}
+        </Text>
+        <Text style={[styles.price, { color: theme.colors.textColor }]}>
+          ${item.spu}
+        </Text>
+      </View>
+      <View style={styles.ratingContainer}>
+        <Icon name="star" size={16} color="#FFD700" />
+        <Text style={styles.rating}>{item.rating} 4.7</Text>
+      </View>
+    </Pressable>
   );
 
   return (
