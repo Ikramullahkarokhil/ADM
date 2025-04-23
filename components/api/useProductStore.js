@@ -511,6 +511,7 @@ const useProductStore = create(
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         user: state.user,
+        cartItem: state.cartItem,
       }),
     }
   )
