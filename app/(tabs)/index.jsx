@@ -108,21 +108,6 @@ const ContentSections = memo(
   }
 );
 
-// Network status indicator
-const NetworkStatusIndicator = memo(({ isConnected, theme }) => {
-  if (isConnected) return null;
-
-  return (
-    <View
-      style={[styles.networkIndicator, { backgroundColor: theme.colors.error }]}
-    >
-      <Text style={styles.networkIndicatorText}>
-        No internet connection. Please check your network.
-      </Text>
-    </View>
-  );
-});
-
 const Home = () => {
   const theme = useTheme();
   const navigation = useNavigation();
@@ -282,8 +267,6 @@ const Home = () => {
         cartItemCount={cartItemCount}
         onCartPress={handleCartPress}
       />
-
-      <NetworkStatusIndicator isConnected={isConnected} theme={theme} />
 
       <ScrollView
         refreshControl={refreshControl}

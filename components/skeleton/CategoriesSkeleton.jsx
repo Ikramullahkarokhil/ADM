@@ -33,32 +33,48 @@ const CategoriesSkeletonItem = () => {
 };
 
 const CategoriesSkeletonList = memo(() => {
+  const theme = useTheme();
+
   return (
-    <FlatList
-      data={Array(6).fill(null)}
-      renderItem={() => <CategoriesSkeletonItem />}
-      keyExtractor={(_, index) => index.toString()}
-      numColumns={2}
-      key="skeleton"
-      contentContainerStyle={styles.skeletonContainer}
-      scrollEnabled={false}
-      removeClippedSubviews={true}
-      maxToRenderPerBatch={3}
-      windowSize={3}
-      initialNumToRender={2}
-      updateCellsBatchingPeriod={50}
-      getItemLayout={(data, index) => ({
-        length: 150,
-        offset: 150 * index,
-        index,
-      })}
-    />
+    <View style={{ marginTop: 28 }}>
+      {/* Skeleton for main category title */}
+      <Skeleton
+        width={130}
+        height={20}
+        animation="none"
+        style={{
+          marginBottom: 10,
+          marginLeft: 14,
+          borderRadius: 5,
+          backgroundColor: theme.colors.subInactiveColor,
+        }}
+      />
+
+      <FlatList
+        data={Array(6).fill(null)}
+        renderItem={() => <CategoriesSkeletonItem />}
+        keyExtractor={(_, index) => index.toString()}
+        numColumns={2}
+        key="skeleton"
+        contentContainerStyle={styles.skeletonContainer}
+        scrollEnabled={false}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={3}
+        windowSize={3}
+        initialNumToRender={2}
+        updateCellsBatchingPeriod={50}
+        getItemLayout={(data, index) => ({
+          length: 150,
+          offset: 150 * index,
+          index,
+        })}
+      />
+    </View>
   );
 });
 
 const styles = StyleSheet.create({
   skeletonContainer: {
-    marginTop: 50,
     marginHorizontal: 10,
   },
 });

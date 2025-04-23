@@ -13,7 +13,7 @@ import {
 import { useTheme } from "react-native-paper";
 import { useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
-import { Feather, Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import HotDealsSkeleton from "../skeleton/HotDealsSkeleton";
 
@@ -272,20 +272,10 @@ const SaleProductsList = ({ data, load }) => {
           <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
             Hot Deals
           </Text>
-
-          <View>
-            <Ionicons name="pricetag-outline" size={24} color="red" />
-            <Text
-              style={[styles.sectionSubTitle, { color: colors.deleteButton }]}
-            >
-              Upto {data.discount_value}% OFF
-            </Text>
-          </View>
           <Text
             style={[styles.sectionSubTitle, { color: colors.deleteButton }]}
-            numberOfLines={1}
           >
-            {data.discount_title}
+            Upto {data.discount_value}% OFF
           </Text>
         </View>
         {data.discount_end_at && (
@@ -308,7 +298,7 @@ const SaleProductsList = ({ data, load }) => {
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         updateCellsBatchingPeriod={50}
-        extraData={colors}
+        extraData={[colors, load]}
       />
     </View>
   );

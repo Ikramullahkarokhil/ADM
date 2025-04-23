@@ -66,7 +66,7 @@ const Layout = () => {
       headerStyle: { backgroundColor: theme.colors.primary },
       headerTintColor: theme.colors.textColor,
       detachInactiveScreens: true,
-      animation: "slide_from_right",
+      animation: "ios_from_right",
     };
   }, [theme]);
 

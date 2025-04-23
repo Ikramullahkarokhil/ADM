@@ -536,28 +536,26 @@ const Signup = () => {
         translucent
       />
 
-      {isDarkTheme && (
-        <View style={styles.backgroundElements}>
-          <View
-            style={[
-              styles.circle1,
-              { backgroundColor: "rgba(66, 133, 244, 0.08)" },
-            ]}
-          />
-          <View
-            style={[
-              styles.circle2,
-              { backgroundColor: "rgba(52, 168, 83, 0.05)" },
-            ]}
-          />
-          <View
-            style={[
-              styles.circle3,
-              { backgroundColor: "rgba(234, 67, 53, 0.07)" },
-            ]}
-          />
-        </View>
-      )}
+      <View style={styles.backgroundElements}>
+        <View
+          style={[
+            styles.circle1,
+            { backgroundColor: "rgba(66, 133, 244, 0.08)" },
+          ]}
+        />
+        <View
+          style={[
+            styles.circle2,
+            { backgroundColor: "rgba(52, 168, 83, 0.05)" },
+          ]}
+        />
+        <View
+          style={[
+            styles.circle3,
+            { backgroundColor: "rgba(234, 67, 53, 0.07)" },
+          ]}
+        />
+      </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
