@@ -212,15 +212,8 @@ const ProductVariantSelection = () => {
       );
       return false;
     }
-
-    if (!selectedBillingAddress) {
-      const defaultAddress =
-        consumerBillingAddress.find((addr) => addr.status === 1) ||
-        consumerBillingAddress[0];
-      setSelectedBillingAddress(defaultAddress);
-    }
     return true;
-  }, [consumerBillingAddress, selectedBillingAddress, router]);
+  }, [consumerBillingAddress, router]);
 
   const handleAddressSelection = useCallback(
     (addressId) => {
@@ -234,6 +227,11 @@ const ProductVariantSelection = () => {
 
   // Order processing
   const processOrder = useCallback(async () => {
+    if (!selectedBillingAddress) {
+      showAlert("Error", "Please select a billing address");
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const formattedItems = selections.map((sel) => {
@@ -277,7 +275,7 @@ const ProductVariantSelection = () => {
       showAlert(
         "Order Placed Successfully",
         `Your order no is ${response.order_no}`,
-        () => router.navigate("/Orders")
+        () => router.replace("/Orders")
       );
     } catch (error) {
       console.error("Failed to place order:", error);
@@ -292,6 +290,7 @@ const ProductVariantSelection = () => {
     selections,
     selectedItems,
     user,
+    selectedBillingAddress,
     proceedOrder,
     listCart,
     router,
@@ -318,7 +317,14 @@ const ProductVariantSelection = () => {
     }
 
     if (!checkBillingAddresses()) return;
-    if (selectedBillingAddress) processOrder();
+
+    // Show billing address modal if no address is selected
+    if (!selectedBillingAddress) {
+      setShowBillingModal(true);
+      return;
+    }
+
+    processOrder();
   }, [
     selections,
     selectedItems,
@@ -327,6 +333,10 @@ const ProductVariantSelection = () => {
     processOrder,
     hasValidVariants,
   ]);
+
+  const handleBillingModalConfirm = useCallback(() => {
+    setShowBillingModal(false);
+  }, [selectedBillingAddress, processOrder]);
 
   // Memoized Components
   const BillingAddressModal = memo(() => (
@@ -446,12 +456,7 @@ const ProductVariantSelection = () => {
             </Button>
             <Button
               mode="contained"
-              onPress={() => {
-                setShowBillingModal(false);
-                selectedBillingAddress
-                  ? processOrder()
-                  : showAlert("Error", "Please select a billing address");
-              }}
+              onPress={handleBillingModalConfirm}
               style={[
                 styles.modalButton,
                 { backgroundColor: theme.colors.button },

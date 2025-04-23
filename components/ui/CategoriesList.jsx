@@ -6,14 +6,13 @@ import {
   Image,
   FlatList,
   useWindowDimensions,
-  Pressable,
   ActivityIndicator,
   TouchableOpacity,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { Link, router, useRouter } from "expo-router";
+import { router, useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
-import { MaterialIcons, Feather } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 
 // Data transformation function (no worklet needed here)
 const transformData = (rawData) => {
@@ -33,21 +32,16 @@ const transformData = (rawData) => {
 };
 
 // SubcategoryItem component (unchanged)
-const SubcategoryItem = ({ item, index, isDarkTheme, router }) => {
+const SubcategoryItem = ({ item, index, isDarkTheme, router, theme }) => {
   return (
     <View style={styles.itemContainer}>
-      <Pressable
+      <TouchableOpacity
         style={[
           styles.product,
           {
-            backgroundColor: isDarkTheme
-              ? "rgba(30, 30, 30, 0.8)"
-              : "rgba(255, 255, 255, 0.8)",
-            shadowColor: isDarkTheme ? "#000" : "#888",
+            backgroundColor: theme.colors.primary,
           },
         ]}
-        accessibilityLabel={`View products in ${item.title}`}
-        android_ripple={{ color: isDarkTheme ? "#444" : "#ddd" }}
         activeOpacity={0.7}
         onPress={() =>
           router.navigate({
@@ -89,7 +83,7 @@ const SubcategoryItem = ({ item, index, isDarkTheme, router }) => {
             </Text>
           </View>
         </View>
-      </Pressable>
+      </TouchableOpacity>
     </View>
   );
 };
@@ -148,6 +142,7 @@ const CategorySection = ({
             index={index}
             isDarkTheme={isDarkTheme}
             router={router}
+            theme={theme}
           />
         )}
         keyExtractor={(subItem) => subItem.categories_id.toString()}
@@ -293,9 +288,6 @@ const styles = StyleSheet.create({
   itemContainer: {
     flex: 1,
     margin: 6,
-    borderRadius: 16,
-    overflow: "hidden",
-    elevation: 10,
   },
   product: {
     borderRadius: 16,
@@ -303,7 +295,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 2,
+    elevation: 10,
   },
   imageContainer: {
     position: "relative",

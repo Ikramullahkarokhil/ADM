@@ -60,7 +60,6 @@ const ProductItem = memo(
         <Pressable
           onLongPress={() => onLongPress(item)}
           delayLongPress={500}
-          android_ripple={{ color: theme.colors.ripple }}
           onPress={() =>
             router.navigate({
               pathname: "/screens/ProductDetail",

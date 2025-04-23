@@ -15,7 +15,6 @@ import {
   Platform,
   Image,
   TouchableOpacity,
-  FlatList,
   RefreshControl,
   ScrollView,
 } from "react-native";

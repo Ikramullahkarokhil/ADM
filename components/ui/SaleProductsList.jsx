@@ -8,12 +8,14 @@ import {
   useWindowDimensions,
   Platform,
   InteractionManager,
+  TouchableOpacity,
 } from "react-native";
 import { useTheme } from "react-native-paper";
 import { useRouter } from "expo-router";
 import useThemeStore from "../store/useThemeStore";
-import { Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
+import HotDealsSkeleton from "../skeleton/HotDealsSkeleton";
 
 const DealTimer = memo(({ endDate, colors }) => {
   const [timeLeft, setTimeLeft] = useState({
@@ -156,10 +158,10 @@ const ProductItem = memo(({ item, onPress, colors, isDarkTheme }) => {
 
   return (
     <View style={styles.cardWrapper}>
-      <Pressable
+      <TouchableOpacity
         style={[styles.productCard, { backgroundColor: colors.primary }]}
         onPress={handlePress}
-        android_ripple={{ color: colors.ripple, borderless: false }}
+        activeOpacity={0.7}
       >
         <View style={styles.imageContainer}>
           <ProductImage
@@ -198,7 +200,7 @@ const ProductItem = memo(({ item, onPress, colors, isDarkTheme }) => {
             </View>
           </View>
         </View>
-      </Pressable>
+      </TouchableOpacity>
     </View>
   );
 });
@@ -260,7 +262,8 @@ const SaleProductsList = ({ data, load }) => {
     [handleViewAllPress, handleProductPress, colors, isDarkTheme]
   );
 
-  if (load || !data) return null;
+  if (!saleProducts) return null;
+  if (load) return <HotDealsSkeleton />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
@@ -269,10 +272,20 @@ const SaleProductsList = ({ data, load }) => {
           <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
             Hot Deals
           </Text>
+
+          <View>
+            <Ionicons name="pricetag-outline" size={24} color="red" />
+            <Text
+              style={[styles.sectionSubTitle, { color: colors.deleteButton }]}
+            >
+              Upto {data.discount_value}% OFF
+            </Text>
+          </View>
           <Text
             style={[styles.sectionSubTitle, { color: colors.deleteButton }]}
+            numberOfLines={1}
           >
-            Upto {data.discount_value}% OFF
+            {data.discount_title}
           </Text>
         </View>
         {data.discount_end_at && (
@@ -295,6 +308,7 @@ const SaleProductsList = ({ data, load }) => {
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         updateCellsBatchingPeriod={50}
+        extraData={colors}
       />
     </View>
   );

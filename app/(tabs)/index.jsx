@@ -79,12 +79,6 @@ const Header = memo(({ theme, isDarkTheme, cartItemCount, onCartPress }) => {
   );
 });
 
-// Sale Products Section with skeleton loading
-const SaleProductsSection = memo(({ data, loading }) => {
-  if (!data || data.total <= 0) return;
-  return <SaleProductsList data={data} load={loading} />;
-});
-
 const NewArrivalsSection = memo(({ data }) => {
   if (!data || data.total <= 0) return null;
   return <NewArrivals data={data} />;
@@ -297,7 +291,7 @@ const Home = () => {
         contentInsetAdjustmentBehavior="automatic"
         showsVerticalScrollIndicator={false}
       >
-        <SaleProductsSection data={saleProducts} loading={loading} />
+        <SaleProductsList data={saleProducts} load={loading} />
 
         {/* Using the new CategoriesSection component */}
         <CategoriesSection

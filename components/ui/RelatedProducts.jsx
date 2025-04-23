@@ -31,8 +31,8 @@ const ProductCard = React.memo(({ product, theme, isDarkTheme, onPress }) => {
         styles.productCard,
         { opacity: pressed ? 0.8 : 1 },
       ]}
-      android_ripple={{ color: theme.colors.ripple }}
       onPress={onPress}
+      activeOpacity={0.7}
     >
       <View style={styles.imageContainer}>
         <Image
