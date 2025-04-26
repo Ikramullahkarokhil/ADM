@@ -11,20 +11,15 @@ import {
   Dimensions,
   RefreshControl,
   Animated,
+  FlatList,
 } from "react-native";
 import Carousel from "react-native-reanimated-carousel";
-import {
-  Link,
-  useLocalSearchParams,
-  useNavigation,
-  useRouter,
-} from "expo-router";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { Button, PaperProvider, useTheme } from "react-native-paper";
 import * as Linking from "expo-linking";
 import AlertDialog from "../../../components/ui/AlertDialog";
 import useProductStore from "../../../components/api/useProductStore";
-import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import RelatedProducts from "../../../components/ui/RelatedProducts";
 import ProductDetailSkeleton from "../../../components/skeleton/ProductDetailsSkeleton";
@@ -271,15 +266,11 @@ const QuestionItem = memo(({ item, theme }) => (
 
 // Question Section component
 const QuestionSection = memo(
-  ({
-    questions,
-    totalQuestions,
-    user,
-    showQuestionActionSheet,
-    theme,
-    productId,
-    router,
-  }) => {
+  ({ questions, totalQuestions, theme, productId, router }) => {
+    const renderItem = ({ item: q }) => {
+      return <QuestionItem item={q} theme={theme} />;
+    };
+
     return (
       <View
         style={[
@@ -293,32 +284,26 @@ const QuestionSection = memo(
           Product Questions {totalQuestions > 0 && `(${totalQuestions})`}
         </Text>
 
-        {questions.length > 0 ? (
-          questions.map((q) => {
-            const isUserQuestion = user && q.consumer_id === user.consumer_id;
-            const canEditOrDelete =
-              isUserQuestion && (!q.answers || q.answers.length === 0);
-
-            return (
-              <Pressable
-                onPress={
-                  canEditOrDelete
-                    ? () => showQuestionActionSheet(q.products_qna_id)
-                    : undefined
-                }
-                key={q.products_qna_id}
-              >
-                <QuestionItem item={q} theme={theme} />
-              </Pressable>
-            );
-          })
-        ) : (
-          <Text
-            style={[styles.noQuestionsText, { color: theme.colors.textColor }]}
-          >
-            No questions yet.
-          </Text>
-        )}
+        <FlatList
+          data={questions}
+          renderItem={renderItem}
+          keyExtractor={(q) => q.products_qna_id.toString()}
+          contentContainerStyle={{ paddingVertical: 8 }}
+          ItemSeparatorComponent={() => (
+            <View style={{ borderBottomWidth: 0.5 }} />
+          )}
+          scrollEnabled={false}
+          ListEmptyComponent={() => (
+            <Text
+              style={[
+                styles.noQuestionsText,
+                { color: theme.colors.textColor },
+              ]}
+            >
+              No questions yet.
+            </Text>
+          )}
+        />
 
         <Button
           mode="outlined"
@@ -446,7 +431,6 @@ const ProductDetail = () => {
   const navigation = useNavigation();
   const theme = useTheme();
   const router = useRouter();
-  const { showActionSheetWithOptions } = useActionSheet();
   const { isDarkTheme } = useThemeStore();
   const scrollViewRef = useRef();
 
@@ -475,7 +459,6 @@ const ProductDetail = () => {
     error,
     getProductQuestionList,
     deleteProductQuestion,
-    productQuestions,
     fetchProductDetails,
     fetchRelatedProducts,
     rateProduct,
@@ -523,10 +506,11 @@ const ProductDetail = () => {
         ]);
 
         setQuestions(questionsData.questions || []);
+        setTotalQuestions(questionsData.total || null);
+
         setRelatedProducts(
           relatedProductsData?.length > 0 ? relatedProductsData : null
         );
-        setTotalQuestions(productQuestions);
       }
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -734,35 +718,6 @@ const ProductDetail = () => {
       showAlert,
       router,
     ]
-  );
-
-  // Show question action sheet
-  const showQuestionActionSheet = useCallback(
-    (questionId) => {
-      const options = ["Edit", "Delete", "Cancel"];
-      const destructiveButtonIndex = 1;
-      const cancelButtonIndex = 2;
-
-      showActionSheetWithOptions(
-        {
-          options,
-          cancelButtonIndex,
-          destructiveButtonIndex,
-          tintColor: theme.colors.button,
-        },
-        (buttonIndex) => {
-          if (buttonIndex === 0) {
-            ToastAndroid.show(
-              "Update functionality not implemented",
-              ToastAndroid.SHORT
-            );
-          } else if (buttonIndex === 1) {
-            handleDeleteQuestion(questionId);
-          }
-        }
-      );
-    },
-    [showActionSheetWithOptions, handleDeleteQuestion, theme.colors.button]
   );
 
   // Handle related product selection
@@ -1062,7 +1017,6 @@ const ProductDetail = () => {
           questions={questions}
           totalQuestions={totalQuestions}
           user={user}
-          showQuestionActionSheet={showQuestionActionSheet}
           theme={theme}
           productId={product.products_id}
           router={router}
@@ -1274,7 +1228,6 @@ const styles = StyleSheet.create({
   },
   questionItem: {
     paddingVertical: 12,
-    borderBottomWidth: 1,
     borderRadius: 8,
     marginVertical: 5,
   },

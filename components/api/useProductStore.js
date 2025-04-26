@@ -22,8 +22,6 @@ const initialState = {
   cartItem: [],
   orders: [],
   productsBySubcategory: {},
-  productQuestions: null,
-  productComments: null,
   consumerBillingAddress: [],
   loginError: null,
   user: null,
@@ -289,7 +287,6 @@ const useProductStore = create(
         const response = await get().apiRequest(
           `/questions/list?product_id=${productId}&sort=recent&page=${page}&limitData=${limitData}`
         );
-        set({ productQuestions: response.total || [] });
         return response || [];
       },
 
@@ -512,6 +509,7 @@ const useProductStore = create(
       partialize: (state) => ({
         user: state.user,
         cartItem: state.cartItem,
+        profileData: state.profileData,
       }),
     }
   )

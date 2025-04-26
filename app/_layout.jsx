@@ -1,15 +1,22 @@
+import React, {
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  Suspense,
+  lazy,
+} from "react";
 import {
   BackHandler,
   useColorScheme,
   ActivityIndicator,
   View,
+  StyleSheet,
 } from "react-native";
-import { useEffect, useState, useCallback, useMemo } from "react";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
-import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
@@ -21,17 +28,20 @@ import Constants from "expo-constants";
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
-import TermsModal from "./screens/ConsentScreen/index";
-import AlertDialog from "../components/ui/NoInternetAlert";
 import { registerBackgroundNotifications } from "../notification-services";
-import UpdateModal from "../components/ui/UpdateModal";
 import { checkForUpdate } from "../utils/VersionUtils";
+
+// Lazy-load heavy UI components only when needed
+const TermsModal = lazy(() => import("./screens/ConsentScreen"));
+const AlertDialog = lazy(() => import("../components/ui/NoInternetAlert"));
+const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 enableScreens();
 
-const Layout = () => {
+export default function Layout() {
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const { isDarkTheme, initializeTheme } = useThemeStore();
   const theme = useMemo(
@@ -39,7 +49,6 @@ const Layout = () => {
     [isDarkTheme]
   );
 
-  // 2. Product & user related hooks
   const {
     fetchProfile,
     logout,
@@ -50,235 +59,156 @@ const Layout = () => {
     getAppVersions,
   } = useProductStore();
 
-  // 3. Local state variables
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(null);
-  const [showAlert, setShowAlert] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [accepted, setAccepted] = useState(null);
+  const [isConnected, setIsConnected] = useState(true);
   const [versionData, setVersionData] = useState([]);
-  const [updateModalVisible, setUpdateModalVisible] = useState(false);
-  const [latestVersion, setLatestVersion] = useState(null);
-  const router = useRouter();
+  const [updateInfo, setUpdateInfo] = useState(null);
+
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
-  const screenOptions = useCallback(() => {
-    return {
-      headerTitleAlign: "center",
-      headerStyle: { backgroundColor: theme.colors.primary },
-      headerTintColor: theme.colors.textColor,
-      detachInactiveScreens: true,
-      animation: "ios_from_right",
-    };
-  }, [theme]);
-
-  // 4. Memoized loading view and screen options
-  const loadingView = useMemo(
+  // Memoize loading view
+  const LoadingScreen = useMemo(
     () => (
-      <View style={styles.loadingContainer}>
+      <View style={styles.loader}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     ),
     [theme.colors.primary]
   );
 
-  // 5. Initialize background tasks (using useCallback to avoid re-creation)
-  const initBackgroundTasks = useCallback(async () => {
-    try {
-      await registerBackgroundNotifications();
-    } catch (error) {
-      console.error("Error initializing background tasks:", error);
-    }
-  }, []);
-
+  // Background tasks
   useEffect(() => {
-    initBackgroundTasks();
+    registerBackgroundNotifications().catch(console.error);
     return () => {
-      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch((err) =>
-        console.error("Failed to unregister background task:", err)
+      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
+        console.error
       );
     };
-  }, [initBackgroundTasks]);
-
-  // 6. Check for app version updates
-  useEffect(() => {
-    const checkVersion = async () => {
-      try {
-        const netState = await NetInfo.fetch();
-        if (netState.isConnected) {
-          const versions = await getAppVersions();
-          setVersionData(versions);
-          if (versions?.length > 0) {
-            const updateNeeded = checkForUpdate(currentVersion, versions);
-            if (updateNeeded) {
-              setLatestVersion(updateNeeded);
-              setUpdateModalVisible(true);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error fetching version data:", error);
-      }
-    };
-    checkVersion();
-  }, [getAppVersions, currentVersion]);
-
-  // 7. Check acceptance of terms and manage splash screen visibility.
-  useEffect(() => {
-    SplashScreen.preventAutoHideAsync();
-    const checkTerms = async () => {
-      try {
-        const value = await AsyncStorage.getItem("hasAcceptedTerms");
-        setHasAcceptedTerms(value === "true");
-      } catch (error) {
-        console.error("Error checking terms acceptance:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    checkTerms();
   }, []);
 
-  // 8. Initialize theme and navigation bar color on change.
+  // Monitor connectivity once
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) =>
+      setIsConnected(state.isConnected)
+    );
+    return unsubscribe;
+  }, []);
+
+  // Check versions (debounced, no duplicate calls)
+  useEffect(() => {
+    (async () => {
+      if (!isConnected) return;
+      try {
+        const versions = await getAppVersions();
+        setVersionData(versions);
+        const needed = checkForUpdate(currentVersion, versions);
+        if (needed) setUpdateInfo(needed);
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, [isConnected, getAppVersions, currentVersion]);
+
+  // Terms acceptance
+  useEffect(() => {
+    SplashScreen.preventAutoHideAsync();
+    (async () => {
+      const stored = await AsyncStorage.getItem("hasAcceptedTerms");
+      setAccepted(stored === "true");
+      setLoading(false);
+    })();
+  }, []);
+
+  // Theme & nav bar
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
     NavigationBar.setBackgroundColorAsync(theme.colors.primary);
   }, [colorScheme, initializeTheme, theme.colors.primary]);
 
-  // 9. Fetch user data only when authenticated
-  const fetchUserData = useCallback(async () => {
-    if (user?.consumer_id) {
-      try {
-        await Promise.all([
-          fetchProfile(user.consumer_id),
-          listCart(user.consumer_id),
-          fetchBillingAddresses(user.consumer_id),
-          listOrders(user.consumer_id),
-        ]);
-      } catch (error) {
-        console.error("Error fetching user data:", error);
-      }
+  // Authentication & routing
+  useEffect(() => {
+    if (loading || accepted === null) return;
+    const isLoggedIn =
+      user?.timestamp && Date.now() - user.timestamp <= 7 * 24 * 3600 * 1000;
+    SplashScreen.hideAsync().catch(console.warn);
+    if (!accepted) return;
+    if (!isLoggedIn && user) logout();
+    router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+  }, [loading, accepted, user, logout, router]);
+
+  // Fetch user data on valid session
+  useEffect(() => {
+    if (user?.consumer_id && isConnected && accepted) {
+      Promise.all([
+        fetchProfile(user.consumer_id),
+        listCart(user.consumer_id),
+        fetchBillingAddresses(user.consumer_id),
+        listOrders(user.consumer_id),
+      ]).catch(console.error);
     }
   }, [
     user?.consumer_id,
+    isConnected,
+    accepted,
     fetchProfile,
     listCart,
     fetchBillingAddresses,
     listOrders,
   ]);
 
-  // 10. Handle authentication & routing (grouping logic ensures checks fire when all data is ready)
-  useEffect(() => {
-    const checkAuthenticationAndNetworkStatus = async () => {
-      if (!isLoading && hasAcceptedTerms !== null) {
-        // Combine authentication check and splash screen hide
-        const isLoggedIn = user?.timestamp
-          ? Date.now() - user.timestamp <= 7 * 24 * 60 * 60 * 1000
-          : false;
-
-        if (hasAcceptedTerms) {
-          if (!isLoggedIn && user) await logout();
-          SplashScreen.hideAsync();
-          router.replace(isLoggedIn ? "/(tabs)" : "/Login");
-        } else {
-          SplashScreen.hideAsync();
-        }
-
-        // Handle network connectivity changes
-        const netState = await NetInfo.fetch();
-        const connected = Boolean(netState.isConnected);
-        setShowAlert(!connected);
-
-        if (connected && hasAcceptedTerms && !isLoading) {
-          router.replace(user ? "/(tabs)" : "/Login");
-          fetchUserData();
-        }
-      }
-    };
-
-    checkAuthenticationAndNetworkStatus();
-  }, [hasAcceptedTerms, user, logout, isLoading, router, fetchUserData]);
-
-  // 11. Monitor network connectivity changes
-  useEffect(() => {
-    // Subscribe to network state updates
-    const unsubscribe = NetInfo.addEventListener((state) => {
-      const connected = Boolean(state.isConnected);
-      setShowAlert(!connected);
-    });
-
-    // Cleanup subscription on unmount
-    return () => unsubscribe();
-  }, []);
-
-  // 12. Memoized handlers to prevent unnecessary re-creation
-  const handleAcceptTerms = useCallback(async () => {
-    try {
-      await AsyncStorage.setItem("hasAcceptedTerms", "true");
-      setHasAcceptedTerms(true);
-    } catch (error) {
-      console.error("Error setting terms acceptance:", error);
-    }
-  }, []);
-
-  const handleRefresh = useCallback(() => {
-    NetInfo.fetch().then((state) => {
-      const connected = Boolean(state.isConnected);
-      setShowAlert(!connected);
-    });
-  }, []);
-
-  // 13. Show loading view until all checks are complete
-  if (hasAcceptedTerms === null || isLoading) {
-    return loadingView;
-  }
+  if (loading || accepted === null) return LoadingScreen;
 
   return (
-    <GestureHandlerRootView
-      style={{ flex: 1, backgroundColor: theme.colors.primary }}
-    >
-      <ActionSheetProvider>
+    <GestureHandlerRootView style={styles.container}>
+      <Suspense fallback={LoadingScreen}>
         <PaperProvider theme={theme}>
           <StatusBar style={isDarkTheme ? "light" : "dark"} />
-          {!hasAcceptedTerms ? (
+          {!accepted ? (
             <TermsModal
-              onAccept={handleAcceptTerms}
-              onDecline={() => BackHandler.exitApp()}
+              onAccept={async () => {
+                await AsyncStorage.setItem("hasAcceptedTerms", "true");
+                setAccepted(true);
+              }}
             />
           ) : (
-            <Stack screenOptions={screenOptions}>
+            <Stack
+              screenOptions={{
+                headerTitleAlign: "center",
+                headerStyle: { backgroundColor: theme.colors.primary },
+                headerTintColor: theme.colors.textColor,
+                lazy: true,
+                detachInactiveScreens: true,
+              }}
+            >
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
               <Stack.Screen name="Login" options={{ headerShown: false }} />
             </Stack>
           )}
-          {hasAcceptedTerms && (
+          {accepted && !isConnected && (
             <AlertDialog
-              visible={showAlert}
-              title="No Internet Connection"
-              message="Please check your internet connection and try again."
-              onConfirm={handleRefresh}
-              confirmText="Try again"
+              visible={!isConnected}
+              title="No Internet"
+              message="Check your connection"
+              onConfirm={() =>
+                NetInfo.fetch().then((s) => setIsConnected(s.isConnected))
+              }
             />
           )}
-          {latestVersion && (
+          {updateInfo && (
             <UpdateModal
-              visible={updateModalVisible}
-              onClose={() => setUpdateModalVisible(false)}
-              latestVersion={latestVersion.version}
+              visible={true}
+              latestVersion={updateInfo.version}
               currentVersion={currentVersion}
-              versionData={versionData}
             />
           )}
         </PaperProvider>
-      </ActionSheetProvider>
+      </Suspense>
     </GestureHandlerRootView>
   );
-};
+}
 
-const styles = {
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-};
-
-export default Layout;
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+});

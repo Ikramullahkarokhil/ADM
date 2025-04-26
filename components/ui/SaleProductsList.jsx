@@ -132,14 +132,14 @@ const ProductImage = memo(({ source, isDarkTheme, style }) => {
 
 const ViewAllCard = memo(({ onPress, colors }) => (
   <View style={[styles.cardWrapper, { backgroundColor: colors.primary }]}>
-    <Pressable
+    <TouchableOpacity
       style={[
         styles.productCard,
         styles.viewAllCard,
         { backgroundColor: colors.primary },
       ]}
       onPress={onPress}
-      android_ripple={{ color: colors.ripple, borderless: false }}
+      activeOpacity={0.7}
     >
       <View style={styles.viewAllContent}>
         <Text style={[styles.viewAllCardText, { color: colors.button }]}>
@@ -147,7 +147,7 @@ const ViewAllCard = memo(({ onPress, colors }) => (
         </Text>
         <Feather name="arrow-right" size={24} color={colors.button} />
       </View>
-    </Pressable>
+    </TouchableOpacity>
   </View>
 ));
 
@@ -262,13 +262,13 @@ const SaleProductsList = ({ data, load }) => {
     [handleViewAllPress, handleProductPress, colors, isDarkTheme]
   );
 
-  if (!saleProducts) return null;
+  if (!saleProducts || data?.products?.total < 1) return null;
   if (load) return <HotDealsSkeleton />;
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
       <View style={styles.headerContainer}>
-        <View style={styles.titleContainer}>
+        <View>
           <Text style={[styles.sectionTitle, { color: colors.textColor }]}>
             Hot Deals
           </Text>
