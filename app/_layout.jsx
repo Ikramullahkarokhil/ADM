@@ -1,13 +1,5 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  Suspense,
-  lazy,
-} from "react";
+import React, { useEffect, useState, useMemo, Suspense, lazy } from "react";
 import {
-  BackHandler,
   useColorScheme,
   ActivityIndicator,
   View,
@@ -30,10 +22,10 @@ import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
 import { registerBackgroundNotifications } from "../notification-services";
 import { checkForUpdate } from "../utils/VersionUtils";
+import AlertDialog from "../components/ui/NoInternetAlert";
 
 // Lazy-load heavy UI components only when needed
 const TermsModal = lazy(() => import("./screens/ConsentScreen"));
-const AlertDialog = lazy(() => import("../components/ui/NoInternetAlert"));
 const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
@@ -62,7 +54,6 @@ export default function Layout() {
   const [loading, setLoading] = useState(true);
   const [accepted, setAccepted] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
-  const [versionData, setVersionData] = useState([]);
   const [updateInfo, setUpdateInfo] = useState(null);
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
@@ -101,7 +92,7 @@ export default function Layout() {
       if (!isConnected) return;
       try {
         const versions = await getAppVersions();
-        setVersionData(versions);
+
         const needed = checkForUpdate(currentVersion, versions);
         if (needed) setUpdateInfo(needed);
       } catch (e) {
