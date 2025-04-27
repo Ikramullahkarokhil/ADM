@@ -126,13 +126,11 @@ const Questions = () => {
   // Load questions with optimized pagination handling
   const loadQuestions = useCallback(
     async (page = 1, isLoadingMoreQuestions = false) => {
-      // Prevent multiple simultaneous requests
       if (isLoading || isLoadingMore || (!hasMoreQuestions && page > 1)) {
         console.log("Skipping request due to loading state or no more data");
         return;
       }
 
-      // Set appropriate loading state
       if (page === 1) {
         setIsLoading(true);
       } else {
@@ -151,16 +149,13 @@ const Questions = () => {
           const perPage = response.perPage || 10;
           const calculatedTotalPages = Math.ceil(total / perPage);
 
-          // Check if we've reached the end
           const hasMore = page < calculatedTotalPages;
           setHasMoreQuestions(hasMore);
 
-          // Update questions list
           setQuestions((prev) => {
             if (page === 1) {
               return [...questionsData];
             } else {
-              // Add new questions, avoiding duplicates
               const newQuestions = questionsData.filter(
                 (newQ) =>
                   !prev.some(
@@ -168,7 +163,6 @@ const Questions = () => {
                       existingQ.products_qna_id === newQ.products_qna_id
                   )
               );
-
               return [...prev, ...newQuestions];
             }
           });
@@ -202,19 +196,14 @@ const Questions = () => {
     loadQuestions(1);
   }, []);
 
-  // Handle infinite scroll with optimized conditions
+  // Handle infinite scroll
   const handleEndReached = useCallback(() => {
-    console.log(
-      `End reached. Loading more? ${isLoadingMore}, Loading? ${isLoading}, Has more? ${hasMoreQuestions}, Current page: ${currentPage}, Total pages: ${totalPages}`
-    );
-
     if (
       !isLoadingMore &&
       !isLoading &&
       hasMoreQuestions &&
       currentPage < totalPages
     ) {
-      console.log(`Loading more questions for page ${currentPage + 1}`);
       loadQuestions(currentPage + 1, true);
     }
   }, [
@@ -226,7 +215,7 @@ const Questions = () => {
     loadQuestions,
   ]);
 
-  // Add question with optimistic updates
+  // Add question
   const handleAddQuestion = useCallback(async () => {
     const trimmedQuestion = newQuestion.trim();
     if (!trimmedQuestion) {
@@ -241,7 +230,6 @@ const Questions = () => {
 
     setIsAddingQuestion(true);
 
-    // Create temporary question for optimistic update
     const tempQuestion = {
       products_qna_id: `temp_${Date.now()}`,
       product_id: productId,
@@ -254,20 +242,17 @@ const Questions = () => {
       isTemporary: true,
     };
 
-    // Add new question at the beginning
     setQuestions((prev) => [tempQuestion, ...prev]);
     setNewQuestion("");
     Keyboard.dismiss();
 
     try {
-      // Send to server
       const response = await addProductQuestion({
         productID: productId,
         consumerID: user.consumer_id,
         question: trimmedQuestion,
       });
 
-      // Update with server data
       setQuestions((prev) =>
         prev.map((question) =>
           question.products_qna_id === tempQuestion.products_qna_id
@@ -284,25 +269,21 @@ const Questions = () => {
       ToastAndroid.show("Question added successfully", ToastAndroid.SHORT);
     } catch (err) {
       console.error("Error adding question:", err);
-
-      // Remove temporary question on failure
       setQuestions((prev) =>
         prev.filter(
           (question) =>
             question.products_qna_id !== tempQuestion.products_qna_id
         )
       );
-
       ToastAndroid.show("Failed to add question", ToastAndroid.SHORT);
     } finally {
       setIsAddingQuestion(false);
     }
   }, [newQuestion, user, addProductQuestion, productId, showAlert]);
 
-  // Edit question handling
+  // Edit question
   const handleEditQuestion = useCallback((question) => {
     if (Platform.OS === "ios") {
-      // iOS specific alert with prompt
       Alert.prompt(
         "Edit Question",
         "Modify your question below:",
@@ -321,7 +302,6 @@ const Questions = () => {
         question.question
       );
     } else {
-      // Android - use the input field
       setNewQuestion(question.question);
       if (inputRef.current) {
         inputRef.current.focus();
@@ -330,10 +310,9 @@ const Questions = () => {
     }
   }, []);
 
-  // Update question with optimistic updates
+  // Update question
   const updateQuestion = useCallback(
     (question, newText) => {
-      // Optimistic update
       setQuestions((prev) =>
         prev.map((q) =>
           q.products_qna_id === question.products_qna_id
@@ -342,14 +321,12 @@ const Questions = () => {
         )
       );
 
-      // Reset input state if editing
       if (editingQuestion) {
         setNewQuestion("");
         setEditingQuestion(null);
         Keyboard.dismiss();
       }
 
-      // Send to server
       editQuestion({
         question: newText,
         question_id: question.products_qna_id,
@@ -367,7 +344,6 @@ const Questions = () => {
         })
         .catch((err) => {
           console.error("Error updating question:", err);
-          // Revert on failure
           setQuestions((prev) =>
             prev.map((q) =>
               q.products_qna_id === question.products_qna_id
@@ -381,7 +357,7 @@ const Questions = () => {
     [editQuestion, user, editingQuestion]
   );
 
-  // Handle update from input field
+  // Handle update from input
   const handleUpdateQuestion = useCallback(() => {
     if (!editingQuestion) return handleAddQuestion();
 
@@ -391,14 +367,13 @@ const Questions = () => {
     updateQuestion(editingQuestion, trimmedQuestion);
   }, [editingQuestion, newQuestion, updateQuestion, handleAddQuestion]);
 
-  // Delete question with confirmation
+  // Delete question
   const handleDeleteQuestion = useCallback(
     (question) => {
       showAlert(
         "Delete Question",
         "Are you sure you want to delete this question?",
         () => {
-          // Optimistic update - mark as deleting
           setQuestions((prev) =>
             prev.map((q) =>
               q.products_qna_id === question.products_qna_id
@@ -412,7 +387,6 @@ const Questions = () => {
             questionId: question.products_qna_id,
           })
             .then(() => {
-              // Remove from list on success
               setQuestions((prev) =>
                 prev.filter(
                   (q) => q.products_qna_id !== question.products_qna_id
@@ -422,7 +396,6 @@ const Questions = () => {
             })
             .catch((err) => {
               console.error("Error deleting question:", err);
-              // Revert on failure
               setQuestions((prev) =>
                 prev.map((q) =>
                   q.products_qna_id === question.products_qna_id
@@ -441,7 +414,7 @@ const Questions = () => {
     [deleteProductQuestion, user, showAlert]
   );
 
-  // Show action sheet for question options
+  // Show action sheet
   const showQuestionOptions = useCallback(
     (question) => {
       const options = ["Edit", "Delete", "Cancel"];
@@ -478,18 +451,31 @@ const Questions = () => {
     ]
   );
 
-  // Render a question item - memoized for performance
+  // Render question item
   const renderQuestionItem = useCallback(
     ({ item }) => {
-      const isUserQuestion = user && item.consumer_id === user.consumer_id;
+      const isUserQuestion =
+        user &&
+        user.consumer_id &&
+        Number(item.consumer_id) === Number(user.consumer_id);
       const isPending = item.isPending;
       const isDeleting = item.isDeleting;
+      const hasAnswers = item.answers && item.answers.length > 0;
 
       return (
         <View style={styles.questionItemContainer}>
           <TouchableOpacity
-            onPress={() => isUserQuestion && showQuestionOptions(item)}
-            activeOpacity={isUserQuestion ? 0.7 : 1}
+            onPress={() => {
+              if (isUserQuestion && !hasAnswers) {
+                console.log(
+                  "Showing options for question:",
+                  item.products_qna_id
+                );
+                showQuestionOptions(item);
+              }
+            }}
+            activeOpacity={isUserQuestion && !hasAnswers ? 0.7 : 1}
+            disabled={!(isUserQuestion && !hasAnswers)}
             style={[
               styles.questionItem,
               {
@@ -526,9 +512,15 @@ const Questions = () => {
                   {formatDateString(item.date)}
                 </Text>
               </View>
-              {isUserQuestion && (
+              {isUserQuestion && !hasAnswers && (
                 <TouchableOpacity
-                  onPress={() => showQuestionOptions(item)}
+                  onPress={() => {
+                    console.log(
+                      "Options button pressed:",
+                      item.products_qna_id
+                    );
+                    showQuestionOptions(item);
+                  }}
                   style={styles.optionsButton}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
@@ -556,7 +548,7 @@ const Questions = () => {
               {item.question}
             </Text>
 
-            {item.answers && item.answers.length > 0 && (
+            {hasAnswers && (
               <View style={styles.answersContainer}>
                 {item.answers.map((answer, index) => (
                   <View
@@ -605,7 +597,7 @@ const Questions = () => {
     [user, theme.colors, showQuestionOptions]
   );
 
-  // Empty list component - memoized
+  // Empty list component
   const EmptyListComponent = useCallback(
     () => (
       <View style={styles.emptyQuestionContainer}>
@@ -628,7 +620,7 @@ const Questions = () => {
     [isLoading, theme.colors]
   );
 
-  // Footer component - memoized
+  // Footer component
   const ListFooterComponent = useCallback(() => {
     if (isLoadingMore) {
       return (
@@ -643,7 +635,7 @@ const Questions = () => {
     return null;
   }, [isLoadingMore, theme.colors]);
 
-  // Item separator - memoized
+  // Item separator
   const ItemSeparatorComponent = useCallback(
     () => (
       <View
