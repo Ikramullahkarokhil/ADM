@@ -16,6 +16,7 @@ import NetInfo from "@react-native-community/netinfo";
 import * as BackgroundFetch from "expo-background-fetch";
 import { enableScreens } from "react-native-screens";
 import Constants from "expo-constants";
+import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
@@ -152,49 +153,51 @@ export default function Layout() {
 
   return (
     <GestureHandlerRootView style={styles.container}>
-      <Suspense fallback={LoadingScreen}>
-        <PaperProvider theme={theme}>
-          <StatusBar style={isDarkTheme ? "light" : "dark"} />
-          {!accepted ? (
-            <TermsModal
-              onAccept={async () => {
-                await AsyncStorage.setItem("hasAcceptedTerms", "true");
-                setAccepted(true);
-              }}
-            />
-          ) : (
-            <Stack
-              screenOptions={{
-                headerTitleAlign: "center",
-                headerStyle: { backgroundColor: theme.colors.primary },
-                headerTintColor: theme.colors.textColor,
-                lazy: true,
-                detachInactiveScreens: true,
-              }}
-            >
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="Login" options={{ headerShown: false }} />
-            </Stack>
-          )}
-          {accepted && !isConnected && (
-            <AlertDialog
-              visible={!isConnected}
-              title="No Internet"
-              message="Check your connection"
-              onConfirm={() =>
-                NetInfo.fetch().then((s) => setIsConnected(s.isConnected))
-              }
-            />
-          )}
-          {updateInfo && (
-            <UpdateModal
-              visible={true}
-              latestVersion={updateInfo.version}
-              currentVersion={currentVersion}
-            />
-          )}
-        </PaperProvider>
-      </Suspense>
+      <ActionSheetProvider>
+        <Suspense fallback={LoadingScreen}>
+          <PaperProvider theme={theme}>
+            <StatusBar style={isDarkTheme ? "light" : "dark"} />
+            {!accepted ? (
+              <TermsModal
+                onAccept={async () => {
+                  await AsyncStorage.setItem("hasAcceptedTerms", "true");
+                  setAccepted(true);
+                }}
+              />
+            ) : (
+              <Stack
+                screenOptions={{
+                  headerTitleAlign: "center",
+                  headerStyle: { backgroundColor: theme.colors.primary },
+                  headerTintColor: theme.colors.textColor,
+                  lazy: true,
+                  detachInactiveScreens: true,
+                }}
+              >
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="Login" options={{ headerShown: false }} />
+              </Stack>
+            )}
+            {accepted && !isConnected && (
+              <AlertDialog
+                visible={!isConnected}
+                title="No Internet"
+                message="Check your connection"
+                onConfirm={() =>
+                  NetInfo.fetch().then((s) => setIsConnected(s.isConnected))
+                }
+              />
+            )}
+            {updateInfo && (
+              <UpdateModal
+                visible={true}
+                latestVersion={updateInfo.version}
+                currentVersion={currentVersion}
+              />
+            )}
+          </PaperProvider>
+        </Suspense>
+      </ActionSheetProvider>
     </GestureHandlerRootView>
   );
 }
