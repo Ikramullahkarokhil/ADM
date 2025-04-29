@@ -129,6 +129,13 @@ const UpdateProfile = () => {
     }
   }, [profileData]);
 
+  // Reset profileImage when updated_at changes
+  useEffect(() => {
+    if (profileData?.updated_at) {
+      setProfileImage(profileData.consumer_image);
+    }
+  }, []);
+
   const pickImage = async () => {
     if (timeLeft) return; // Disable image picking when update is restricted
     try {
@@ -299,13 +306,17 @@ const UpdateProfile = () => {
           <View style={styles.imageContainer}>
             {profileImage ? (
               <Image
-                source={{ uri: profileImage }}
+                source={{ uri: `${profileImage}?t=${profileData?.updated_at}` }}
                 style={styles.profileImage}
+                key={profileData?.updated_at}
               />
             ) : profileData?.consumer_image ? (
               <Image
-                source={{ uri: profileData.consumer_image }}
+                source={{
+                  uri: `${profileData.consumer_image}?t=${profileData?.updated_at}`,
+                }}
                 style={styles.profileImage}
+                key={profileData?.updated_at}
               />
             ) : (
               <View

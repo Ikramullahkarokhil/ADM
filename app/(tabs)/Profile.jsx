@@ -31,18 +31,17 @@ import useProductStore from "../../components/api/useProductStore";
 import ChangePasswordModal from "../../components/ui/ChangePasswordModal";
 import AlertDialog from "../../components/ui/AlertDialog";
 
-const ProfileHeader = ({ profileImage, username, membership, theme }) => {
+const ProfileHeader = ({
+  profileImage,
+  username,
+  membership,
+  theme,
+  updatedAt,
+}) => {
   const [isImageLoading, setIsImageLoading] = useState(true);
-  const [imageKey, setImageKey] = useState(0);
-
-  // Reset image key when profileImage changes
-  useEffect(() => {
-    console.log("Profile image changed:", profileImage);
-    setImageKey((prev) => prev + 1);
-  }, [profileImage]);
 
   const imageUri = profileImage
-    ? `${profileImage}?t=${imageKey}`
+    ? `${profileImage}?t=${updatedAt}`
     : "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg";
 
   return (
@@ -59,11 +58,11 @@ const ProfileHeader = ({ profileImage, username, membership, theme }) => {
             />
           )}
           <Avatar.Image
-            key={imageKey}
             source={{
               uri: imageUri,
             }}
             size={80}
+            key={updatedAt}
             style={{ backgroundColor: theme.colors.background }}
             onLoadStart={() => setIsImageLoading(true)}
             onLoadEnd={() => setIsImageLoading(false)}
@@ -361,6 +360,7 @@ const Profile = () => {
           }
           username={profileData?.name || "Guest User"}
           membership={getMembershipDuration(profileData?.reg_date)}
+          updatedAt={profileData.updated_at}
           theme={theme}
         />
 
