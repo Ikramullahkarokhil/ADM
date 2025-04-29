@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Image,
+  ActivityIndicator,
 } from "react-native";
 import { Formik, useField, useFormikContext } from "formik";
 import * as Yup from "yup";
@@ -683,7 +684,6 @@ const Signup = () => {
                     style={[
                       styles.button,
                       {
-                        backgroundColor: "transparent",
                         borderWidth: 1,
                         borderColor: colors.button,
                       },
@@ -898,10 +898,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   buttonText: {
     fontSize: 16,

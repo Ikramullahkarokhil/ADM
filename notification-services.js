@@ -5,13 +5,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Constants
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
-const SIX_HOUR_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours (not used in testing)
+const SIX_HOUR_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
 const CART_STORAGE_KEY = "cart_timers";
 const EXPIRED_ITEMS_KEY = "expired_cart_items";
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
 // Toggle testing mode (set to true for testing notifications every minute)
-const IS_TESTING = true;
+const IS_TESTING = false; // Changed to false for production
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -30,8 +30,41 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
     const currentTime = Date.now();
     const expiredItems = await checkAndHandleExpiredItems();
 
+    // Schedule notifications for non-expired items
+    const nonExpiredItems = Object.entries(timers).filter(
+      ([_, timestamp]) => currentTime - timestamp < CART_TIMEOUT
+    );
+
+    for (const [itemId, timestamp] of nonExpiredItems) {
+      const timeElapsed = currentTime - timestamp;
+      const timeRemaining = CART_TIMEOUT - timeElapsed;
+
+      if (timeRemaining > 0) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: "Cart Reminder",
+            body: `Your cart item will expire in ${Math.ceil(
+              timeRemaining / (60 * 60 * 1000)
+            )} hours!`,
+            data: { itemId },
+          },
+          trigger: {
+            seconds: Math.min(6 * 60 * 60, Math.floor(timeRemaining / 1000)),
+          },
+        });
+      }
+    }
+
+    // Schedule expiration notifications for expired items
     if (expiredItems.length > 0) {
-      console.log(`Expired items: ${expiredItems.length}`);
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Cart Items Expired",
+          body: `${expiredItems.length} item(s) in your cart have expired.`,
+          data: { expiredItems },
+        },
+        trigger: null, // Show immediately
+      });
     }
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
@@ -49,7 +82,7 @@ export async function registerBackgroundNotifications() {
       stopOnTerminate: false,
       startOnBoot: true,
     });
-    console.log("Background notifications registers");
+    console.log("Background notifications registered");
   } catch (error) {
     console.error("Background fetch registration failed:", error);
   }
@@ -143,7 +176,9 @@ export async function scheduleCartNotifications(cartItems) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: "Cart Reminder",
-            body: `${item.title} will expire soon!`,
+            body: `${item.title} will expire in ${Math.ceil(
+              timeRemaining / (60 * 60 * 1000)
+            )} hours!`,
             data: { itemId },
           },
           trigger: {
@@ -152,8 +187,20 @@ export async function scheduleCartNotifications(cartItems) {
         });
       }
 
-      nextNotificationTime += 6 * 60 * 60 * 1000; // Increment by 6 hours
+      nextNotificationTime += SIX_HOUR_INTERVAL; // Increment by 6 hours
     }
+
+    // Schedule expiration notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Cart Item Expired",
+        body: `${item.title} has expired from your cart.`,
+        data: { itemId },
+      },
+      trigger: {
+        seconds: Math.floor((expirationTime - currentTime) / 1000),
+      },
+    });
   }
 }
 
@@ -209,7 +256,6 @@ export async function checkAndHandleExpiredItems() {
 
   if (newlyExpired.length > 0) {
     newlyExpired.forEach((id) => {
-      delete timers[id];
       if (!expiredItems.includes(id)) {
         expiredItems.push(id);
         hasChanges = true;
@@ -217,7 +263,6 @@ export async function checkAndHandleExpiredItems() {
     });
 
     if (hasChanges) {
-      await saveCartTimers(timers);
       await saveExpiredItems(expiredItems);
     }
 

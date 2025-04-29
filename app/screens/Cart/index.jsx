@@ -10,12 +10,20 @@ import {
   ToastAndroid,
 } from "react-native";
 import { Button, useTheme, Checkbox, Divider } from "react-native-paper";
-import { Link, useNavigation, useRouter, useFocusEffect } from "expo-router";
+import { useNavigation, useRouter, useFocusEffect } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as Notifications from "expo-notifications";
+import { Device } from "expo-device";
+import {
+  scheduleAppropriateNotifications,
+  loadCartTimers,
+  saveCartTimers,
+  removeItemFromCartTimer,
+} from "../../../notification-services";
 
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -42,9 +50,37 @@ const Cart = () => {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [expiredItems, setExpiredItems] = useState([]);
   const [alertConfig, setAlertConfig] = useState(null); // Unified alert state
+  const [notificationPermission, setNotificationPermission] = useState(false);
 
   const isFirstLoad = useRef(true);
   const hasCheckedExpiration = useRef(false);
+
+  // Request permission for notifications
+  useEffect(() => {
+    const requestPermissions = async () => {
+      if (Device.isDevice) {
+        const { status: existingStatus } =
+          await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+
+        if (existingStatus !== "granted") {
+          const { status } = await Notifications.requestPermissionsAsync();
+          finalStatus = status;
+        }
+
+        setNotificationPermission(finalStatus === "granted");
+
+        if (finalStatus !== "granted") {
+          ToastAndroid.show(
+            "Notification permissions not granted",
+            ToastAndroid.SHORT
+          );
+        }
+      }
+    };
+
+    requestPermissions();
+  }, []);
 
   // Hide the default header
   useEffect(() => {
@@ -59,8 +95,13 @@ const Cart = () => {
 
       await deleteAllFromCart(user.consumer_id);
 
+      // Clear notification timers for all cart items
+      await saveCartTimers({});
       setTimers({});
       setSelectedIds(new Set());
+
+      // Cancel any scheduled notifications
+      await Notifications.cancelAllScheduledNotificationsAsync();
 
       ToastAndroid.show("Cart cleared successfully", ToastAndroid.SHORT);
     } catch (error) {
@@ -90,6 +131,8 @@ const Cart = () => {
   useEffect(() => {
     const loadTimersData = async () => {
       try {
+        const savedTimers = await loadCartTimers();
+        setTimers(savedTimers);
         setInitialLoadComplete(true);
       } catch (error) {
         console.error("Error loading timers:", error);
@@ -123,11 +166,17 @@ const Cart = () => {
 
       if (hasChanges) {
         setTimers(newTimers);
+        await saveCartTimers(newTimers);
+
+        // Schedule notifications for cart items
+        if (notificationPermission) {
+          await scheduleAppropriateNotifications(cartItem);
+        }
       }
     };
 
     updateTimers();
-  }, [cartItem, initialLoadComplete]);
+  }, [cartItem, initialLoadComplete, notificationPermission]);
 
   useFocusEffect(
     useCallback(() => {
@@ -164,30 +213,45 @@ const Cart = () => {
 
   useEffect(() => {
     if (expiredItems.length > 0) {
-      const removeExpiredItems = async () => {
-        for (const item of expiredItems) {
-          await handleRemoveFromCart(item, true);
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-        if (expiredItems.length > 0) {
+      const handleExpiredItems = async () => {
+        // Show notification about expired items
+        if (notificationPermission) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: "Cart Items Expired",
+              body: `${expiredItems.length} item(s) have expired in your cart`,
+              data: { expiredItems },
+            },
+            trigger: null, // Show immediately
+          });
+        } else {
           ToastAndroid.show(
-            `${expiredItems.length} expired item(s) removed from cart`,
+            `${expiredItems.length} item(s) have expired in your cart`,
             ToastAndroid.LONG
           );
         }
+
+        // Don't delete expired items from the API
+        // Just update the UI state
         setExpiredItems([]);
       };
-      removeExpiredItems();
+      handleExpiredItems();
     }
-  }, [expiredItems]);
+  }, [expiredItems, notificationPermission]);
 
   const handleRemoveFromCart = useCallback(
     async (item, isExpired = false) => {
       try {
-        await deleteFromCart({
-          productID: item.consumer_cart_items_id,
-          consumerID: user?.consumer_id,
-        });
+        // Only delete from API if not expired
+        if (!isExpired) {
+          await deleteFromCart({
+            productID: item.consumer_cart_items_id,
+            consumerID: user?.consumer_id,
+          });
+        }
+
+        // Remove item from timers and cancel any notifications for it
+        await removeItemFromCartTimer(item.consumer_cart_items_id);
 
         const newTimers = { ...timers };
         delete newTimers[item.consumer_cart_items_id];
@@ -249,13 +313,18 @@ const Cart = () => {
     try {
       if (user?.consumer_id) {
         await listCart(user.consumer_id);
+
+        // Refresh notifications on manual refresh
+        if (notificationPermission && cartItem.length > 0) {
+          await scheduleAppropriateNotifications(cartItem);
+        }
       }
     } catch (error) {
       console.error("Error refreshing cart:", error);
     } finally {
       setRefreshing(false);
     }
-  }, [listCart, user?.consumer_id]);
+  }, [listCart, user?.consumer_id, notificationPermission, cartItem]);
 
   const showActionSheet = (item) => {
     const options = ["Remove from cart", "Cancel"];

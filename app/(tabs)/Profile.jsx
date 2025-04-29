@@ -380,7 +380,7 @@ const Profile = () => {
           }
           username={profileData?.name || "Guest User"}
           membership={getMembershipDuration(profileData?.reg_date)}
-          updatedAt={profileData.updated_at}
+          updatedAt={profileData?.updated_at}
           theme={theme}
         />
 

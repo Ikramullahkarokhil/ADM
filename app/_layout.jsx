@@ -17,11 +17,15 @@ import * as BackgroundFetch from "expo-background-fetch";
 import { enableScreens } from "react-native-screens";
 import Constants from "expo-constants";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
+import * as Notifications from "expo-notifications";
+import {
+  registerBackgroundNotifications,
+  requestNotificationPermissions,
+} from "../notification-services";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
-import { registerBackgroundNotifications } from "../notification-services";
 import { checkForUpdate } from "../utils/VersionUtils";
 import AlertDialog from "../components/ui/NoInternetAlert";
 
@@ -71,7 +75,23 @@ export default function Layout() {
 
   // Background tasks
   useEffect(() => {
-    registerBackgroundNotifications().catch(console.error);
+    const setupNotifications = async () => {
+      try {
+        // Request notification permissions
+        const hasPermission = await requestNotificationPermissions();
+        if (!hasPermission) {
+          console.warn("Notification permissions not granted");
+          return;
+        }
+
+        // Register background notifications
+        await registerBackgroundNotifications();
+      } catch (error) {
+        console.error("Failed to setup notifications:", error);
+      }
+    };
+
+    setupNotifications();
     return () => {
       BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
         console.error
