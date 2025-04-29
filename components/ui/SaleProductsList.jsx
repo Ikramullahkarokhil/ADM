@@ -186,7 +186,7 @@ const ProductItem = memo(({ item, onPress, colors, isDarkTheme }) => {
             >
               {item.name}
             </Text>
-            <View style={styles.priceContainer}>
+            <View>
               <Text style={[styles.productPrice, { color: colors.button }]}>
                 AF {item.discountedPrice || item.price}
               </Text>
@@ -262,7 +262,7 @@ const SaleProductsList = ({ data, load }) => {
     [handleViewAllPress, handleProductPress, colors, isDarkTheme]
   );
 
-  if (!saleProducts || data?.products?.total < 1) return null;
+  if (!saleProducts || data?.products?.total <= 3) return null;
   if (load) return <HotDealsSkeleton />;
 
   return (
@@ -298,7 +298,7 @@ const SaleProductsList = ({ data, load }) => {
         initialNumToRender={4}
         maxToRenderPerBatch={4}
         updateCellsBatchingPeriod={50}
-        extraData={[colors, load]}
+        extraData={[colors, load, listData]}
       />
     </View>
   );
@@ -369,13 +369,12 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 16,
   },
   productName: { fontSize: 14, fontWeight: "600", marginBottom: 4 },
-  priceContainer: { flexDirection: "row", alignItems: "center" },
+
   productPrice: { fontSize: 16, fontWeight: "700" },
   originalPrice: {
     fontSize: 12,
     fontWeight: "400",
     textDecorationLine: "line-through",
-    marginLeft: 6,
   },
   timerContainer: {
     flexDirection: "row",

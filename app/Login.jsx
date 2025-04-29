@@ -354,7 +354,7 @@ const Login = () => {
               </View>
 
               {/* Modern Google Sign In Button */}
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={[
                   styles.googleButton,
                   {
@@ -396,7 +396,7 @@ const Login = () => {
                     </Text>
                   </>
                 )}
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               <View style={styles.footer}>
                 <View style={styles.signupContainer}>

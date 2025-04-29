@@ -64,7 +64,15 @@ const useAlertDialog = () => {
 
 // Simplified ProductRating component
 const ProductRating = memo(
-  ({ rating, colors, onRateProduct, readOnly, size, numberOfRating }) => {
+  ({
+    rating,
+    colors,
+    onRateProduct,
+    readOnly,
+    size,
+    numberOfRating,
+    showFractional = false,
+  }) => {
     const handleStarPress = useCallback(
       (index) => !readOnly && onRateProduct?.(index + 1),
       [readOnly, onRateProduct]
@@ -79,23 +87,52 @@ const ProductRating = memo(
               { color: colors.textColor, marginRight: 5 },
             ]}
           >
-            {rating}
+            {showFractional
+              ? parseFloat(rating).toFixed(1)
+              : Math.round(rating)}
           </Text>
         )}
-        {[...Array(5)].map((_, index) => (
-          <Pressable
-            key={index}
-            onPress={() => handleStarPress(index)}
-            style={styles.starButton}
-            accessibilityRole={readOnly ? "text" : "button"}
-          >
-            <FontAwesome
-              name={index < rating ? "star" : "star-o"}
-              size={size}
-              color={index < rating ? "#FFD700" : colors.inactiveColor}
-            />
-          </Pressable>
-        ))}
+        {[...Array(5)].map((_, index) => {
+          if (showFractional) {
+            const starValue = index + 1;
+            const isHalfStar = rating >= starValue - 0.5 && rating < starValue;
+            const isFullStar = rating >= starValue;
+
+            return (
+              <Pressable
+                key={index}
+                onPress={() => handleStarPress(index)}
+                style={styles.starButton}
+                accessibilityRole={readOnly ? "text" : "button"}
+              >
+                <FontAwesome
+                  name={
+                    isFullStar ? "star" : isHalfStar ? "star-half-o" : "star-o"
+                  }
+                  size={size}
+                  color={
+                    isFullStar || isHalfStar ? "#FFD700" : colors.inactiveColor
+                  }
+                />
+              </Pressable>
+            );
+          } else {
+            return (
+              <Pressable
+                key={index}
+                onPress={() => handleStarPress(index)}
+                style={styles.starButton}
+                accessibilityRole={readOnly ? "text" : "button"}
+              >
+                <FontAwesome
+                  name={index < rating ? "star" : "star-o"}
+                  size={size}
+                  color={index < rating ? "#FFD700" : colors.inactiveColor}
+                />
+              </Pressable>
+            );
+          }
+        })}
         {numberOfRating >= 1 && (
           <Text style={[styles.ratingText, { color: colors.textColor }]}>
             ({numberOfRating})
@@ -326,8 +363,9 @@ const QuestionSection = memo(
 
 // Review Section component
 const ReviewSection = memo(
-  ({ user, theme, productId, rating, onRateProduct }) => {
+  ({ user, theme, productId, rating = 0, onRateProduct }) => {
     const [showLoginAlert, setShowLoginAlert] = useState(false);
+    const [currentRating, setCurrentRating] = useState(0);
     const fadeAnim = useRef(new Animated.Value(0)).current;
     const router = useRouter();
 
@@ -342,6 +380,7 @@ const ReviewSection = memo(
     const handleRatingPress = useCallback(
       (selectedRating) => {
         if (user) {
+          setCurrentRating(selectedRating);
           onRateProduct(selectedRating);
         } else {
           setShowLoginAlert(true);
@@ -390,11 +429,12 @@ const ReviewSection = memo(
               Rate this product:
             </Text>
             <ProductRating
-              rating={rating}
+              rating={currentRating}
               colors={theme.colors}
               onRateProduct={handleRatingPress}
               readOnly={!user}
               size={24}
+              showFractional={false}
             />
           </View>
 
@@ -872,6 +912,7 @@ const ProductDetail = () => {
             readOnly={true}
             size={16}
             numberOfRating={totalRating}
+            showFractional={true}
           />
 
           {/* Modern price display with discount */}

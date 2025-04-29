@@ -353,7 +353,7 @@ const AboutUs = () => {
                 color="#1877F2"
               />
             </TouchableOpacity>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.socialIcon}
               onPress={() => openLink("https://twitter.com/adm")}
             >
@@ -362,8 +362,8 @@ const AboutUs = () => {
                 size={30}
                 color={theme.colors.textColor}
               />
-            </TouchableOpacity>
-            <TouchableOpacity
+            </TouchableOpacity> */}
+            {/* <TouchableOpacity
               style={styles.socialIcon}
               onPress={() => openLink("https://instagram.com/adm")}
             >
@@ -372,10 +372,14 @@ const AboutUs = () => {
                 size={30}
                 color="#E1306C"
               />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
             <TouchableOpacity
               style={styles.socialIcon}
-              onPress={() => openLink("https://linkedin.com/company/adm")}
+              onPress={() =>
+                openLink(
+                  "https://www.linkedin.com/company/afghanbyte-technologies/"
+                )
+              }
             >
               <MaterialCommunityIcons
                 name="linkedin"

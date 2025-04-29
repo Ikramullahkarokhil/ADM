@@ -9,7 +9,6 @@ import {
   ScrollView,
   Platform,
   KeyboardAvoidingView,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
@@ -21,6 +20,8 @@ import { Formik } from "formik";
 import * as Yup from "yup";
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
+import * as ImageManipulator from "expo-image-manipulator";
+import AlertDialog from "../../../components/ui/AlertDialog"; // Import the custom AlertDialog
 
 const validationSchema = Yup.object().shape({
   name: Yup.string().required("Name is required"),
@@ -50,6 +51,9 @@ const UpdateProfile = () => {
   const [activeField, setActiveField] = useState(null);
   const [timeLeft, setTimeLeft] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertMessage, setAlertMessage] = useState("");
 
   const navigation = useNavigation();
   const theme = useTheme();
@@ -62,6 +66,16 @@ const UpdateProfile = () => {
     dob: "",
     gender: "Male",
   });
+
+  const showAlert = (title, message) => {
+    setAlertTitle(title);
+    setAlertMessage(message);
+    setAlertVisible(true);
+  };
+
+  const hideAlert = () => {
+    setAlertVisible(false);
+  };
 
   useEffect(() => {
     if (profileData?.updated_at) {
@@ -122,7 +136,7 @@ const UpdateProfile = () => {
         await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== "granted") {
-        Alert.alert(
+        showAlert(
           "Permission needed",
           "Please grant permission to access your photos"
         );
@@ -141,7 +155,7 @@ const UpdateProfile = () => {
       }
     } catch (error) {
       console.log("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image");
+      showAlert("Error", "Failed to pick image");
     }
   };
 
@@ -165,9 +179,27 @@ const UpdateProfile = () => {
     try {
       // Get file info
       const fileInfo = await FileSystem.getInfoAsync(uri);
+      if (!fileInfo.exists) {
+        throw new Error("File does not exist");
+      }
+
+      // Check file size and compress if needed
+      let finalUri = uri;
+      if (fileInfo.size > 500 * 1024) {
+        // 500KB in bytes
+        const compressedImage = await ImageManipulator.manipulateAsync(
+          uri,
+          [],
+          {
+            compress: 0.5, // Compress to 50% quality
+            format: ImageManipulator.SaveFormat.JPEG,
+          }
+        );
+        finalUri = compressedImage.uri;
+      }
 
       // Get file name from URI
-      const uriParts = uri.split("/");
+      const uriParts = finalUri.split("/");
       const fileName = uriParts[uriParts.length - 1];
 
       // Get file extension
@@ -180,15 +212,26 @@ const UpdateProfile = () => {
       // Create form data
       const formData = new FormData();
 
-      formData.append("image", {
-        uri: Platform.OS === "ios" ? uri.replace("file://", "") : uri,
-        name: fileName,
+      // Format the image data properly
+      const imageData = {
+        uri: Platform.OS === "ios" ? finalUri.replace("file://", "") : finalUri,
         type: fileType,
-      });
+        name: fileName,
+      };
 
+      // Append the image file
+      formData.append("image", imageData);
+
+      // Append consumer_id if available
       if (profileData?.consumer_id) {
         formData.append("consumer_id", profileData.consumer_id.toString());
       }
+
+      // Log the prepared data for debugging
+      console.log("Prepared form data:", {
+        image: imageData,
+        consumer_id: profileData?.consumer_id,
+      });
 
       return formData;
     } catch (error) {
@@ -199,7 +242,7 @@ const UpdateProfile = () => {
 
   const handleSubmit = async (values) => {
     if (timeLeft) {
-      Alert.alert(
+      showAlert(
         "Update Restricted",
         "You can only update your profile once every hour"
       );
@@ -227,7 +270,7 @@ const UpdateProfile = () => {
           await uploadConsumerImage(imageFormData);
         } catch (error) {
           console.error("Image upload error:", error);
-          Alert.alert(
+          showAlert(
             "Image Upload Failed",
             "Profile details will be updated, but image upload failed."
           );
@@ -237,10 +280,10 @@ const UpdateProfile = () => {
       // Update consumer profile
       await updateConsumer(updatedValues);
       await fetchProfile(profileData.consumer_id);
-      Alert.alert("Success", "Profile updated successfully");
+      showAlert("Success", "Profile updated successfully");
     } catch (error) {
       console.error("Error updating profile:", error);
-      Alert.alert("Error", "Failed to update profile");
+      showAlert("Error", "Failed to update profile");
     } finally {
       setIsUploading(false);
     }
@@ -606,6 +649,16 @@ const UpdateProfile = () => {
           )}
         </Formik>
       </ScrollView>
+
+      {/* Custom Alert Dialog */}
+      <AlertDialog
+        visible={alertVisible}
+        title={alertTitle}
+        message={alertMessage}
+        onDismiss={hideAlert}
+        onConfirm={hideAlert}
+        confirmText="OK"
+      />
     </KeyboardAvoidingView>
   );
 };

@@ -1,4 +1,9 @@
-import React, { useState, useLayoutEffect, useCallback } from "react";
+import React, {
+  useState,
+  useLayoutEffect,
+  useCallback,
+  useEffect,
+} from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -28,6 +33,17 @@ import AlertDialog from "../../components/ui/AlertDialog";
 
 const ProfileHeader = ({ profileImage, username, membership, theme }) => {
   const [isImageLoading, setIsImageLoading] = useState(true);
+  const [imageKey, setImageKey] = useState(0);
+
+  // Reset image key when profileImage changes
+  useEffect(() => {
+    console.log("Profile image changed:", profileImage);
+    setImageKey((prev) => prev + 1);
+  }, [profileImage]);
+
+  const imageUri = profileImage
+    ? `${profileImage}?t=${imageKey}`
+    : "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg";
 
   return (
     <Surface
@@ -43,10 +59,9 @@ const ProfileHeader = ({ profileImage, username, membership, theme }) => {
             />
           )}
           <Avatar.Image
+            key={imageKey}
             source={{
-              uri:
-                profileImage ||
-                "https://img.freepik.com/premium-vector/user-profile-people-icon-isolated-white-background_322958-4540.jpg",
+              uri: imageUri,
             }}
             size={80}
             style={{ backgroundColor: theme.colors.background }}

@@ -266,11 +266,36 @@ const useProductStore = create(
       },
 
       uploadConsumerImage: async (formData) => {
-        const data = await get().apiRequest("/consumer/upload-image", {
-          method: "POST",
-          data: formData,
-        });
-        return data;
+        try {
+          const url = `${API_BASE_URL}/consumer/upload-image`;
+
+          console.log("Upload config:", {
+            url,
+            formDataKeys: Array.from(formData.keys()),
+          });
+
+          const response = await fetch(url, {
+            method: "POST",
+            body: formData,
+            headers: {
+              Accept: "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Upload failed");
+          }
+
+          const data = await response.json();
+          return data;
+        } catch (error) {
+          console.error("Upload error details:", {
+            message: error.message,
+            error,
+          });
+          throw error;
+        }
       },
 
       updateConsumer: async (formData) => {
