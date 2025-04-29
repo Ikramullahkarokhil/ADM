@@ -19,11 +19,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Notifications from "expo-notifications";
 import { Device } from "expo-device";
 import {
-  scheduleAppropriateNotifications,
+  requestNotificationPermissions,
+  registerBackgroundNotifications,
+  updateCartNotifications,
+  setupNotificationListeners,
   loadCartTimers,
-  saveCartTimers,
   removeItemFromCartTimer,
 } from "../../../notification-services";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -57,20 +60,25 @@ const Cart = () => {
 
   // Request permission for notifications
   useEffect(() => {
-    const requestPermissions = async () => {
+    const initNotifications = async () => {
       if (Device.isDevice) {
-        const { status: existingStatus } =
-          await Notifications.getPermissionsAsync();
-        let finalStatus = existingStatus;
+        // Request permissions using the improved function
+        const permissionsGranted = await requestNotificationPermissions();
+        setNotificationPermission(permissionsGranted);
 
-        if (existingStatus !== "granted") {
-          const { status } = await Notifications.requestPermissionsAsync();
-          finalStatus = status;
-        }
+        if (permissionsGranted) {
+          // Register background task
+          await registerBackgroundNotifications();
 
-        setNotificationPermission(finalStatus === "granted");
+          // If we have cart items, update notifications
+          if (cartItem && cartItem.length > 0) {
+            // Save cart items to storage for background task access
+            await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
 
-        if (finalStatus !== "granted") {
+            // Schedule notifications for current cart items
+            await updateCartNotifications(cartItem);
+          }
+        } else {
           ToastAndroid.show(
             "Notification permissions not granted",
             ToastAndroid.SHORT
@@ -79,7 +87,36 @@ const Cart = () => {
       }
     };
 
-    requestPermissions();
+    initNotifications();
+
+    // Setup notification received listener
+    const subscription = setupNotificationListeners((notification) => {
+      console.log("Notification received:", notification);
+      // Access the notification data
+      const data = notification.request.content.data;
+
+      // Handle different types of notifications
+      if (data.type === "expiration") {
+        // Handle expiration notification for multiple items
+        ToastAndroid.show(
+          `${data.count} items have been removed from your cart due to expiration.`,
+          ToastAndroid.LONG
+        );
+      } else if (data.itemId) {
+        // Handle single item notification
+        ToastAndroid.show(
+          `"${data.title}" notification: ${notification.request.content.body}`,
+          ToastAndroid.LONG
+        );
+      }
+    });
+
+    // Clean up
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+    };
   }, []);
 
   // Hide the default header
@@ -95,13 +132,10 @@ const Cart = () => {
 
       await deleteAllFromCart(user.consumer_id);
 
-      // Clear notification timers for all cart items
-      await saveCartTimers({});
+      // Clear all notifications
+      await updateCartNotifications([]);
       setTimers({});
       setSelectedIds(new Set());
-
-      // Cancel any scheduled notifications
-      await Notifications.cancelAllScheduledNotificationsAsync();
 
       ToastAndroid.show("Cart cleared successfully", ToastAndroid.SHORT);
     } catch (error) {
@@ -146,37 +180,32 @@ const Cart = () => {
     };
   }, []);
 
+  // Update notifications when cart changes - but only when explicitly needed
   useEffect(() => {
-    if (!initialLoadComplete) return;
+    if (!cartItem || !notificationPermission) return;
 
-    const updateTimers = async () => {
-      const newTimers = { ...timers };
-      let hasChanges = false;
+    // Cart items loaded initially OR cart count changed (item added/removed)
+    const shouldScheduleNotifications =
+      initialLoadComplete && !isFirstLoad.current;
 
-      for (const item of cartItem) {
-        const itemId = item.consumer_cart_items_id;
-        if (!newTimers[itemId] && item.date) {
-          const timestamp = parseCartItemDate(item.date);
-          if (timestamp) {
-            newTimers[itemId] = timestamp;
-            hasChanges = true;
-          }
-        }
-      }
+    if (!shouldScheduleNotifications) return;
 
-      if (hasChanges) {
-        setTimers(newTimers);
-        await saveCartTimers(newTimers);
+    console.log("Updating cart notifications due to cart change");
 
-        // Schedule notifications for cart items
-        if (notificationPermission) {
-          await scheduleAppropriateNotifications(cartItem);
-        }
+    const updateNotifications = async () => {
+      try {
+        // Save updated cart items to storage
+        await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
+
+        // Update scheduled notifications
+        await updateCartNotifications(cartItem);
+      } catch (error) {
+        console.error("Failed to update cart notifications:", error);
       }
     };
 
-    updateTimers();
-  }, [cartItem, initialLoadComplete, notificationPermission]);
+    updateNotifications();
+  }, [cartItem, notificationPermission, initialLoadComplete]);
 
   useFocusEffect(
     useCallback(() => {
@@ -220,7 +249,7 @@ const Cart = () => {
             content: {
               title: "Cart Items Expired",
               body: `${expiredItems.length} item(s) have expired in your cart`,
-              data: { expiredItems },
+              data: { type: "expiration", count: expiredItems.length },
             },
             trigger: null, // Show immediately
           });
@@ -257,6 +286,14 @@ const Cart = () => {
         delete newTimers[item.consumer_cart_items_id];
         setTimers(newTimers);
 
+        // Update notifications for the remaining cart items
+        if (notificationPermission) {
+          const remainingItems = cartItem.filter(
+            (i) => i.consumer_cart_items_id !== item.consumer_cart_items_id
+          );
+          await updateCartNotifications(remainingItems);
+        }
+
         if (!isExpired) {
           ToastAndroid.show("Product removed from cart", ToastAndroid.SHORT);
         }
@@ -265,7 +302,13 @@ const Cart = () => {
         ToastAndroid.show("Failed to remove product", ToastAndroid.SHORT);
       }
     },
-    [deleteFromCart, user?.consumer_id, timers]
+    [
+      deleteFromCart,
+      user?.consumer_id,
+      timers,
+      notificationPermission,
+      cartItem,
+    ]
   );
 
   const toggleSelection = useCallback((consumerCartItemsId) => {
@@ -316,7 +359,7 @@ const Cart = () => {
 
         // Refresh notifications on manual refresh
         if (notificationPermission && cartItem.length > 0) {
-          await scheduleAppropriateNotifications(cartItem);
+          await updateCartNotifications(cartItem);
         }
       }
     } catch (error) {

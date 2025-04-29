@@ -5,13 +5,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Constants
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
-const SIX_HOUR_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours
+const SIX_HOURS = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+const ONE_HOUR = 60 * 60 * 1000; // 1 hour in milliseconds
 const CART_STORAGE_KEY = "cart_timers";
-const EXPIRED_ITEMS_KEY = "expired_cart_items";
+const LAST_NOTIFICATION_KEY = "last_notification_time";
 const BACKGROUND_FETCH_TASK = "background-notification-task";
-
-// Toggle testing mode (set to true for testing notifications every minute)
-const IS_TESTING = false; // Changed to false for production
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -26,46 +24,35 @@ Notifications.setNotificationHandler({
 TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
   try {
     console.log("Running background notification check");
-    const timers = await loadCartTimers();
-    const currentTime = Date.now();
-    const expiredItems = await checkAndHandleExpiredItems();
 
-    // Schedule notifications for non-expired items
-    const nonExpiredItems = Object.entries(timers).filter(
-      ([_, timestamp]) => currentTime - timestamp < CART_TIMEOUT
+    // Check when last notification was sent
+    const lastNotificationTime = await AsyncStorage.getItem(
+      LAST_NOTIFICATION_KEY
     );
+    const currentTime = Date.now();
 
-    for (const [itemId, timestamp] of nonExpiredItems) {
-      const timeElapsed = currentTime - timestamp;
-      const timeRemaining = CART_TIMEOUT - timeElapsed;
-
-      if (timeRemaining > 0) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Cart Reminder",
-            body: `Your cart item will expire in ${Math.ceil(
-              timeRemaining / (60 * 60 * 1000)
-            )} hours!`,
-            data: { itemId },
-          },
-          trigger: {
-            seconds: Math.min(6 * 60 * 60, Math.floor(timeRemaining / 1000)),
-          },
-        });
-      }
+    // Only check for notifications if it's been at least 5.5 hours since the last one
+    // This prevents notification loops
+    if (
+      lastNotificationTime &&
+      currentTime - parseInt(lastNotificationTime) < 5.5 * 60 * 60 * 1000
+    ) {
+      console.log(
+        "Skipping notification check - too soon since last notification"
+      );
+      return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    // Schedule expiration notifications for expired items
-    if (expiredItems.length > 0) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: "Cart Items Expired",
-          body: `${expiredItems.length} item(s) in your cart have expired.`,
-          data: { expiredItems },
-        },
-        trigger: null, // Show immediately
-      });
+    const cartItems = await loadCartItems();
+
+    if (!cartItems || !cartItems.length) {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
     }
+
+    await scheduleCartNotifications(cartItems);
+
+    // Record the time of this notification check
+    await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
 
     return BackgroundFetch.BackgroundFetchResult.NewData;
   } catch (error) {
@@ -78,7 +65,7 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
 export async function registerBackgroundNotifications() {
   try {
     await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-      minimumInterval: 15 * 60, // 15 minutes
+      minimumInterval: 60, // 1 hour (in minutes)
       stopOnTerminate: false,
       startOnBoot: true,
     });
@@ -94,12 +81,12 @@ export async function requestNotificationPermissions() {
   return status === "granted";
 }
 
-// Updated date parser to match the cart component
+// Parse cart item date string to timestamp
 const parseCartItemDate = (dateString) => {
   if (!dateString) return null;
 
   try {
-    // Format: "2025-03-15 09:06:02"
+    // Format: "2025-04-29 13:14:46"
     const [datePart, timePart] = dateString.split(" ");
     if (!datePart || !timePart) return null;
 
@@ -115,6 +102,7 @@ const parseCartItemDate = (dateString) => {
   }
 };
 
+// *** FOR BACKWARD COMPATIBILITY ***
 // Load cart timers from storage
 export async function loadCartTimers() {
   try {
@@ -126,6 +114,7 @@ export async function loadCartTimers() {
   }
 }
 
+// *** FOR BACKWARD COMPATIBILITY ***
 // Save cart timers to storage
 export async function saveCartTimers(timers) {
   try {
@@ -135,106 +124,201 @@ export async function saveCartTimers(timers) {
   }
 }
 
-// Load expired items from storage
-export async function loadExpiredItems() {
+// Load cart items from storage
+export async function loadCartItems() {
   try {
-    const stored = await AsyncStorage.getItem(EXPIRED_ITEMS_KEY);
+    const stored = await AsyncStorage.getItem("cartItems");
     return stored ? JSON.parse(stored) : [];
   } catch (error) {
-    console.error("Failed to load expired items:", error);
+    console.error("Failed to load cart items:", error);
     return [];
   }
 }
 
-// Save expired items to storage
-export async function saveExpiredItems(expiredItems) {
-  try {
-    await AsyncStorage.setItem(EXPIRED_ITEMS_KEY, JSON.stringify(expiredItems));
-  } catch (error) {
-    console.error("Failed to save expired items:", error);
-  }
-}
+// Calculate notification times at exact 6-hour intervals
+function calculateNotificationTimes(addedTime, expirationTime, currentTime) {
+  const notificationTimes = [];
 
-// Schedule notifications for cart items (production)
-export async function scheduleCartNotifications(cartItems) {
-  await Notifications.cancelAllScheduledNotificationsAsync();
-  const currentTime = Date.now();
+  // Calculate all possible notification times (at 6-hour intervals)
+  // Start from the item's added time and add 6-hour intervals
+  let notificationTime = addedTime + SIX_HOURS;
 
-  for (const item of cartItems) {
-    const itemId = item.consumer_cart_items_id;
-    const timeAdded = parseCartItemDate(item.date);
-
-    if (!timeAdded) continue;
-
-    const expirationTime = timeAdded + CART_TIMEOUT;
-    let nextNotificationTime = currentTime;
-
-    while (nextNotificationTime < expirationTime) {
-      const timeRemaining = expirationTime - nextNotificationTime;
-
-      if (timeRemaining > 0) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Cart Reminder",
-            body: `${item.title} will expire in ${Math.ceil(
-              timeRemaining / (60 * 60 * 1000)
-            )} hours!`,
-            data: { itemId },
-          },
-          trigger: {
-            seconds: Math.min(6 * 60 * 60, Math.floor(timeRemaining / 1000)),
-          },
-        });
-      }
-
-      nextNotificationTime += SIX_HOUR_INTERVAL; // Increment by 6 hours
+  while (notificationTime < expirationTime) {
+    // Only include future notification times (after current time)
+    if (notificationTime > currentTime) {
+      notificationTimes.push(notificationTime);
     }
 
-    // Schedule expiration notification
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: "Cart Item Expired",
-        body: `${item.title} has expired from your cart.`,
-        data: { itemId },
-      },
-      trigger: {
-        seconds: Math.floor((expirationTime - currentTime) / 1000),
-      },
-    });
+    // Move to next 6-hour slot
+    notificationTime += SIX_HOURS;
   }
+
+  // Add the final expiration notification
+  if (expirationTime > currentTime) {
+    notificationTimes.push(expirationTime);
+  }
+
+  return notificationTimes;
 }
 
-// Schedule a repeating test notification every minute
-export async function scheduleTestNotification() {
+// Schedule notifications for cart items
+export async function scheduleCartNotifications(cartItems) {
+  if (!cartItems || !cartItems.length) return;
+
+  // Cancel existing notifications to avoid duplicates
   await Notifications.cancelAllScheduledNotificationsAsync();
 
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Testing Notification",
-      body: "This notification appears every minute for testing purposes.",
-    },
-    trigger: {
-      seconds: 60, // Trigger after 60 seconds
-      repeats: true, // Repeat indefinitely
-    },
-  });
+  const currentTime = Date.now();
+  const scheduledNotifications = [];
 
-  console.log("Test notifications scheduled to repeat every minute.");
-}
+  // Check when last notification was sent
+  const lastNotificationTime = await AsyncStorage.getItem(
+    LAST_NOTIFICATION_KEY
+  );
 
-// Function to choose between testing and production notification scheduling
-export async function scheduleAppropriateNotifications(cartItems) {
-  if (IS_TESTING) {
-    await scheduleTestNotification();
-  } else {
-    await scheduleCartNotifications(cartItems);
+  // Prevent notification spam by ensuring we don't send notifications too frequently
+  if (
+    lastNotificationTime &&
+    currentTime - parseInt(lastNotificationTime) < ONE_HOUR
+  ) {
+    console.log("Skipping notifications - too soon since last notification");
+    return;
   }
-}
 
-// Remove an item from cart timer storage
-export async function removeItemFromCartTimer(itemId) {
-  const timers = await loadCartTimers();
-  delete timers[itemId];
+  // Group notifications if there are multiple items
+  if (cartItems.length > 1) {
+    // Find the earliest expiration time
+    let earliestExpiration = Infinity;
+    let earliestAddedTime = Infinity;
+
+    for (const item of cartItems) {
+      const timeAdded = parseCartItemDate(item.date);
+      if (!timeAdded) continue;
+
+      const expirationTime = timeAdded + CART_TIMEOUT;
+
+      if (expirationTime < earliestExpiration) {
+        earliestExpiration = expirationTime;
+        earliestAddedTime = timeAdded;
+      }
+    }
+
+    if (earliestExpiration !== Infinity) {
+      // Calculate notification times at 6-hour intervals
+      const notificationTimes = calculateNotificationTimes(
+        earliestAddedTime,
+        earliestExpiration,
+        currentTime
+      );
+
+      // If we have any notification times, schedule them
+      if (notificationTimes.length > 0) {
+        for (const notificationTime of notificationTimes) {
+          // Determine if this is the expiration notification
+          const isExpiration = notificationTime === earliestExpiration;
+
+          // Calculate hours remaining
+          const hoursRemaining = Math.ceil(
+            (notificationTime - currentTime) / ONE_HOUR
+          );
+
+          scheduledNotifications.push(
+            Notifications.scheduleNotificationAsync({
+              content: {
+                title: isExpiration ? "Cart Items Expired" : "Cart Reminder",
+                body: isExpiration
+                  ? `${cartItems.length} items have been removed from your cart due to expiration.`
+                  : `You have ${cartItems.length} items in your cart that will expire in ${hoursRemaining} hours`,
+                data: {
+                  type: isExpiration ? "expiration" : "reminder",
+                  count: cartItems.length,
+                },
+              },
+              trigger: {
+                seconds: Math.max(
+                  1,
+                  Math.floor((notificationTime - currentTime) / 1000)
+                ),
+              },
+            })
+          );
+        }
+      }
+    }
+  } else {
+    // Single item notification
+    const item = cartItems[0];
+    const timeAdded = parseCartItemDate(item.date);
+
+    if (!timeAdded) return;
+
+    const expirationTime = timeAdded + CART_TIMEOUT;
+
+    // Calculate notification times at 6-hour intervals
+    const notificationTimes = calculateNotificationTimes(
+      timeAdded,
+      expirationTime,
+      currentTime
+    );
+
+    // If we have any notification times, schedule them
+    if (notificationTimes.length > 0) {
+      for (const notificationTime of notificationTimes) {
+        // Determine if this is the expiration notification
+        const isExpiration = notificationTime === expirationTime;
+
+        // Calculate hours remaining
+        const hoursRemaining = Math.ceil(
+          (notificationTime - currentTime) / ONE_HOUR
+        );
+
+        scheduledNotifications.push(
+          Notifications.scheduleNotificationAsync({
+            content: {
+              title: isExpiration ? "Cart Item Expired" : "Cart Reminder",
+              body: isExpiration
+                ? `"${item.title}" has been removed from your cart due to expiration.`
+                : `"${item.title}" will expire from your cart in ${hoursRemaining} hours`,
+              data: {
+                itemId: item.consumer_cart_items_id,
+                title: item.title,
+                type: isExpiration ? "expiration" : "reminder",
+              },
+            },
+            trigger: {
+              seconds: Math.max(
+                1,
+                Math.floor((notificationTime - currentTime) / 1000)
+              ),
+            },
+          })
+        );
+      }
+    }
+  }
+
+  // Wait for all notifications to be scheduled
+  if (scheduledNotifications.length > 0) {
+    await Promise.all(scheduledNotifications);
+
+    // Record the time of this notification scheduling
+    await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
+
+    console.log(`Scheduled ${scheduledNotifications.length} notifications`);
+  }
+
+  // For backward compatibility: Update cart timers
+  const timers = {};
+  for (const item of cartItems) {
+    if (item.consumer_cart_items_id && item.date) {
+      const timeAdded = parseCartItemDate(item.date);
+      if (timeAdded) {
+        timers[item.consumer_cart_items_id] = timeAdded;
+      }
+    }
+  }
+
+  // Save to timer storage (for backward compatibility)
   await saveCartTimers(timers);
 }
 
@@ -243,31 +327,43 @@ export function setupNotificationListeners(onNotificationReceived) {
   return Notifications.addNotificationReceivedListener(onNotificationReceived);
 }
 
-// Function to check and handle expired items in the cart timers
-export async function checkAndHandleExpiredItems() {
-  const timers = await loadCartTimers();
+// Update cart notifications when cart changes
+export async function updateCartNotifications(cartItems) {
+  // Check when last update was sent
+  const lastNotificationTime = await AsyncStorage.getItem(
+    LAST_NOTIFICATION_KEY
+  );
   const currentTime = Date.now();
-  let expiredItems = await loadExpiredItems();
-  let hasChanges = false;
 
-  const newlyExpired = Object.entries(timers)
-    .filter(([_, timestamp]) => currentTime - timestamp >= CART_TIMEOUT)
-    .map(([id]) => id);
-
-  if (newlyExpired.length > 0) {
-    newlyExpired.forEach((id) => {
-      if (!expiredItems.includes(id)) {
-        expiredItems.push(id);
-        hasChanges = true;
-      }
-    });
-
-    if (hasChanges) {
-      await saveExpiredItems(expiredItems);
-    }
-
-    return newlyExpired;
+  // Add some throttling to prevent notification loop
+  if (
+    lastNotificationTime &&
+    currentTime - parseInt(lastNotificationTime) < ONE_HOUR
+  ) {
+    console.log("Skipping notification update - too soon since last update");
+    return;
   }
 
-  return [];
+  if (!cartItems || cartItems.length === 0) {
+    // Clear all notifications if cart is empty
+    await Notifications.cancelAllScheduledNotificationsAsync();
+    // For backward compatibility: Clear timers
+    await saveCartTimers({});
+  } else {
+    // Schedule notifications for updated cart
+    await scheduleCartNotifications(cartItems);
+  }
+}
+
+// *** FOR BACKWARD COMPATIBILITY ***
+// Remove an item from cart timer storage
+export async function removeItemFromCartTimer(itemId) {
+  const timers = await loadCartTimers();
+  delete timers[itemId];
+  await saveCartTimers(timers);
+}
+
+// For testing purposes
+export async function getScheduledNotifications() {
+  return await Notifications.getAllScheduledNotificationsAsync();
 }

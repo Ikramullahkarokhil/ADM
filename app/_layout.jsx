@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   View,
   StyleSheet,
+  ToastAndroid,
 } from "react-native";
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
@@ -21,6 +22,7 @@ import * as Notifications from "expo-notifications";
 import {
   registerBackgroundNotifications,
   requestNotificationPermissions,
+  setupNotificationListeners,
 } from "../notification-services";
 
 import useThemeStore from "../components/store/useThemeStore";
@@ -54,12 +56,14 @@ export default function Layout() {
     fetchBillingAddresses,
     listOrders,
     getAppVersions,
+    cartItem,
   } = useProductStore();
 
   const [loading, setLoading] = useState(true);
   const [accepted, setAccepted] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const [notificationPermission, setNotificationPermission] = useState(false);
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
@@ -73,31 +77,73 @@ export default function Layout() {
     [theme.colors.primary]
   );
 
-  // Background tasks
+  // Setup notification system only once
   useEffect(() => {
-    const setupNotifications = async () => {
+    const setupNotificationSystem = async () => {
       try {
         // Request notification permissions
         const hasPermission = await requestNotificationPermissions();
+        setNotificationPermission(hasPermission);
+
         if (!hasPermission) {
           console.warn("Notification permissions not granted");
           return;
         }
 
-        // Register background notifications
+        // Register background notifications task once
         await registerBackgroundNotifications();
+
+        // Setup notification listener for app-wide handling
+        const subscription = setupNotificationListeners((notification) => {
+          console.log("Notification received in root layout:", notification);
+          const data = notification.request.content.data;
+
+          // Only handle expiration notifications here
+          if (data.type === "expiration") {
+            ToastAndroid.show(
+              `${data.count || 1} item(s) have expired from your cart`,
+              ToastAndroid.LONG
+            );
+
+            // Refresh cart only if expired items and user logged in
+            if (user?.consumer_id) {
+              listCart(user.consumer_id).catch(console.error);
+            }
+          }
+        });
+
+        return () => {
+          if (subscription) {
+            subscription.remove();
+          }
+          BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
+            console.error
+          );
+        };
       } catch (error) {
         console.error("Failed to setup notifications:", error);
       }
     };
 
-    setupNotifications();
-    return () => {
-      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
-        console.error
-      );
-    };
+    setupNotificationSystem();
   }, []);
+
+  // Save cart items to AsyncStorage for background tasks
+  // But don't schedule notifications here - let the Cart component handle that
+  useEffect(() => {
+    if (!cartItem || !user?.consumer_id) return;
+
+    const saveCartItems = async () => {
+      try {
+        // Only save to AsyncStorage for background task access
+        await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
+      } catch (error) {
+        console.error("Failed to save cart items:", error);
+      }
+    };
+
+    saveCartItems();
+  }, [cartItem, user?.consumer_id]);
 
   // Monitor connectivity once
   useEffect(() => {
