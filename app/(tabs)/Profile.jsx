@@ -256,15 +256,35 @@ const Profile = () => {
     const now = new Date();
     const diffMs = now - regDate;
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays < 30)
+
+    if (diffDays < 30) {
       return `Member for ${diffDays} ${diffDays === 1 ? "day" : "days"}`;
+    }
+
     const diffMonths = Math.floor(diffDays / 30);
-    if (diffMonths < 12)
+    const remainingDays = diffDays % 30;
+
+    if (diffMonths < 12) {
+      if (remainingDays === 0) {
+        return `Member for ${diffMonths} ${
+          diffMonths === 1 ? "month" : "months"
+        }`;
+      }
       return `Member for ${diffMonths} ${
         diffMonths === 1 ? "month" : "months"
-      }`;
+      } and ${remainingDays} ${remainingDays === 1 ? "day" : "days"}`;
+    }
+
     const diffYears = Math.floor(diffMonths / 12);
-    return `Member for ${diffYears} ${diffYears === 1 ? "year" : "years"}`;
+    const remainingMonths = diffMonths % 12;
+
+    if (remainingMonths === 0) {
+      return `Member for ${diffYears} ${diffYears === 1 ? "year" : "years"}`;
+    }
+
+    return `Member for ${diffYears} ${
+      diffYears === 1 ? "year" : "years"
+    } and ${remainingMonths} ${remainingMonths === 1 ? "month" : "months"}`;
   }, []);
 
   const accountSettings = [
