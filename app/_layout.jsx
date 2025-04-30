@@ -11,7 +11,6 @@ import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as SplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
 import * as BackgroundFetch from "expo-background-fetch";
@@ -31,13 +30,14 @@ import { darkTheme, lightTheme } from "../components/Theme";
 import useProductStore from "../components/api/useProductStore";
 import { checkForUpdate } from "../utils/VersionUtils";
 import AlertDialog from "../components/ui/NoInternetAlert";
+import IntroScreen from "./screens/IntroScreen";
 
 // Lazy-load heavy UI components only when needed
-const TermsModal = lazy(() => import("./screens/ConsentScreen"));
 const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
 
 const BACKGROUND_FETCH_TASK = "background-notification-task";
 
+// Enable native screens for better performance
 enableScreens();
 
 export default function Layout() {
@@ -49,6 +49,7 @@ export default function Layout() {
     [isDarkTheme]
   );
 
+  // Product store hooks
   const {
     fetchProfile,
     logout,
@@ -60,15 +61,17 @@ export default function Layout() {
     cartItem,
   } = useProductStore();
 
+  // App state
   const [loading, setLoading] = useState(true);
   const [accepted, setAccepted] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
   const [updateInfo, setUpdateInfo] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(false);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null);
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
-  // Memoize loading view
+  // Memoize loading view for better performance
   const LoadingScreen = useMemo(
     () => (
       <View style={styles.loader}>
@@ -80,6 +83,8 @@ export default function Layout() {
 
   // Setup notification system only once
   useEffect(() => {
+    let subscription;
+
     const setupNotificationSystem = async () => {
       try {
         // Request notification permissions
@@ -95,12 +100,12 @@ export default function Layout() {
         await registerBackgroundNotifications();
 
         // Setup notification listener for app-wide handling
-        const subscription = setupNotificationListeners((notification) => {
+        subscription = setupNotificationListeners((notification) => {
           console.log("Notification received in root layout:", notification);
           const data = notification.request.content.data;
 
           // Handle different types of notifications
-          if (data.type === "expiration") {
+          if (data?.type === "expiration") {
             ToastAndroid.show(
               `${data.count || 1} item(s) have expired from your cart`,
               ToastAndroid.LONG
@@ -108,9 +113,11 @@ export default function Layout() {
 
             // Refresh cart only if expired items and user logged in
             if (user?.consumer_id) {
-              listCart(user.consumer_id).catch(console.error);
+              listCart(user.consumer_id).catch((error) =>
+                console.error("Error refreshing cart:", error)
+              );
             }
-          } else if (data.type === "reminder") {
+          } else if (data?.type === "reminder") {
             // Show reminder notifications
             ToastAndroid.show(
               notification.request.content.body,
@@ -119,96 +126,164 @@ export default function Layout() {
           }
         });
 
-        // Register background fetch task with proper configuration
-        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-          minimumInterval: 30 * 60, // 30 minutes
-          stopOnTerminate: false,
-          startOnBoot: true,
-          enableHeadless: true, // Enable headless mode for better background handling
-        });
+        try {
+          // Register background fetch task with proper configuration
+          await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+            minimumInterval: 30 * 60, // 30 minutes
+            stopOnTerminate: false,
+            startOnBoot: true,
+            enableHeadless: true, // Enable headless mode for better background handling
+          });
+        } catch (error) {
+          console.error("Failed to register background task:", error);
+        }
 
         // Save cart items to storage for background task access
         if (cartItem && cartItem.length > 0) {
-          await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
-          await updateCartNotifications(cartItem);
-        }
-
-        return () => {
-          if (subscription) {
-            subscription.remove();
+          try {
+            await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
+            await updateCartNotifications(cartItem);
+          } catch (error) {
+            console.error("Failed to save cart items:", error);
           }
-          BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
-            console.error
-          );
-        };
+        }
       } catch (error) {
         console.error("Failed to setup notifications:", error);
       }
     };
 
     setupNotificationSystem();
+
+    // Cleanup function
+    return () => {
+      if (subscription) {
+        subscription.remove();
+      }
+
+      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
+        (error) => console.error("Failed to unregister background task:", error)
+      );
+    };
   }, [user?.consumer_id, listCart, cartItem]);
 
   // Monitor connectivity once
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener((state) =>
-      setIsConnected(state.isConnected)
+      setIsConnected(!!state.isConnected)
     );
     return unsubscribe;
   }, []);
 
   // Check versions (debounced, no duplicate calls)
   useEffect(() => {
-    (async () => {
+    let isMounted = true;
+
+    const checkVersions = async () => {
       if (!isConnected) return;
+
       try {
         const versions = await getAppVersions();
 
+        if (!isMounted) return;
+
         const needed = checkForUpdate(currentVersion, versions);
         if (needed) setUpdateInfo(needed);
-      } catch (e) {
-        console.error(e);
+      } catch (error) {
+        console.error("Failed to check for updates:", error);
       }
-    })();
+    };
+
+    checkVersions();
+
+    return () => {
+      isMounted = false;
+    };
   }, [isConnected, getAppVersions, currentVersion]);
 
-  // Terms acceptance
+  // Check onboarding status
   useEffect(() => {
-    SplashScreen.preventAutoHideAsync();
-    (async () => {
-      const stored = await AsyncStorage.getItem("hasAcceptedTerms");
-      setAccepted(stored === "true");
-      setLoading(false);
-    })();
+    let isMounted = true;
+
+    const loadInitialState = async () => {
+      try {
+        await SplashScreen.preventAutoHideAsync();
+
+        // Check if user has completed onboarding
+        const onboardingCompleted = await AsyncStorage.getItem(
+          "hasCompletedOnboarding"
+        );
+
+        // Check terms acceptance
+        const stored = await AsyncStorage.getItem("hasAcceptedTerms");
+
+        if (!isMounted) return;
+
+        setHasCompletedOnboarding(onboardingCompleted === "true");
+        setAccepted(stored === "true");
+      } catch (error) {
+        console.error("Error loading onboarding state:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          SplashScreen.hideAsync().catch(console.warn);
+        }
+      }
+    };
+
+    loadInitialState();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Theme & nav bar
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
-    NavigationBar.setBackgroundColorAsync(theme.colors.primary);
+    NavigationBar.setBackgroundColorAsync(theme.colors.primary).catch((error) =>
+      console.error("Failed to set navigation bar color:", error)
+    );
   }, [colorScheme, initializeTheme, theme.colors.primary]);
 
-  // Authentication & routing
+  // Handle routing based on auth state
   useEffect(() => {
-    if (loading || accepted === null) return;
+    if (loading || hasCompletedOnboarding === null || accepted === null) return;
+
+    // Skip navigation if user hasn't completed onboarding or accepted terms
+    if (hasCompletedOnboarding === false || accepted === false) return;
+
+    // Check if user session is valid (less than 7 days old)
     const isLoggedIn =
       user?.timestamp && Date.now() - user.timestamp <= 7 * 24 * 3600 * 1000;
-    SplashScreen.hideAsync().catch(console.warn);
-    if (!accepted) return;
-    if (!isLoggedIn && user) logout();
-    router.replace(isLoggedIn ? "/(tabs)" : "/Login");
-  }, [loading, accepted, user, logout, router]);
 
-  // Fetch user data on valid session
+    // If user session is invalid but user exists, log them out
+    if (!isLoggedIn && user) logout();
+
+    // Navigate to appropriate screen
+    router.replace(isLoggedIn ? "/(tabs)" : "/Login");
+  }, [loading, accepted, hasCompletedOnboarding, user, logout, router]);
+
+  // Fetch user data when session is valid and connected
   useEffect(() => {
-    if (user?.consumer_id && isConnected && accepted) {
-      Promise.all([
-        fetchProfile(user.consumer_id),
-        listCart(user.consumer_id),
-        fetchBillingAddresses(user.consumer_id),
-        listOrders(user.consumer_id),
-      ]).catch(console.error);
-    }
+    if (!user?.consumer_id || !isConnected || !accepted) return;
+
+    // Fetch all user data in parallel
+    Promise.all([
+      fetchProfile(user.consumer_id).catch((e) =>
+        console.error("Error fetching profile:", e)
+      ),
+      listCart(user.consumer_id).catch((e) =>
+        console.error("Error fetching cart:", e)
+      ),
+      fetchBillingAddresses(user.consumer_id).catch((e) =>
+        console.error("Error fetching addresses:", e)
+      ),
+      listOrders(user.consumer_id).catch((e) =>
+        console.error("Error fetching orders:", e)
+      ),
+    ]).catch((error) => {
+      console.error("Error fetching user data:", error);
+    });
   }, [
     user?.consumer_id,
     isConnected,
@@ -219,22 +294,55 @@ export default function Layout() {
     listOrders,
   ]);
 
-  if (loading || accepted === null) return LoadingScreen;
+  // Handle completing the onboarding process
+  const handleCompleteOnboarding = async () => {
+    try {
+      await AsyncStorage.setItem("hasAcceptedTerms", "true");
+      await AsyncStorage.setItem("hasCompletedOnboarding", "true");
 
+      setAccepted(true);
+      setHasCompletedOnboarding(true);
+    } catch (error) {
+      console.error("Error saving onboarding state:", error);
+
+      // Still try to update state even if storage fails
+      setAccepted(true);
+      setHasCompletedOnboarding(true);
+    }
+  };
+
+  // Show loading screen while initializing
+  if (loading) {
+    return LoadingScreen;
+  }
+
+  // Show intro screen if user hasn't completed onboarding
+  if (hasCompletedOnboarding === false) {
+    return (
+      <PaperProvider theme={theme}>
+        <StatusBar style={isDarkTheme ? "light" : "dark"} />
+        <IntroScreen theme={theme} onComplete={handleCompleteOnboarding} />
+      </PaperProvider>
+    );
+  }
+
+  // Main app UI
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       <ActionSheetProvider>
         <Suspense fallback={LoadingScreen}>
           <PaperProvider theme={theme}>
             <StatusBar style={isDarkTheme ? "light" : "dark"} />
+
             {!accepted ? (
-              <TermsModal
-                onAccept={async () => {
-                  await AsyncStorage.setItem("hasAcceptedTerms", "true");
-                  setAccepted(true);
-                }}
+              // If terms not accepted yet, show the Terms modal via IntroScreen
+              <IntroScreen
+                theme={theme}
+                startAtConsent={true}
+                onComplete={handleCompleteOnboarding}
               />
             ) : (
+              // Main app navigation stack
               <Stack
                 screenOptions={{
                   headerTitleAlign: "center",
@@ -248,16 +356,20 @@ export default function Layout() {
                 <Stack.Screen name="Login" options={{ headerShown: false }} />
               </Stack>
             )}
+
+            {/* Show no internet alert when needed */}
             {accepted && !isConnected && (
               <AlertDialog
                 visible={!isConnected}
                 title="No Internet"
                 message="Check your connection"
                 onConfirm={() =>
-                  NetInfo.fetch().then((s) => setIsConnected(s.isConnected))
+                  NetInfo.fetch().then((s) => setIsConnected(!!s.isConnected))
                 }
               />
             )}
+
+            {/* Show update modal when an update is available */}
             {updateInfo && (
               <UpdateModal
                 visible={true}
@@ -268,11 +380,17 @@ export default function Layout() {
           </PaperProvider>
         </Suspense>
       </ActionSheetProvider>
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: {
+    flex: 1,
+  },
+  loader: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
 });
