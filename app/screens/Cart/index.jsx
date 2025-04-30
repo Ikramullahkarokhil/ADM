@@ -1,5 +1,5 @@
 import AlertDialog from "../../../components/ui/AlertDialog";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -82,6 +82,53 @@ const Cart = () => {
     }
   };
 
+  // Filter out expired items (items added more than 24 hours ago)
+  const validCartItems = useMemo(() => {
+    if (!cartItem || cartItem.length === 0) return [];
+
+    const currentTime = Date.now();
+    return cartItem.filter((item) => {
+      const timeAdded = parseCartItemDate(item.date);
+      if (!timeAdded) return true; // Keep items with no date
+
+      return currentTime - timeAdded < CART_TIMEOUT;
+    });
+  }, [cartItem]);
+
+  // Auto-remove expired items from cart
+  useEffect(() => {
+    const autoRemoveExpiredItems = async () => {
+      if (!user?.consumer_id || !cartItem || cartItem.length === 0) return;
+
+      const currentTime = Date.now();
+      const expiredItems = cartItem.filter((item) => {
+        const timeAdded = parseCartItemDate(item.date);
+        if (!timeAdded) return false;
+        return currentTime - timeAdded >= CART_TIMEOUT;
+      });
+
+      // Remove expired items from cart
+      for (const item of expiredItems) {
+        try {
+          await deleteFromCart({
+            productID: item.consumer_cart_items_id,
+            consumerID: user.consumer_id,
+          });
+        } catch (error) {
+          console.error("Failed to auto-remove expired item:", error);
+        }
+      }
+
+      if (expiredItems.length > 0) {
+        console.log(
+          `Automatically removed ${expiredItems.length} expired items from cart`
+        );
+      }
+    };
+
+    autoRemoveExpiredItems();
+  }, [cartItem, user?.consumer_id, deleteFromCart]);
+
   const handleRemoveFromCart = useCallback(
     async (item) => {
       try {
@@ -108,7 +155,8 @@ const Cart = () => {
     });
   }, []);
 
-  const selectedItems = cartItem.filter((item) =>
+  // Update to use validCartItems
+  const selectedItems = validCartItems.filter((item) =>
     selectedIds.has(item.consumer_cart_items_id)
   );
 
@@ -211,7 +259,7 @@ const Cart = () => {
         <TouchableOpacity
           style={styles.clearButton}
           onPress={() => {
-            if (cartItem.length > 0) {
+            if (validCartItems.length > 0) {
               setAlertConfig({
                 title: "Clear Cart",
                 message:
@@ -226,13 +274,13 @@ const Cart = () => {
               });
             }
           }}
-          disabled={cartItem.length === 0}
+          disabled={validCartItems.length === 0}
         >
           <MaterialCommunityIcons
             name="cart-remove"
             size={24}
             color={
-              cartItem.length > 0
+              validCartItems.length > 0
                 ? theme.colors.textColor
                 : theme.colors.inactiveColor
             }
@@ -489,22 +537,20 @@ const Cart = () => {
     <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <CustomHeader />
       <FlatList
-        data={cartItem}
+        data={validCartItems}
         renderItem={renderItem}
         keyExtractor={(item) => item.consumer_cart_items_id}
         contentContainerStyle={[
           styles.list,
-          cartItem.length === 0 && styles.emptyList,
+          validCartItems.length === 0 && styles.emptyList,
         ]}
         ListEmptyComponent={renderEmptyCart}
-        ItemSeparatorComponent={() => <Divider style={styles.divider} />}
         refreshing={refreshing}
         onRefresh={onRefresh}
-        showsVerticalScrollIndicator={false}
       />
-      {renderFooter()}
 
-      {/* Unified Alert Dialog */}
+      {validCartItems.length > 0 && renderFooter()}
+
       {alertConfig && (
         <AlertDialog
           visible={true}

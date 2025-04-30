@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Image,
   Dimensions,
-  StatusBar,
   Pressable,
   ActivityIndicator,
   ScrollView,
@@ -20,8 +19,12 @@ import Animated, {
   withDelay,
   Easing,
   withSequence,
+  FadeIn,
+  FadeOut,
 } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import useThemeStore from "../../components/store/useThemeStore";
+import { StatusBar } from "expo-status-bar";
 
 const { width, height } = Dimensions.get("window");
 const AnimatedButton = Animated.createAnimatedComponent(Button);
@@ -30,41 +33,50 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
   const [currentStep, setCurrentStep] = useState(startAtConsent ? 2 : 0);
   const totalSteps = 3;
+  const { isDarkTheme } = useThemeStore();
 
   // Animation values
   const contentOpacity = useSharedValue(0);
   const buttonOpacity = useSharedValue(0);
   const buttonScale = useSharedValue(1);
+  const contentTranslateY = useSharedValue(20);
 
   // Set up animations when step changes
   useEffect(() => {
     // Reset animations on step change
     contentOpacity.value = 0;
     buttonOpacity.value = 0;
+    contentTranslateY.value = 20;
 
     // Animate in with slight delay
     setTimeout(() => {
-      // Simple fade in for content
+      // Fade in and slide up for content
       contentOpacity.value = withTiming(1, {
-        duration: 600,
+        duration: 800,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      });
+
+      contentTranslateY.value = withTiming(0, {
+        duration: 800,
         easing: Easing.bezier(0.25, 0.1, 0.25, 1),
       });
 
       // Slightly delayed fade in for button
       buttonOpacity.value = withDelay(
-        300,
+        400,
         withTiming(1, {
-          duration: 500,
+          duration: 600,
           easing: Easing.bezier(0.25, 0.1, 0.25, 1),
         })
       );
-    }, 50);
+    }, 100);
   }, [currentStep]);
 
   // Content animation style
   const contentAnimatedStyle = useAnimatedStyle(() => {
     return {
       opacity: contentOpacity.value,
+      transform: [{ translateY: contentTranslateY.value }],
     };
   });
 
@@ -80,7 +92,7 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
   const handleButtonPress = useCallback(() => {
     // Animate button scale down and up
     buttonScale.value = withSequence(
-      withTiming(0.95, { duration: 100 }),
+      withTiming(0.97, { duration: 100 }),
       withTiming(1, { duration: 100 })
     );
 
@@ -95,7 +107,7 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
   // Handle terms acceptance
   const handleAccept = useCallback(() => {
     buttonScale.value = withSequence(
-      withTiming(0.95, { duration: 100 }),
+      withTiming(0.97, { duration: 100 }),
       withTiming(1, { duration: 100 })
     );
     setTimeout(() => onComplete(), 200);
@@ -130,8 +142,9 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               backgroundColor:
                 index === currentStep
                   ? theme.colors.button
-                  : theme.colors.button + "40",
-              width: index === currentStep ? 24 : 10,
+                  : theme.colors.button + "30",
+              width: index === currentStep ? 18 : 6,
+              height: index === currentStep ? 6 : 6,
             },
           ]}
         />
@@ -145,13 +158,13 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
 
     return (
       <TouchableOpacity
-        style={[styles.backButton, { backgroundColor: theme.colors.primary }]}
+        style={[styles.backButton]}
         onPress={handlePreviousStep}
         hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
       >
         <MaterialCommunityIcons
-          name="chevron-left"
-          size={28}
+          name="arrow-left"
+          size={24}
           color={theme.colors.button}
         />
       </TouchableOpacity>
@@ -163,27 +176,24 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
     switch (currentStep) {
       case 0: // Intro Screen
         return (
-          <View style={styles.container}>
-            <StatusBar
-              translucent
-              backgroundColor="transparent"
-              barStyle="dark-content"
-            />
-            <View style={styles.background}>
-              <View
-                style={[
-                  styles.gradientOverlay,
-                  { backgroundColor: theme.colors.primary },
-                ]}
-              />
-            </View>
+          <View
+            style={[
+              styles.container,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
+            <StatusBar style={isDarkTheme ? "light" : "dark"} />
 
             <BackButton />
             <ProgressIndicator />
 
             <Animated.View style={[styles.content, contentAnimatedStyle]}>
               <Image
-                source={require("../../assets/images/darkLogo.png")}
+                source={
+                  isDarkTheme
+                    ? require("../../assets/images/lightLogo.png")
+                    : require("../../assets/images/darkLogo.png")
+                }
                 style={styles.logo}
                 resizeMode="contain"
               />
@@ -193,7 +203,10 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               </Text>
 
               <Text
-                style={[styles.description, { color: theme.colors.textColor }]}
+                style={[
+                  styles.description,
+                  { color: theme.colors.textColor + "99" },
+                ]}
               >
                 Your one-stop solution for shopping with a seamless experience
                 and wide range of products delivered to your doorstep.
@@ -222,7 +235,6 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
                     { color: theme.colors.buttonText },
                   ]}
                   onPress={handleButtonPress}
-                  icon="arrow-right"
                 >
                   Get Started
                 </Button>
@@ -233,7 +245,12 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
 
       case 1: // Features Screen
         return (
-          <View style={styles.container}>
+          <View
+            style={[
+              styles.container,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
             <BackButton />
             <ProgressIndicator />
             <FeaturesView
@@ -241,13 +258,19 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               onNext={handleButtonPress}
               contentOpacity={contentOpacity}
               buttonOpacity={buttonOpacity}
+              contentTranslateY={contentTranslateY}
             />
           </View>
         );
 
       case 2: // Consent Screen
         return (
-          <View style={styles.container}>
+          <View
+            style={[
+              styles.container,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          >
             <StatusBar
               translucent
               backgroundColor="transparent"
@@ -261,6 +284,7 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               onDecline={handleDecline}
               contentOpacity={contentOpacity}
               buttonOpacity={buttonOpacity}
+              contentTranslateY={contentTranslateY}
             />
           </View>
         );
@@ -274,30 +298,13 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
 };
 
 // Simplified Features view (moved from FeaturesScreen.jsx)
-const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
-  const featureItemsOpacity = useSharedValue([1, 1, 1, 1, 1]); // Initialize with 1 for immediate visibility
-
-  // Set up animations
-  useEffect(() => {
-    // We'll simplify the animation to ensure features are visible
-    featureItemsOpacity.value = [1, 1, 1, 1, 1];
-  }, []);
-
-  // Content animation
-  const contentAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: contentOpacity.value,
-    };
-  });
-
-  // Button animation
-  const buttonAnimatedStyle = useAnimatedStyle(() => {
-    return {
-      opacity: buttonOpacity.value,
-    };
-  });
-
-  // Features data
+const FeaturesView = ({
+  theme,
+  onNext,
+  contentOpacity,
+  buttonOpacity,
+  contentTranslateY,
+}) => {
   const features = [
     {
       icon: "cart-outline",
@@ -326,12 +333,20 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
     },
   ];
 
-  // Generate animated styles for each feature item - simplified to ensure visibility
-  const getFeatureAnimatedStyle = (index) => {
+  // Content animation
+  const contentAnimatedStyle = useAnimatedStyle(() => {
     return {
-      opacity: 1, // Always visible
+      opacity: contentOpacity.value,
+      transform: [{ translateY: contentTranslateY.value }],
     };
-  };
+  });
+
+  // Button animation
+  const buttonAnimatedStyle = useAnimatedStyle(() => {
+    return {
+      opacity: buttonOpacity.value,
+    };
+  });
 
   return (
     <View style={styles.featuresMainContainer}>
@@ -341,7 +356,10 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
         </Text>
 
         <Text
-          style={[styles.featuresSubtitle, { color: theme.colors.textColor }]}
+          style={[
+            styles.featuresSubtitle,
+            { color: theme.colors.textColor + "99" },
+          ]}
         >
           Discover what our app can do for you
         </Text>
@@ -352,24 +370,23 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
           showsVerticalScrollIndicator={false}
         >
           {features.map((feature, index) => (
-            <TouchableOpacity
+            <Animated.View
+              entering={FadeIn.delay(200 + index * 100).duration(400)}
               style={[
                 styles.featureItem,
                 { backgroundColor: theme.colors.background },
-                getFeatureAnimatedStyle(index),
               ]}
-              activeOpacity={0.7}
               key={index}
             >
               <View
                 style={[
                   styles.iconContainer,
-                  { backgroundColor: theme.colors.primary + "20" },
+                  { backgroundColor: theme.colors.primary + "15" },
                 ]}
               >
                 <MaterialCommunityIcons
                   name={feature.icon}
-                  size={28}
+                  size={24}
                   color={theme.colors.button}
                 />
               </View>
@@ -385,13 +402,13 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
                 <Text
                   style={[
                     styles.featureDescription,
-                    { color: theme.colors.inactiveColor },
+                    { color: theme.colors.textColor + "99" },
                   ]}
                 >
                   {feature.description}
                 </Text>
               </View>
-            </TouchableOpacity>
+            </Animated.View>
           ))}
         </ScrollView>
       </Animated.View>
@@ -402,7 +419,7 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
           buttonAnimatedStyle,
           {
             backgroundColor: theme.colors.primary,
-            borderTopColor: theme.colors.inactiveColor,
+            borderTopColor: theme.colors.inactiveColor + "20",
           },
         ]}
       >
@@ -415,7 +432,6 @@ const FeaturesView = ({ theme, onNext, contentOpacity, buttonOpacity }) => {
           contentStyle={styles.buttonContent}
           labelStyle={[styles.buttonLabel, { color: theme.colors.buttonText }]}
           onPress={onNext}
-          icon="arrow-right"
         >
           Continue
         </Button>
@@ -431,11 +447,13 @@ const ConsentView = ({
   onDecline,
   contentOpacity,
   buttonOpacity,
+  contentTranslateY,
 }) => {
   const [loading, setLoading] = useState(false);
 
   const contentAnimStyle = useAnimatedStyle(() => ({
     opacity: contentOpacity.value,
+    transform: [{ translateY: contentTranslateY.value }],
   }));
 
   const buttonsAnimStyle = useAnimatedStyle(() => ({
@@ -475,9 +493,11 @@ const ConsentView = ({
         <ScrollView
           style={styles.consentScrollView}
           contentContainerStyle={styles.termsContent}
-          showsVerticalScrollIndicator={true}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             Welcome to ADM! Before you start using our app, please take a moment
             to read and accept our terms and conditions.
           </Text>
@@ -490,7 +510,9 @@ const ConsentView = ({
           >
             1. Acceptance of Terms
           </Text>
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             By using our application, you agree to be bound by these Terms of
             Service and all applicable laws and regulations. If you do not agree
             with any of these terms, you are prohibited from using this
@@ -505,7 +527,9 @@ const ConsentView = ({
           >
             2. Privacy Policy
           </Text>
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             Your use of our application is also subject to our Privacy Policy,
             which outlines how we collect, use, and protect your personal
             information.
@@ -519,7 +543,9 @@ const ConsentView = ({
           >
             3. User Account
           </Text>
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             You are responsible for maintaining the confidentiality of your
             account information and for all activities that occur under your
             account.
@@ -533,7 +559,9 @@ const ConsentView = ({
           >
             4. Product Information and Pricing
           </Text>
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             We strive to provide accurate product information, but we do not
             warrant that product descriptions or other content is accurate,
             complete, reliable, current, or error-free.
@@ -547,7 +575,9 @@ const ConsentView = ({
           >
             5. Payments and Orders
           </Text>
-          <Text style={[styles.termsText, { color: theme.colors.textColor }]}>
+          <Text
+            style={[styles.termsText, { color: theme.colors.textColor + "99" }]}
+          >
             All payments are processed securely. By placing an order, you agree
             to pay the specified amount and provide accurate billing
             information.
@@ -561,7 +591,10 @@ const ConsentView = ({
               Privacy Policy
             </Text>
             <Text
-              style={[styles.separatorText, { color: theme.colors.textColor }]}
+              style={[
+                styles.separatorText,
+                { color: theme.colors.textColor + "60" },
+              ]}
             >
               •
             </Text>
@@ -580,9 +613,9 @@ const ConsentView = ({
           styles.consentButtonContainer,
           buttonsAnimStyle,
           {
-            backgroundColor: theme.colors.primay,
-            borderTopColor: theme.colors.inactiveColor,
-            borderTopWidth: 0.3,
+            backgroundColor: theme.colors.primary,
+            borderTopColor: theme.colors.inactiveColor + "20",
+            borderTopWidth: 1,
           },
         ]}
       >
@@ -614,7 +647,6 @@ const ConsentView = ({
           onPress={handleAcceptPress}
           loading={loading}
           disabled={loading}
-          icon="check"
         >
           Accept
         </Button>
@@ -626,27 +658,11 @@ const ConsentView = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-  },
-  background: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-  },
-  gradientOverlay: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: height * 0.6,
-    opacity: 0.05,
   },
   content: {
     flex: 1,
@@ -655,15 +671,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   logo: {
-    width: width * 0.5,
-    height: width * 0.5,
-    marginBottom: 24,
+    width: width * 0.4,
+    height: width * 0.4,
+    marginBottom: 32,
   },
   title: {
-    fontSize: 32,
-    fontWeight: "bold",
+    fontSize: 28,
+    fontWeight: "600",
     textAlign: "center",
     marginBottom: 16,
+    letterSpacing: 0.2,
   },
   description: {
     fontSize: 16,
@@ -671,6 +688,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginBottom: 24,
     paddingHorizontal: 12,
+    letterSpacing: 0.1,
   },
   buttonContainer: {
     width: "100%",
@@ -682,22 +700,22 @@ const styles = StyleSheet.create({
   },
   button: {
     width: "100%",
-    borderRadius: 12,
-    elevation: 4,
+    borderRadius: 8,
+    elevation: 0,
   },
   buttonContent: {
-    height: 60,
+    height: 52,
   },
   buttonLabel: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "500",
     textTransform: "none",
+    letterSpacing: 0.2,
   },
 
   // Features View styles
   featuresMainContainer: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   featuresContent: {
     flex: 1,
@@ -705,34 +723,39 @@ const styles = StyleSheet.create({
     paddingTop: 60,
   },
   featuresTitle: {
-    fontSize: 32,
-    fontWeight: "bold",
+    fontSize: 28,
+    fontWeight: "600",
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: 8,
+    letterSpacing: 0.2,
   },
   featuresSubtitle: {
     fontSize: 16,
     textAlign: "center",
     marginBottom: 30,
-    opacity: 0.8,
+    letterSpacing: 0.1,
   },
   featuresScrollView: {
     flex: 1,
   },
   featuresScrollContent: {
     paddingBottom: 100,
+    paddingHorizontal: 4,
   },
   featureItem: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 16,
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 12,
+    elevation: 0,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.05)",
   },
   iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
@@ -741,13 +764,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   featureTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 4,
+    letterSpacing: 0.1,
   },
   featureDescription: {
     fontSize: 14,
     lineHeight: 20,
+    letterSpacing: 0.1,
   },
   bottomButtonContainer: {
     position: "absolute",
@@ -755,20 +780,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-    paddingTop: 10,
-    borderTopWidth: 0.3,
+    paddingBottom: 24,
+    paddingTop: 16,
+    borderTopWidth: 1,
   },
   featuresButton: {
     width: "100%",
-    borderRadius: 12,
-    elevation: 4,
+    borderRadius: 8,
+    elevation: 0,
   },
 
   // Consent View styles
   consentMainContainer: {
     flex: 1,
-    backgroundColor: "#fff",
   },
   consentContent: {
     flex: 1,
@@ -778,9 +802,10 @@ const styles = StyleSheet.create({
   },
   consentTitle: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "600",
     textAlign: "center",
-    marginBottom: 10,
+    marginBottom: 16,
+    letterSpacing: 0.2,
   },
   consentScrollView: {
     flex: 1,
@@ -788,28 +813,31 @@ const styles = StyleSheet.create({
   },
   termsContent: {
     paddingBottom: 20,
+    paddingHorizontal: 4,
   },
   termsText: {
     fontSize: 15,
     lineHeight: 22,
     marginBottom: 16,
+    letterSpacing: 0.1,
   },
   termsSectionTitle: {
     fontSize: 17,
-    fontWeight: "bold",
+    fontWeight: "600",
     marginTop: 8,
     marginBottom: 8,
+    letterSpacing: 0.1,
   },
   linkContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 16,
+    marginTop: 24,
     marginBottom: 8,
   },
   linkText: {
     fontSize: 15,
-    textDecorationLine: "underline",
+    letterSpacing: 0.1,
   },
   separatorText: {
     marginHorizontal: 8,
@@ -820,31 +848,32 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     paddingHorizontal: 20,
-    paddingBottom: 20,
-
-    paddingTop: 10,
+    paddingBottom: 24,
+    paddingTop: 16,
     flexDirection: "row",
   },
   declineButton: {
     flex: 1,
-    marginRight: 10,
-    borderRadius: 12,
-    borderWidth: 2,
+    marginRight: 12,
+    borderRadius: 8,
+    borderWidth: 1,
   },
   acceptButton: {
     flex: 1.5,
-    borderRadius: 12,
-    elevation: 4,
+    borderRadius: 8,
+    elevation: 0,
   },
   declineButtonLabel: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "500",
     textTransform: "none",
+    letterSpacing: 0.1,
   },
   acceptButtonLabel: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "500",
     textTransform: "none",
+    letterSpacing: 0.1,
   },
 
   // Progress indicator styles
@@ -853,21 +882,20 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     position: "absolute",
-    top: 40,
+    top: 48,
     left: 0,
     right: 0,
     zIndex: 10,
   },
   progressDot: {
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 4,
+    borderRadius: 3,
+    marginHorizontal: 3,
   },
 
   // Back button
   backButton: {
     position: "absolute",
-    top: 40,
+    top: 48,
     left: 16,
     zIndex: 10,
     width: 40,
@@ -875,8 +903,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-
-    elevation: 5,
   },
 });
 

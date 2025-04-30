@@ -17,7 +17,6 @@ import * as BackgroundFetch from "expo-background-fetch";
 import { enableScreens } from "react-native-screens";
 import Constants from "expo-constants";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
-import * as Notifications from "expo-notifications";
 import {
   requestNotificationPermissions,
   registerBackgroundNotifications,
@@ -84,6 +83,7 @@ export default function Layout() {
   // Setup notification system only once
   useEffect(() => {
     let subscription;
+    let isFirstLoad = true;
 
     const setupNotificationSystem = async () => {
       try {
@@ -142,7 +142,13 @@ export default function Layout() {
         if (cartItem && cartItem.length > 0) {
           try {
             await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
-            await updateCartNotifications(cartItem);
+
+            // Only update notifications if this isn't the first app load
+            // This prevents notifications from showing immediately on app open
+            if (!isFirstLoad) {
+              await updateCartNotifications(cartItem);
+            }
+            isFirstLoad = false;
           } catch (error) {
             console.error("Failed to save cart items:", error);
           }
@@ -240,6 +246,15 @@ export default function Layout() {
   // Theme & nav bar
   useEffect(() => {
     initializeTheme(colorScheme === "dark");
+
+    // Then force update for system theme mode with current values
+    const { themeMode } = useThemeStore.getState();
+    if (themeMode === "system") {
+      setTimeout(() => {
+        useThemeStore.getState().setThemeMode("system", colorScheme === "dark");
+      }, 50);
+    }
+
     NavigationBar.setBackgroundColorAsync(theme.colors.primary).catch((error) =>
       console.error("Failed to set navigation bar color:", error)
     );
@@ -328,7 +343,7 @@ export default function Layout() {
 
   // Main app UI
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: theme.colors.primary }]}>
       <ActionSheetProvider>
         <Suspense fallback={LoadingScreen}>
           <PaperProvider theme={theme}>
@@ -350,6 +365,7 @@ export default function Layout() {
                   headerTintColor: theme.colors.textColor,
                   lazy: true,
                   detachInactiveScreens: true,
+                  freezeOnBlur: true,
                 }}
               >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />

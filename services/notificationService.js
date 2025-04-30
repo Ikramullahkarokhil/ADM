@@ -66,12 +66,22 @@ export const loadCartItems = async () => {
 const calculateNotificationTimes = (addedTime, expirationTime, currentTime) => {
   const notificationTimes = [];
 
+  // Calculate the next 6-hour interval from current time
+  const timeElapsedSinceAdd = currentTime - addedTime;
+  const intervalsPassed = Math.floor(timeElapsedSinceAdd / SIX_HOURS);
+  const nextInterval = addedTime + (intervalsPassed + 1) * SIX_HOURS;
+
   // Add notifications at 6-hour intervals
-  let notificationTime = addedTime + SIX_HOURS;
+  let notificationTime = nextInterval;
+
+  // Ensure first notification is in the future
+  while (notificationTime < currentTime + 60000) {
+    notificationTime += SIX_HOURS;
+  }
+
+  // Add all future 6-hour interval notifications
   while (notificationTime < expirationTime - ONE_HOUR) {
-    if (notificationTime > currentTime) {
-      notificationTimes.push(notificationTime);
-    }
+    notificationTimes.push(notificationTime);
     notificationTime += SIX_HOURS;
   }
 
@@ -88,11 +98,24 @@ const calculateNotificationTimes = (addedTime, expirationTime, currentTime) => {
   }
 
   // Add expiration notification
-  if (expirationTime > currentTime) {
-    notificationTimes.push(expirationTime);
-  }
+  notificationTimes.push(expirationTime);
 
   return notificationTimes;
+};
+
+// Check if an item is actually expired
+const isItemExpired = (timeAdded) => {
+  if (!timeAdded) return false;
+  const currentTime = Date.now();
+  return currentTime - timeAdded >= CART_TIMEOUT;
+};
+
+// Check if an item is about to expire (within 15 minutes)
+const isItemAboutToExpire = (timeAdded) => {
+  if (!timeAdded) return false;
+  const currentTime = Date.now();
+  const timeUntilExpiration = timeAdded + CART_TIMEOUT - currentTime;
+  return timeUntilExpiration > 0 && timeUntilExpiration <= 15 * 60 * 1000; // 15 minutes
 };
 
 // Schedule notifications for cart items
@@ -101,6 +124,21 @@ const scheduleCartNotifications = async (cartItems) => {
 
   // Cancel existing notifications to avoid duplicates
   await Notifications.cancelAllScheduledNotificationsAsync();
+
+  // Separate items into active and about-to-expire
+  const activeItems = [];
+  const expiringItems = [];
+
+  cartItems.forEach((item) => {
+    const timeAdded = parseCartItemDate(item.date);
+    if (!timeAdded) return;
+
+    if (isItemAboutToExpire(timeAdded)) {
+      expiringItems.push(item);
+    } else if (!isItemExpired(timeAdded)) {
+      activeItems.push(item);
+    }
+  });
 
   const currentTime = Date.now();
   const scheduledNotifications = [];
@@ -111,21 +149,23 @@ const scheduleCartNotifications = async (cartItems) => {
   );
 
   // Prevent notification spam by ensuring we don't send notifications too frequently
+  // But allow expiration notifications to bypass this check
   if (
     lastNotificationTime &&
-    currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES
+    currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES &&
+    expiringItems.length === 0
   ) {
     console.log("Skipping notifications - too soon since last notification");
     return;
   }
 
-  // Group notifications if there are multiple items
-  if (cartItems.length > 1) {
-    // Find the earliest expiration time
+  // Schedule notifications for regular active items first
+  if (activeItems.length > 1) {
+    // Group notifications for multiple items
     let earliestExpiration = Infinity;
     let earliestAddedTime = Infinity;
 
-    for (const item of cartItems) {
+    for (const item of activeItems) {
       const timeAdded = parseCartItemDate(item.date);
       if (!timeAdded) continue;
 
@@ -155,11 +195,11 @@ const scheduleCartNotifications = async (cartItems) => {
             content: {
               title: isExpiration ? "Cart Items Expired" : "Cart Reminder",
               body: isExpiration
-                ? `${cartItems.length} items have been removed from your cart due to expiration.`
-                : `You have ${cartItems.length} items in your cart that will expire in ${hoursRemaining} hours`,
+                ? `${activeItems.length} items have been removed from your cart due to expiration.`
+                : `You have ${activeItems.length} items in your cart that will expire in ${hoursRemaining} hours`,
               data: {
                 type: isExpiration ? "expiration" : "reminder",
-                count: cartItems.length,
+                count: activeItems.length,
               },
             },
             trigger: {
@@ -172,9 +212,9 @@ const scheduleCartNotifications = async (cartItems) => {
         );
       }
     }
-  } else {
+  } else if (activeItems.length === 1) {
     // Single item notification
-    const item = cartItems[0];
+    const item = activeItems[0];
     const timeAdded = parseCartItemDate(item.date);
 
     if (!timeAdded) return;
@@ -214,6 +254,35 @@ const scheduleCartNotifications = async (cartItems) => {
         })
       );
     }
+  }
+
+  // Now schedule immediate expiration notifications for items about to expire
+  for (const item of expiringItems) {
+    const timeAdded = parseCartItemDate(item.date);
+    if (!timeAdded) continue;
+
+    const expirationTime = timeAdded + CART_TIMEOUT;
+    const secondsUntilExpiration = Math.max(
+      1,
+      Math.floor((expirationTime - currentTime) / 1000)
+    );
+
+    scheduledNotifications.push(
+      Notifications.scheduleNotificationAsync({
+        content: {
+          title: "Cart Item Expiring Soon",
+          body: `"${item.title}" will expire from your cart very soon.`,
+          data: {
+            itemId: item.consumer_cart_items_id,
+            title: item.title,
+            type: "expiration",
+          },
+        },
+        trigger: {
+          seconds: secondsUntilExpiration,
+        },
+      })
+    );
   }
 
   // Wait for all notifications to be scheduled
@@ -262,9 +331,23 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
     const currentTime = Date.now();
 
     // Only check for notifications if it's been at least 30 minutes since the last one
+    // Unless there are items about to expire
+    const cartItems = await loadCartItems();
+    if (!cartItems || !cartItems.length) {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    // Check if any items are about to expire
+    const hasExpiringItems = cartItems.some((item) => {
+      const timeAdded = parseCartItemDate(item.date);
+      return timeAdded && isItemAboutToExpire(timeAdded);
+    });
+
+    // Skip if too soon since last notification and no expiring items
     if (
       lastNotificationTime &&
-      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES
+      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES &&
+      !hasExpiringItems
     ) {
       console.log(
         "Skipping notification check - too soon since last notification"
@@ -272,13 +355,7 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 
-    const cartItems = await loadCartItems();
-
-    if (!cartItems || !cartItems.length) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
-
-    // Schedule notifications for all items
+    // Schedule notifications with all cart items
     await scheduleCartNotifications(cartItems);
 
     // Record the time of this notification check
@@ -300,7 +377,6 @@ export const registerBackgroundNotifications = async () => {
       startOnBoot: true,
       enableHeadless: true,
     });
-    console.log("Background notifications registered");
   } catch (error) {
     console.error("Background fetch registration failed:", error);
   }

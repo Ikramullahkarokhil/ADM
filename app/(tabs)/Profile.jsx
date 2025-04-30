@@ -191,6 +191,18 @@ const Profile = () => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  // Listen for system theme changes and update if using system theme
+  useEffect(() => {
+    // This effect should only update the theme when it's set to system
+    if (themeMode === "system") {
+      // Add a small delay to ensure this is processed after other operations
+      const timer = setTimeout(() => {
+        setThemeMode("system", colorScheme === "dark");
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [colorScheme, setThemeMode, themeMode]);
+
   const handleDeleteAccount = async () => {
     try {
       await deleteConsumerAccount(profileData.consumer_id);
@@ -228,7 +240,17 @@ const Profile = () => {
         ) {
           const themeOptions = ["system", "light", "dark"];
           const selectedTheme = themeOptions[selectedIndex];
+
+          // For system theme, use the current colorScheme value from the component closure
           await setThemeMode(selectedTheme, colorScheme === "dark");
+
+          // Additional check for system theme to ensure it applies correctly
+          if (selectedTheme === "system") {
+            // Force an immediate update with the current system value
+            setTimeout(() => {
+              setThemeMode("system", colorScheme === "dark");
+            }, 50);
+          }
         }
       }
     );

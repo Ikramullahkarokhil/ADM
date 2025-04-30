@@ -14,7 +14,6 @@ import {
   ScrollView,
   RefreshControl,
   Platform,
-  Text,
 } from "react-native";
 import { useTheme, IconButton, Badge } from "react-native-paper";
 import { Link, router, useNavigation } from "expo-router";
@@ -28,8 +27,6 @@ import NewArrivals from "../../components/ui/NewArrivals";
 import JustForYou from "../../components/ui/JustForYou";
 import TopSellers from "../../components/ui/TopSellers";
 import SaleProductsList from "../../components/ui/SaleProductsList";
-import HotDealsSkeleton from "../../components/skeleton/HotDealsSkeleton";
-
 // Pre-load images once so they aren't reloaded on each render.
 const DARK_LOGO = require("../../assets/images/darkLogo.png");
 const LIGHT_LOGO = require("../../assets/images/lightLogo.png");
