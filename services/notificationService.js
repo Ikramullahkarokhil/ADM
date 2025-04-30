@@ -22,71 +22,15 @@ Notifications.setNotificationHandler({
 });
 
 // Request notification permissions
-export async function requestNotificationPermissions() {
+export const requestNotificationPermissions = async () => {
   const { status } = await Notifications.requestPermissionsAsync();
   return status === "granted";
-}
+};
 
 // Setup notification listeners
-export function setupNotificationListeners(onNotificationReceived) {
+export const setupNotificationListeners = (onNotificationReceived) => {
   return Notifications.addNotificationReceivedListener(onNotificationReceived);
-}
-
-// Register background task for notifications
-TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
-  try {
-    console.log("Running background notification check");
-
-    // Check when last notification was sent
-    const lastNotificationTime = await AsyncStorage.getItem(
-      LAST_NOTIFICATION_KEY
-    );
-    const currentTime = Date.now();
-
-    // Only check for notifications if it's been at least 30 minutes since the last one
-    if (
-      lastNotificationTime &&
-      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES
-    ) {
-      console.log(
-        "Skipping notification check - too soon since last notification"
-      );
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
-
-    const cartItems = await loadCartItems();
-
-    if (!cartItems || !cartItems.length) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
-
-    // Schedule notifications for all items
-    await scheduleCartNotifications(cartItems);
-
-    // Record the time of this notification check
-    await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
-
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error("Background task failed:", error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
-  }
-});
-
-// Initialize background fetch
-export async function registerBackgroundNotifications() {
-  try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
-      minimumInterval: 30 * 60, // 30 minutes
-      stopOnTerminate: false,
-      startOnBoot: true,
-      enableHeadless: true,
-    });
-    console.log("Background notifications registered");
-  } catch (error) {
-    console.error("Background fetch registration failed:", error);
-  }
-}
+};
 
 // Parse cart item date string to timestamp
 const parseCartItemDate = (dateString) => {
@@ -108,7 +52,7 @@ const parseCartItemDate = (dateString) => {
 };
 
 // Load cart items from storage
-export async function loadCartItems() {
+export const loadCartItems = async () => {
   try {
     const stored = await AsyncStorage.getItem("cartItems");
     return stored ? JSON.parse(stored) : [];
@@ -116,10 +60,10 @@ export async function loadCartItems() {
     console.error("Failed to load cart items:", error);
     return [];
   }
-}
+};
 
 // Calculate notification times at exact intervals
-function calculateNotificationTimes(addedTime, expirationTime, currentTime) {
+const calculateNotificationTimes = (addedTime, expirationTime, currentTime) => {
   const notificationTimes = [];
 
   // Add notifications at 6-hour intervals
@@ -149,10 +93,10 @@ function calculateNotificationTimes(addedTime, expirationTime, currentTime) {
   }
 
   return notificationTimes;
-}
+};
 
 // Schedule notifications for cart items
-export async function scheduleCartNotifications(cartItems) {
+const scheduleCartNotifications = async (cartItems) => {
   if (!cartItems || !cartItems.length) return;
 
   // Cancel existing notifications to avoid duplicates
@@ -278,10 +222,10 @@ export async function scheduleCartNotifications(cartItems) {
     await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
     console.log(`Scheduled ${scheduledNotifications.length} notifications`);
   }
-}
+};
 
 // Update cart notifications when cart changes
-export async function updateCartNotifications(cartItems) {
+export const updateCartNotifications = async (cartItems) => {
   // Check when last update was sent
   const lastNotificationTime = await AsyncStorage.getItem(
     LAST_NOTIFICATION_KEY
@@ -304,9 +248,65 @@ export async function updateCartNotifications(cartItems) {
     // Schedule notifications for updated cart
     await scheduleCartNotifications(cartItems);
   }
-}
+};
+
+// Register background task for notifications
+TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+  try {
+    console.log("Running background notification check");
+
+    // Check when last notification was sent
+    const lastNotificationTime = await AsyncStorage.getItem(
+      LAST_NOTIFICATION_KEY
+    );
+    const currentTime = Date.now();
+
+    // Only check for notifications if it's been at least 30 minutes since the last one
+    if (
+      lastNotificationTime &&
+      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES
+    ) {
+      console.log(
+        "Skipping notification check - too soon since last notification"
+      );
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    const cartItems = await loadCartItems();
+
+    if (!cartItems || !cartItems.length) {
+      return BackgroundFetch.BackgroundFetchResult.NoData;
+    }
+
+    // Schedule notifications for all items
+    await scheduleCartNotifications(cartItems);
+
+    // Record the time of this notification check
+    await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
+
+    return BackgroundFetch.BackgroundFetchResult.NewData;
+  } catch (error) {
+    console.error("Background task failed:", error);
+    return BackgroundFetch.BackgroundFetchResult.Failed;
+  }
+});
+
+// Initialize background fetch
+export const registerBackgroundNotifications = async () => {
+  try {
+    await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+      minimumInterval: 30 * 60, // 30 minutes
+      stopOnTerminate: false,
+      startOnBoot: true,
+      enableHeadless: true,
+    });
+    console.log("Background notifications registered");
+  } catch (error) {
+    console.error("Background fetch registration failed:", error);
+  }
+};
 
 // For testing purposes
-export async function getScheduledNotifications() {
+export const getScheduledNotifications = async () => {
   return await Notifications.getAllScheduledNotificationsAsync();
-}
+};

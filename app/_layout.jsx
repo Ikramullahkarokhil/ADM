@@ -20,10 +20,11 @@ import Constants from "expo-constants";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
 import * as Notifications from "expo-notifications";
 import {
-  registerBackgroundNotifications,
   requestNotificationPermissions,
+  registerBackgroundNotifications,
   setupNotificationListeners,
-} from "../notification-services";
+  updateCartNotifications,
+} from "../services/notificationService";
 
 import useThemeStore from "../components/store/useThemeStore";
 import { darkTheme, lightTheme } from "../components/Theme";
@@ -90,7 +91,7 @@ export default function Layout() {
           return;
         }
 
-        // Register background notifications task once
+        // Register background notifications task
         await registerBackgroundNotifications();
 
         // Setup notification listener for app-wide handling
@@ -98,7 +99,7 @@ export default function Layout() {
           console.log("Notification received in root layout:", notification);
           const data = notification.request.content.data;
 
-          // Only handle expiration notifications here
+          // Handle different types of notifications
           if (data.type === "expiration") {
             ToastAndroid.show(
               `${data.count || 1} item(s) have expired from your cart`,
@@ -109,8 +110,28 @@ export default function Layout() {
             if (user?.consumer_id) {
               listCart(user.consumer_id).catch(console.error);
             }
+          } else if (data.type === "reminder") {
+            // Show reminder notifications
+            ToastAndroid.show(
+              notification.request.content.body,
+              ToastAndroid.LONG
+            );
           }
         });
+
+        // Register background fetch task with proper configuration
+        await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+          minimumInterval: 30 * 60, // 30 minutes
+          stopOnTerminate: false,
+          startOnBoot: true,
+          enableHeadless: true, // Enable headless mode for better background handling
+        });
+
+        // Save cart items to storage for background task access
+        if (cartItem && cartItem.length > 0) {
+          await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
+          await updateCartNotifications(cartItem);
+        }
 
         return () => {
           if (subscription) {
@@ -126,24 +147,7 @@ export default function Layout() {
     };
 
     setupNotificationSystem();
-  }, []);
-
-  // Save cart items to AsyncStorage for background tasks
-  // But don't schedule notifications here - let the Cart component handle that
-  useEffect(() => {
-    if (!cartItem || !user?.consumer_id) return;
-
-    const saveCartItems = async () => {
-      try {
-        // Only save to AsyncStorage for background task access
-        await AsyncStorage.setItem("cartItems", JSON.stringify(cartItem));
-      } catch (error) {
-        console.error("Failed to save cart items:", error);
-      }
-    };
-
-    saveCartItems();
-  }, [cartItem, user?.consumer_id]);
+  }, [user?.consumer_id, listCart, cartItem]);
 
   // Monitor connectivity once
   useEffect(() => {

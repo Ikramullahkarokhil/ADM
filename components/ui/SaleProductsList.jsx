@@ -262,7 +262,7 @@ const SaleProductsList = ({ data, load }) => {
     [handleViewAllPress, handleProductPress, colors, isDarkTheme]
   );
 
-  if (!saleProducts || data?.products?.total <= 3) return null;
+  if (!saleProducts || data?.products?.total < 3 || !data.products) return null;
   if (load) return <HotDealsSkeleton />;
 
   return (

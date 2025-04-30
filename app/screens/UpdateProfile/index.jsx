@@ -120,6 +120,8 @@ const UpdateProfile = () => {
         new Date(new Date().setFullYear(new Date().getFullYear() - 10));
       formattedDate = formatDate(new Date(formattedDate));
 
+      setProfileImage(profileData.consumer_image);
+
       setInitialValues({
         name: profileData.name || "",
         phone: profileData.phone || "",
@@ -128,13 +130,6 @@ const UpdateProfile = () => {
       });
     }
   }, [profileData]);
-
-  // Reset profileImage when updated_at changes
-  useEffect(() => {
-    if (profileData?.updated_at) {
-      setProfileImage(profileData.consumer_image);
-    }
-  }, []);
 
   const pickImage = async () => {
     if (timeLeft) return; // Disable image picking when update is restricted
