@@ -20,8 +20,9 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
+  BackHandler,
 } from "react-native";
-import { useNavigation, useFocusEffect, useRouter } from "expo-router";
+import { useNavigation, useRouter, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Button, useTheme } from "react-native-paper";
 import { Feather } from "@expo/vector-icons";
@@ -293,6 +294,34 @@ const FilterModal = memo(
     categoryOptions,
     priceBounds,
   }) => {
+    // Add BackHandler effect with useCallback to handle hardware back button
+    const handleBackPress = useCallback(() => {
+      if (isVisible) {
+        onClose();
+        return true;
+      }
+      return false;
+    }, [isVisible, onClose]);
+
+    useEffect(() => {
+      let backHandlerSubscription;
+
+      if (isVisible) {
+        // Only add the event listener when the modal is visible
+        backHandlerSubscription = BackHandler.addEventListener(
+          "hardwareBackPress",
+          handleBackPress
+        );
+      }
+
+      return () => {
+        // Only remove if we added it
+        if (backHandlerSubscription) {
+          backHandlerSubscription.remove();
+        }
+      };
+    }, [isVisible, handleBackPress]);
+
     return (
       <Modal
         isVisible={isVisible}

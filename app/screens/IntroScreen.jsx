@@ -182,8 +182,6 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               { backgroundColor: theme.colors.primary },
             ]}
           >
-            <StatusBar style={isDarkTheme ? "light" : "dark"} />
-
             <BackButton />
             <ProgressIndicator />
 
@@ -271,11 +269,6 @@ const IntroScreen = ({ theme, onComplete, startAtConsent = false }) => {
               { backgroundColor: theme.colors.primary },
             ]}
           >
-            <StatusBar
-              translucent
-              backgroundColor="transparent"
-              barStyle={theme.dark ? "light-content" : "dark-content"}
-            />
             <BackButton />
             <ProgressIndicator />
             <ConsentView

@@ -30,6 +30,7 @@ import useProductStore from "../components/api/useProductStore";
 import { checkForUpdate } from "../utils/VersionUtils";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import IntroScreen from "./screens/IntroScreen";
+import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 
 // Lazy-load heavy UI components only when needed
 const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
@@ -330,10 +331,12 @@ export default function Layout() {
   // Show intro screen if user hasn't completed onboarding
   if (hasCompletedOnboarding === false) {
     return (
-      <PaperProvider theme={theme}>
-        <StatusBar style={isDarkTheme ? "light" : "dark"} />
-        <IntroScreen theme={theme} onComplete={handleCompleteOnboarding} />
-      </PaperProvider>
+      <SafeAreaView style={{ flex: 1 }} edges={["bottom"]}>
+        <PaperProvider theme={theme}>
+          <StatusBar style={isDarkTheme ? "light" : "dark"} />
+          <IntroScreen theme={theme} onComplete={handleCompleteOnboarding} />
+        </PaperProvider>
+      </SafeAreaView>
     );
   }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -24,6 +24,41 @@ const UpdateModal = ({ visible, onClose, currentVersion, versionData }) => {
   const [expiryDate, setExpiryDate] = useState(null);
 
   const { colors } = useTheme();
+
+  const handleClose = useCallback(() => {
+    if (Platform.OS === "ios") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    onClose();
+  }, [onClose]);
+
+  // Fix for BackHandler.removeEventListener issue with useCallback
+  const handleBackPress = useCallback(() => {
+    if (visible && !isDownloading) {
+      handleClose();
+      return true;
+    }
+    return false;
+  }, [visible, isDownloading, handleClose]);
+
+  useEffect(() => {
+    let backHandlerSubscription;
+
+    if (visible) {
+      // Only add the event listener when the modal is visible
+      backHandlerSubscription = BackHandler.addEventListener(
+        "hardwareBackPress",
+        handleBackPress
+      );
+    }
+
+    return () => {
+      // Only remove if we added it
+      if (backHandlerSubscription) {
+        backHandlerSubscription.remove();
+      }
+    };
+  }, [visible, handleBackPress]);
 
   useEffect(() => {
     if (versionData && versionData.length > 0) {
@@ -93,13 +128,6 @@ const UpdateModal = ({ visible, onClose, currentVersion, versionData }) => {
     }
   };
 
-  const handleClose = () => {
-    if (Platform.OS === "ios") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    onClose();
-  };
-
   const formatExpiryDate = (date) => {
     if (!date) return "N/A";
     return date.toLocaleDateString(undefined, {
@@ -113,7 +141,7 @@ const UpdateModal = ({ visible, onClose, currentVersion, versionData }) => {
     <View>
       <Modal
         isVisible={visible}
-        onBackButtonPress={!isDownloading ? handleClose : null}
+        onBackdropPress={!isDownloading ? handleClose : null}
         backdropOpacity={0.3}
         backdropTransitionOutTiming={0}
         animationIn="fadeInUp"
