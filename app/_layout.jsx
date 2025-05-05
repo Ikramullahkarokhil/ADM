@@ -343,8 +343,6 @@ export default function Layout() {
       <ActionSheetProvider>
         <Suspense fallback={LoadingScreen}>
           <PaperProvider theme={theme}>
-            <StatusBar style={isDarkTheme ? "light" : "dark"} />
-
             {!accepted ? (
               // If terms not accepted yet, show the Terms modal via IntroScreen
               <IntroScreen
@@ -362,6 +360,7 @@ export default function Layout() {
                   lazy: true,
                   detachInactiveScreens: true,
                   freezeOnBlur: true,
+                  statusBarStyle: isDarkTheme ? "light" : "dark",
                 }}
               >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
