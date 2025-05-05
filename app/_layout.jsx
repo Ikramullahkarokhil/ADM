@@ -9,11 +9,11 @@ import {
 import { Stack, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
-import * as NavigationBar from "expo-navigation-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SplashScreen from "expo-splash-screen";
 import NetInfo from "@react-native-community/netinfo";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
+import * as TaskManager from "expo-task-manager";
 import { enableScreens } from "react-native-screens";
 import Constants from "expo-constants";
 import { ActionSheetProvider } from "@expo/react-native-action-sheet";
@@ -34,7 +34,7 @@ import IntroScreen from "./screens/IntroScreen";
 // Lazy-load heavy UI components only when needed
 const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
 
-const BACKGROUND_FETCH_TASK = "background-notification-task";
+const BACKGROUND_TASK_NAME = "background-notification-task";
 
 // Enable native screens for better performance
 enableScreens();
@@ -127,12 +127,11 @@ export default function Layout() {
         });
 
         try {
-          // Register background fetch task with proper configuration
-          await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+          // Register background task with proper configuration
+          await BackgroundTask.registerTaskAsync(BACKGROUND_TASK_NAME, {
             minimumInterval: 30 * 60, // 30 minutes
             stopOnTerminate: false,
             startOnBoot: true,
-            enableHeadless: true, // Enable headless mode for better background handling
           });
         } catch (error) {
           console.error("Failed to register background task:", error);
@@ -166,9 +165,15 @@ export default function Layout() {
         subscription.remove();
       }
 
-      BackgroundFetch.unregisterTaskAsync(BACKGROUND_FETCH_TASK).catch(
-        (error) => console.error("Failed to unregister background task:", error)
-      );
+      // Try to unregister the task and catch any errors
+      try {
+        TaskManager.unregisterTaskAsync(BACKGROUND_TASK_NAME).catch((error) => {
+          // Ignore specific errors about task not being registered or different consumer
+          console.log("Background task cleanup:", error.message);
+        });
+      } catch (error) {
+        console.log("Background task cleanup error:", error);
+      }
     };
   }, [user?.consumer_id, listCart, cartItem]);
 
@@ -245,20 +250,11 @@ export default function Layout() {
 
   // Theme & nav bar
   useEffect(() => {
+    // Initialize theme with current system value
     initializeTheme(colorScheme === "dark");
 
-    // Then force update for system theme mode with current values
-    const { themeMode } = useThemeStore.getState();
-    if (themeMode === "system") {
-      setTimeout(() => {
-        useThemeStore.getState().setThemeMode("system", colorScheme === "dark");
-      }, 50);
-    }
-
-    NavigationBar.setBackgroundColorAsync(theme.colors.primary).catch((error) =>
-      console.error("Failed to set navigation bar color:", error)
-    );
-  }, [colorScheme, initializeTheme, theme.colors.primary]);
+    // No need to force update for system theme - it will be handled by initializeTheme
+  }, [colorScheme, initializeTheme]);
 
   // Handle routing based on auth state
   useEffect(() => {

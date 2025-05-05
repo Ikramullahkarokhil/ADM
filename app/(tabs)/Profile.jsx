@@ -241,16 +241,8 @@ const Profile = () => {
           const themeOptions = ["system", "light", "dark"];
           const selectedTheme = themeOptions[selectedIndex];
 
-          // For system theme, use the current colorScheme value from the component closure
+          // Apply the selected theme with current system status
           await setThemeMode(selectedTheme, colorScheme === "dark");
-
-          // Additional check for system theme to ensure it applies correctly
-          if (selectedTheme === "system") {
-            // Force an immediate update with the current system value
-            setTimeout(() => {
-              setThemeMode("system", colorScheme === "dark");
-            }, 50);
-          }
         }
       }
     );

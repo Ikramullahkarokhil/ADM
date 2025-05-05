@@ -19,13 +19,12 @@ const useThemeStore = create((set, get) => ({
         set({ isDarkTheme: isSystemDark });
       } else {
         set({ isDarkTheme: mode === "dark" });
+        // Save the theme preference only when not using system theme
+        await AsyncStorage.setItem(
+          THEME_PREFERENCE,
+          JSON.stringify(mode === "dark")
+        );
       }
-
-      // Save the theme preference
-      await AsyncStorage.setItem(
-        THEME_PREFERENCE,
-        JSON.stringify(mode === "dark")
-      );
     } catch (error) {
       console.error("Failed to save theme mode:", error);
     }

@@ -1,5 +1,5 @@
 import * as Notifications from "expo-notifications";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import * as TaskManager from "expo-task-manager";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -10,7 +10,7 @@ const ONE_HOUR = 60 * 60 * 1000; // 1 hour in milliseconds
 const THIRTY_MINUTES = 30 * 60 * 1000; // 30 minutes in milliseconds
 const CART_STORAGE_KEY = "cart_timers";
 const LAST_NOTIFICATION_KEY = "last_notification_time";
-const BACKGROUND_FETCH_TASK = "background-notification-task";
+const BACKGROUND_TASK_NAME = "background-notification-task";
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -320,7 +320,7 @@ export const updateCartNotifications = async (cartItems) => {
 };
 
 // Register background task for notifications
-TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
+TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
   try {
     console.log("Running background notification check");
 
@@ -331,54 +331,44 @@ TaskManager.defineTask(BACKGROUND_FETCH_TASK, async () => {
     const currentTime = Date.now();
 
     // Only check for notifications if it's been at least 30 minutes since the last one
-    // Unless there are items about to expire
-    const cartItems = await loadCartItems();
-    if (!cartItems || !cartItems.length) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
-
-    // Check if any items are about to expire
-    const hasExpiringItems = cartItems.some((item) => {
-      const timeAdded = parseCartItemDate(item.date);
-      return timeAdded && isItemAboutToExpire(timeAdded);
-    });
-
-    // Skip if too soon since last notification and no expiring items
     if (
       lastNotificationTime &&
-      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES &&
-      !hasExpiringItems
+      currentTime - parseInt(lastNotificationTime) < THIRTY_MINUTES
     ) {
       console.log(
         "Skipping notification check - too soon since last notification"
       );
-      return BackgroundFetch.BackgroundFetchResult.NoData;
+      return BackgroundTask.Result.NO_DATA;
     }
 
-    // Schedule notifications with all cart items
+    const cartItems = await loadCartItems();
+    if (!cartItems || !cartItems.length) {
+      return BackgroundTask.Result.NO_DATA;
+    }
+
+    // Schedule notifications for all items
     await scheduleCartNotifications(cartItems);
 
     // Record the time of this notification check
     await AsyncStorage.setItem(LAST_NOTIFICATION_KEY, currentTime.toString());
 
-    return BackgroundFetch.BackgroundFetchResult.NewData;
+    return BackgroundTask.Result.NEW_DATA;
   } catch (error) {
     console.error("Background task failed:", error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
+    return BackgroundTask.Result.FAILED;
   }
 });
 
-// Initialize background fetch
+// Initialize background task
 export const registerBackgroundNotifications = async () => {
   try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_FETCH_TASK, {
+    await BackgroundTask.registerTaskAsync(BACKGROUND_TASK_NAME, {
       minimumInterval: 30 * 60, // 30 minutes
       stopOnTerminate: false,
       startOnBoot: true,
-      enableHeadless: true,
     });
   } catch (error) {
-    console.error("Background fetch registration failed:", error);
+    console.error("Background task registration failed:", error);
   }
 };
 
