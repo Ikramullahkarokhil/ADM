@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-  useLayoutEffect,
-} from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   StyleSheet,
   Text,
@@ -15,7 +9,7 @@ import {
   TouchableOpacity,
   Linking,
 } from "react-native";
-import { useLocalSearchParams, useNavigation, router } from "expo-router";
+import { useLocalSearchParams, router } from "expo-router";
 import { useTheme } from "react-native-paper";
 import { Card, Badge, Divider } from "react-native-paper";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -34,7 +28,6 @@ const safeJsonParse = (jsonString, defaultValue = []) => {
 
 const OrderDetails = () => {
   const { orderId } = useLocalSearchParams();
-  const navigation = useNavigation();
   const { colors } = useTheme();
   // Destructure the orderDetails and changeOrderStatus function from useProductStore.
   const { orderDetails, changeOrderStatus } = useProductStore();
@@ -284,13 +277,6 @@ const OrderDetails = () => {
     const options = { year: "numeric", month: "long", day: "numeric" };
     return new Date(dateString).toLocaleDateString(undefined, options);
   };
-
-  // Set navigation options.
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Order Details",
-    });
-  }, [navigation]);
 
   if (loading) {
     return (

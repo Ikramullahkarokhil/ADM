@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useEffect, useCallback, memo } from "react";
+import { useState, useEffect, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -19,15 +19,13 @@ import {
   Surface,
   RadioButton,
 } from "react-native-paper";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
-import { MaterialCommunityIcons, Feather, Entypo } from "@expo/vector-icons";
+import { MaterialCommunityIcons, Feather } from "@expo/vector-icons";
 import useThemeStore from "../../../components/store/useThemeStore";
 import AlertDialog from "../../../components/ui/AlertDialog";
 
 const ProductVariantSelection = () => {
-  // Hooks and state initialization
-  const navigation = useNavigation();
   const router = useRouter();
   const theme = useTheme();
   const { isDarkTheme } = useThemeStore();
@@ -48,11 +46,6 @@ const ProductVariantSelection = () => {
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
   const [alertConfirmAction, setAlertConfirmAction] = useState(() => () => {});
-
-  // Set navigation title
-  useLayoutEffect(() => {
-    navigation.setOptions({ title: "Customize Order" });
-  }, [navigation]);
 
   // Parse items and initialize selections
   useEffect(() => {

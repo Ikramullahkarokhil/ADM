@@ -1,6 +1,4 @@
-"use client";
-
-import { useEffect, useState, useCallback, memo, useLayoutEffect } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -12,7 +10,7 @@ import {
   Pressable,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { FontAwesome5 } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 import useProductStore from "../../../components/api/useProductStore";
@@ -127,14 +125,6 @@ const TopSellersScreen = () => {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const { fetchTopSellers } = useProductStore();
-
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Top Sellers",
-    });
-  }, [navigation]);
 
   const handleSellerPress = useCallback(
     (seller) => {

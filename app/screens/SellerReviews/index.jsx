@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  memo,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useState, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -12,13 +6,11 @@ import {
   FlatList,
   ActivityIndicator,
   Platform,
-  Pressable,
 } from "react-native";
-import { useLocalSearchParams, useNavigation, router } from "expo-router";
-import { MaterialIcons, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useLocalSearchParams } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
-import { StatusBar } from "expo-status-bar";
 
 // Pre-defined constants to avoid recreating arrays on each render
 const MONTHS = [
@@ -83,26 +75,13 @@ const EmptyReviews = memo(({ colors }) => (
 ));
 
 const ReviewsList = () => {
-  const { sellerId, title, sellerName } = useLocalSearchParams();
-  const navigation = useNavigation();
+  const { sellerId, title } = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [reviews, setReviews] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const { fetchSellerReviews, user } = useProductStore();
   const { colors } = useTheme();
-
-  // Set navigation options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: sellerName || "Customer Reviews",
-      headerTintColor: colors.buttonText,
-      headerStyle: {
-        backgroundColor: colors.button,
-      },
-      headerShadowVisible: false,
-    });
-  }, [title, navigation, colors]);
 
   // Load reviews data
   useEffect(() => {
@@ -171,7 +150,6 @@ const ReviewsList = () => {
         style={[styles.loadingContainer, { backgroundColor: colors.primary }]}
       >
         <View>
-          <StatusBar style="light" backgroundColor={colors.button} />
           <Text
             style={{
               fontSize: 18,
@@ -200,7 +178,6 @@ const ReviewsList = () => {
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
       <View>
-        <StatusBar style="light" backgroundColor={colors.button} />
         <Text
           style={{
             fontSize: 18,

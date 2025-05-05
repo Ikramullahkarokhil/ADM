@@ -5,8 +5,8 @@ import {
   MaterialIcons,
   Feather,
 } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
-import React, { useLayoutEffect } from "react";
+
+import React from "react";
 import {
   StyleSheet,
   Text,
@@ -131,14 +131,7 @@ const FeatureCard = ({ feature, theme }) => {
 };
 
 const Index = () => {
-  const navigation = useNavigation();
   const theme = useTheme();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "More Features",
-    });
-  }, [navigation, theme]);
 
   return (
     <ScrollView

@@ -6,7 +6,7 @@ import {
   StyleSheet,
   ToastAndroid,
 } from "react-native";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useGlobalSearchParams, useRouter } from "expo-router";
 import { Provider as PaperProvider } from "react-native-paper";
 import { StatusBar } from "expo-status-bar";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -30,7 +30,7 @@ import useProductStore from "../components/api/useProductStore";
 import { checkForUpdate } from "../utils/VersionUtils";
 import AlertDialog from "../components/ui/NoInternetAlert";
 import IntroScreen from "./screens/IntroScreen";
-import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // Lazy-load heavy UI components only when needed
 const UpdateModal = lazy(() => import("../components/ui/UpdateModal"));
@@ -68,6 +68,9 @@ export default function Layout() {
   const [updateInfo, setUpdateInfo] = useState(null);
   const [notificationPermission, setNotificationPermission] = useState(false);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null);
+
+  const { MainCategorieName, subCategorieName, sellerName, sellerTitle } =
+    useGlobalSearchParams();
 
   const currentVersion = Constants.expoConfig?.version || "1.0.0";
 
@@ -368,6 +371,101 @@ export default function Layout() {
               >
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="Login" options={{ headerShown: false }} />
+                <Stack.Screen
+                  name="screens/AboutUs/index"
+                  options={{ title: "About Us" }}
+                />
+                <Stack.Screen
+                  name="screens/AllCategories/index"
+                  options={{ title: MainCategorieName }}
+                />
+                <Stack.Screen
+                  name="screens/AllNewArrivals/index"
+                  options={{ title: "New Arrivals" }}
+                />
+                <Stack.Screen
+                  name="screens/AllSaleProducts/index"
+                  options={{ title: "Hot Deals" }}
+                />
+                <Stack.Screen
+                  name="screens/AllTopSellers/index"
+                  options={{ title: "Top Sellers" }}
+                />
+                <Stack.Screen
+                  name="screens/BillingAddress/index"
+                  options={{ title: "Billing Addresses" }}
+                />
+                <Stack.Screen
+                  name="screens/Cart/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="screens/Comments/index"
+                  options={{ title: "Comments" }}
+                />
+                <Stack.Screen
+                  name="screens/JustForYou/index"
+                  options={{ title: "Just For You" }}
+                />
+                <Stack.Screen
+                  name="screens/MoreFeatures/index"
+                  options={{ title: "More Features" }}
+                />
+                <Stack.Screen
+                  name="screens/OrderDetails/index"
+                  options={{ title: "Order Details" }}
+                />
+                <Stack.Screen name="screens/ProductDetail/index" />
+                <Stack.Screen
+                  name="screens/Products/index"
+                  options={{ title: subCategorieName }}
+                />
+                <Stack.Screen
+                  name="screens/ProductVariantSelection/index"
+                  options={{ title: "Customize Order" }}
+                />
+                <Stack.Screen
+                  name="screens/Questions/index"
+                  options={{ title: "Questions" }}
+                />
+                <Stack.Screen
+                  name="screens/SellerProducts/index"
+                  options={{
+                    title: sellerName,
+
+                    headerTitle: sellerName || "Products",
+                    headerTintColor: theme.colors.buttonText,
+                    headerStyle: {
+                      backgroundColor: theme.colors.button,
+                    },
+                    headerShadowVisible: false,
+                    statusBarStyle: "light",
+                  }}
+                />
+                <Stack.Screen
+                  name="screens/SellerProfile/index"
+                  options={{ title: sellerTitle }}
+                />
+                <Stack.Screen
+                  name="screens/SellerReviews/index"
+                  options={{
+                    headerTitle: sellerName,
+                    headerTintColor: theme.colors.buttonText,
+                    headerStyle: {
+                      backgroundColor: theme.colors.button,
+                    },
+                    headerShadowVisible: false,
+                    statusBarStyle: "light",
+                  }}
+                />
+                <Stack.Screen
+                  name="screens/Signup/index"
+                  options={{ headerShown: false }}
+                />
+                <Stack.Screen
+                  name="screens/UpdateProfile/index"
+                  options={{ title: "Update Profile" }}
+                />
               </Stack>
             )}
 

@@ -1,11 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  memo,
-  useMemo,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
 import {
   View,
   Text,
@@ -209,7 +202,7 @@ const SectionHeader = memo(
 
 // Main component with optimized structure
 const SellerProfile = () => {
-  const { sellerId, sellerTitle } = useLocalSearchParams();
+  const { sellerId } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -219,13 +212,6 @@ const SellerProfile = () => {
     useProductStore();
   const { colors } = useTheme();
   const { isDarkTheme } = useThemeStore();
-
-  // Set navigation options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: sellerTitle || "Seller Profile",
-    });
-  }, [sellerTitle, navigation]);
 
   // Load seller data with error handling
   const loadSellerData = useCallback(

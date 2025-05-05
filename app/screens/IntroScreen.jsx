@@ -20,11 +20,9 @@ import Animated, {
   Easing,
   withSequence,
   FadeIn,
-  FadeOut,
 } from "react-native-reanimated";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import useThemeStore from "../../components/store/useThemeStore";
-import { StatusBar } from "expo-status-bar";
 
 const { width, height } = Dimensions.get("window");
 const AnimatedButton = Animated.createAnimatedComponent(Button);

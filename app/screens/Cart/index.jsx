@@ -1,5 +1,5 @@
 import AlertDialog from "../../../components/ui/AlertDialog";
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -9,14 +9,13 @@ import {
   TouchableOpacity,
   ToastAndroid,
 } from "react-native";
-import { Button, useTheme, Checkbox, Divider } from "react-native-paper";
-import { useNavigation, useRouter, useFocusEffect } from "expo-router";
+import { Button, useTheme, Checkbox } from "react-native-paper";
+import { useNavigation, useRouter } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import useThemeStore from "../../../components/store/useThemeStore";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CART_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -40,15 +39,6 @@ const Cart = () => {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [alertConfig, setAlertConfig] = useState(null);
-
-  const isFirstLoad = useRef(true);
-
-  // Hide the default header
-  useEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
 
   const handleClearCart = async () => {
     try {

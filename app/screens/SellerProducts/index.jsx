@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, memo, useLayoutEffect } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import {
   View,
   Text,
@@ -15,7 +15,6 @@ import { MaterialIcons } from "@expo/vector-icons";
 import useProductStore from "../../../components/api/useProductStore";
 import { useTheme } from "react-native-paper";
 import useThemeStore from "../../../components/store/useThemeStore";
-import { StatusBar } from "expo-status-bar";
 
 // Product Item component optimized with memo
 const ProductItem = memo(
@@ -71,29 +70,16 @@ const ProductItem = memo(
 );
 
 const ProductsList = () => {
-  const { sellerId, listType, title, sellerName } = useLocalSearchParams();
+  const { sellerId, listType, title } = useLocalSearchParams();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [products, setProducts] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const { user, fetchSellerNewArivals, fetchSellerAllProducts } =
-    useProductStore();
+  const { fetchSellerNewArivals, fetchSellerAllProducts } = useProductStore();
   const { colors } = useTheme();
   const { isDarkTheme } = useThemeStore();
-
-  // Set navigation options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: sellerName || "Products",
-      headerTintColor: colors.buttonText,
-      headerStyle: {
-        backgroundColor: colors.button,
-      },
-      headerShadowVisible: false,
-    });
-  }, [title, navigation, colors]);
 
   // Load products data
   useEffect(() => {
@@ -186,7 +172,6 @@ const ProductsList = () => {
         style={[styles.loadingContainer, { backgroundColor: colors.primary }]}
       >
         <View>
-          <StatusBar style="light" backgroundColor={colors.button} />
           <Text
             style={{
               fontSize: 18,
@@ -240,8 +225,6 @@ const ProductsList = () => {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.primary }]}>
-      <StatusBar style={"light"} backgroundColor={colors.button} />
-
       <Text
         style={{
           fontSize: 18,

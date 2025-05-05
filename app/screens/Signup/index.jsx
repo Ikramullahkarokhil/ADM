@@ -15,9 +15,9 @@ import {
 import { Formik, useField, useFormikContext } from "formik";
 import * as Yup from "yup";
 import useProductStore from "../../../components/api/useProductStore";
-import { useState, useLayoutEffect, useCallback, memo } from "react";
-import { Link, useNavigation, useRouter } from "expo-router";
-import { Button, ProgressBar, useTheme } from "react-native-paper";
+import { useState, useCallback, memo } from "react";
+import { Link, useRouter } from "expo-router";
+import { ProgressBar, useTheme } from "react-native-paper";
 import CountryCodeDropdownPicker from "react-native-dropdown-country-picker";
 import DatePicker from "react-native-date-picker";
 import { useActionSheet } from "@expo/react-native-action-sheet";
@@ -447,7 +447,6 @@ const StepIndicator = memo(({ currentStep, totalSteps }) => {
 const Signup = () => {
   const { signupUser, loginLoading, loginError } = useProductStore();
   const router = useRouter();
-  const navigation = useNavigation();
   const [currentStep, setCurrentStep] = useState(0);
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [confirmSecureTextEntry, setConfirmSecureTextEntry] = useState(true);
@@ -455,12 +454,6 @@ const Signup = () => {
   // const colors = isDarkTheme ? darkTheme.colors : lightTheme.colors;
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerShown: false,
-    });
-  }, [navigation]);
 
   const handleSignup = async (values) => {
     console.log("Submitting form data:", values);

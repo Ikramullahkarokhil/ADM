@@ -1,17 +1,9 @@
-import {
-  useEffect,
-  useState,
-  useCallback,
-  memo,
-  useRef,
-  useLayoutEffect,
-} from "react";
+import { useEffect, useState, useCallback, memo, useRef } from "react";
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
-  TouchableOpacity,
   Image,
   ActivityIndicator,
   Pressable,
@@ -19,7 +11,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { useRouter, useNavigation } from "expo-router";
+import { useRouter } from "expo-router";
 import useProductStore from "../../../components/api/useProductStore";
 import useThemeStore from "../../../components/store/useThemeStore";
 
@@ -143,13 +135,6 @@ const AllNewArrivals = () => {
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const colors = theme.colors;
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "New Arrivals",
-    });
-  }, [navigation]);
 
   const loadProducts = async (pageNum = 1, shouldRefresh = false) => {
     try {

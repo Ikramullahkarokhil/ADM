@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   StyleSheet,
   Text,
@@ -11,12 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import {
-  Link,
-  useRouter,
-  useLocalSearchParams,
-  useNavigation,
-} from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import useThemeStore from "../../../components/store/useThemeStore";
 import useProductStore from "../../../components/api/useProductStore";
 import AllCategoriesSkeleton from "../../../components/skeleton/AllCategoriesSkeleton";
@@ -96,10 +91,8 @@ const AllCategories = () => {
   const numColumns = width > 550 ? 3 : 2;
   const router = useRouter();
   const { isDarkTheme } = useThemeStore();
-  const { mainCategoryId, MainCategorieName, totalSubCategories } =
-    useLocalSearchParams();
+  const { mainCategoryId, totalSubCategories } = useLocalSearchParams();
   const { fetchSubcategories } = useProductStore();
-  const navigation = useNavigation();
 
   // State management
   const [subCategories, setSubCategories] = useState([]);
@@ -108,13 +101,6 @@ const AllCategories = () => {
   const [error, setError] = useState(null);
   const limit = 15;
   const total = parseInt(totalSubCategories, 10) || 0; // Ensure total is a number, default to 0 if invalid
-
-  // Header configuration
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: MainCategorieName,
-    });
-  }, [navigation, MainCategorieName]);
 
   // Function to load subcategories (initial or more)
   const loadSubCategories = async (isLoadMore = false) => {

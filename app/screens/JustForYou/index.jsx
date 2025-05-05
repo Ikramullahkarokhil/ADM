@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useLayoutEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,10 +9,9 @@ import {
   Pressable,
   ActivityIndicator,
   SafeAreaView,
-  StatusBar,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import useThemeStore from "../../../components/store/useThemeStore";
 import useProductStore from "../../../components/api/useProductStore";
 
@@ -87,13 +86,6 @@ const JustForYouScreen = () => {
   const [hasMore, setHasMore] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const colors = theme.colors;
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Just For You",
-    });
-  }, [navigation]);
 
   const loadProducts = async (pageNum = 1, shouldRefresh = false) => {
     try {

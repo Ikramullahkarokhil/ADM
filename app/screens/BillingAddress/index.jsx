@@ -21,7 +21,6 @@ import useProductStore from "../../../components/api/useProductStore";
 import * as Yup from "yup";
 import { Formik } from "formik";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { useNavigation } from "expo-router";
 import { useActionSheet } from "@expo/react-native-action-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -669,7 +668,6 @@ const BillingAddress = () => {
   } = useProductStore();
 
   const [state, dispatch] = useReducer(reducer, initialState);
-  const navigation = useNavigation();
   const { showActionSheetWithOptions } = useActionSheet();
   const scrollViewRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -695,13 +693,6 @@ const BillingAddress = () => {
       });
     }
   }, [consumerBillingAddress]);
-
-  // Set up navigation options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Billing Addresses",
-    });
-  }, [navigation]);
 
   // Animate FAB when mode changes
   useLayoutEffect(() => {

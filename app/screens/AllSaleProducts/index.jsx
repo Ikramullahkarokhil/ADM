@@ -1,11 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  memo,
-  useMemo,
-  useLayoutEffect,
-} from "react";
+import React, { useEffect, useState, useCallback, memo, useMemo } from "react";
 import {
   View,
   Text,
@@ -20,7 +13,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useTheme } from "react-native-paper";
-import { useNavigation, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
 import { Feather } from "@expo/vector-icons";
 import { FlashList } from "@shopify/flash-list";
 import useProductStore from "../../../components/api/useProductStore";
@@ -262,14 +255,6 @@ const AllSaleProducts = () => {
     discountInfo: null,
     products: [],
   });
-
-  const navigation = useNavigation();
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: "Hot Deals",
-    });
-  }, [navigation]);
 
   const itemWidth = width > 550 ? width / 3 - 24 : width / 2 - 24;
 

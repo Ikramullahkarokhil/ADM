@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   StyleSheet,
   Text,
@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { useNavigation } from "expo-router";
+
 import { useTheme } from "react-native-paper";
 import useProductStore from "../../../components/api/useProductStore";
 import DatePicker from "react-native-date-picker";
@@ -55,7 +55,6 @@ const UpdateProfile = () => {
   const [alertTitle, setAlertTitle] = useState("");
   const [alertMessage, setAlertMessage] = useState("");
 
-  const navigation = useNavigation();
   const theme = useTheme();
   const { profileData, uploadConsumerImage, updateConsumer, fetchProfile } =
     useProductStore();
@@ -101,12 +100,6 @@ const UpdateProfile = () => {
       }
     }
   }, [profileData?.updated_at]);
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Update Profile",
-    });
-  }, [navigation]);
 
   useEffect(() => {
     if (profileData) {

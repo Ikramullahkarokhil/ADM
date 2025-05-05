@@ -1,13 +1,5 @@
 // Optimized ProductList.tsx (without reducers)
-import React, {
-  useEffect,
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  memo,
-  useMemo,
-  useState,
-} from "react";
+import React, { useEffect, useCallback, useRef, memo, useState } from "react";
 import {
   View,
   Text,
@@ -20,12 +12,7 @@ import {
   Pressable,
   RefreshControl,
 } from "react-native";
-import {
-  Link,
-  useLocalSearchParams,
-  useNavigation,
-  useRouter,
-} from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useTheme } from "react-native-paper";
 import { FontAwesome, Feather, MaterialIcons } from "@expo/vector-icons";
 import { useActionSheet } from "@expo/react-native-action-sheet";
@@ -222,8 +209,7 @@ const useAlertDialog = () => {
 
 // --- MAIN COMPONENT ---
 const ProductList = () => {
-  const navigation = useNavigation();
-  const { subcategoryId, subCategorieName } = useLocalSearchParams();
+  const { subcategoryId } = useLocalSearchParams();
   const {
     fetchProductsBySubcategory,
     addToCart,
@@ -244,13 +230,6 @@ const ProductList = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [addingToCart, setAddingToCart] = useState([]);
   const [error, setError] = useState(null);
-
-  // Set header options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: subCategorieName,
-    });
-  }, [navigation, subCategorieName]);
 
   // Load products helper
   const loadProducts = useCallback(async () => {

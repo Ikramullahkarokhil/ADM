@@ -1,4 +1,4 @@
-import React, { useLayoutEffect } from "react";
+import React from "react";
 import {
   StyleSheet,
   Text,
@@ -10,23 +10,16 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Surface, Divider, useTheme } from "react-native-paper";
-import { FontAwesome6, MaterialCommunityIcons } from "@expo/vector-icons";
-import { useNavigation } from "expo-router";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+
 import useThemeStore from "../../../components/store/useThemeStore";
 import Constants from "expo-constants";
 
 const AboutUs = () => {
   const theme = useTheme();
-  const navigation = useNavigation();
   const { isDarkTheme } = useThemeStore();
 
   const AppVersion = Constants.expoConfig?.version || "1.0.0";
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      headerTitle: "About Us",
-    });
-  }, [navigation]);
 
   const openLink = (url) => {
     Linking.openURL(url).catch((err) =>

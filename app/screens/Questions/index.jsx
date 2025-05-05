@@ -1,11 +1,4 @@
-import {
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  memo,
-  useLayoutEffect,
-} from "react";
+import { useState, useCallback, useEffect, useRef, memo } from "react";
 import {
   StyleSheet,
   Text,
@@ -20,7 +13,7 @@ import {
   Alert,
   Platform,
 } from "react-native";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useTheme } from "react-native-paper";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useActionSheet } from "@expo/react-native-action-sheet";
@@ -77,7 +70,6 @@ const formatDateString = (dateString) => {
 
 const Questions = () => {
   const { productId } = useLocalSearchParams();
-  const navigation = useNavigation();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
 
@@ -115,13 +107,6 @@ const Questions = () => {
     setAlertConfig({ title, message, onConfirm });
     setAlertVisible(true);
   }, []);
-
-  // Set header options
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Questions",
-    });
-  }, [navigation]);
 
   // Load questions with optimized pagination handling
   const loadQuestions = useCallback(

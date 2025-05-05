@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useLayoutEffect,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   StyleSheet,
   Text,
@@ -19,7 +13,7 @@ import {
   TouchableOpacity,
   Alert,
 } from "react-native";
-import { useLocalSearchParams, useNavigation } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
 import { useTheme } from "react-native-paper";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useActionSheet } from "@expo/react-native-action-sheet";
@@ -77,7 +71,6 @@ const formatDateString = (dateString) => {
 
 const Comments = () => {
   const { productId } = useLocalSearchParams();
-  const navigation = useNavigation();
   const theme = useTheme();
   const { showActionSheetWithOptions } = useActionSheet();
 
@@ -188,12 +181,6 @@ const Comments = () => {
       comments,
     ]
   );
-
-  useLayoutEffect(() => {
-    navigation.setOptions({
-      title: "Comments",
-    });
-  }, [navigation]);
 
   // Load comments on initial mount
   useEffect(() => {
